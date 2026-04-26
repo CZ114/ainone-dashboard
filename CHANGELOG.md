@@ -2,6 +2,18 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.3 — 2026-04-26
+
+### Fixed
+
+- **"Drag both" from the recordings panel now produces two pills.**
+  Previously, dragging both CSV + audio looked like only the CSV had
+  been attached: a single recording pill with the CSV filename, and
+  the audio info silently buried in metadata. Each file now becomes
+  its own visible attachment with its own prompt block, and the
+  audio attachment carries the served URL as its path so Claude can
+  fetch it from a Bash call.
+
 ## v1.0.2 — 2026-04-26
 
 ### Added
