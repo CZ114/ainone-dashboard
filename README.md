@@ -21,11 +21,9 @@ AinOne Dashboard streams data from an ESP32-S3 multi-sensor board over USB seria
 - [Quick Start](#quick-start)
   - [1. Install the Claude Code CLI](#1-install-the-claude-code-cli)
   - [2. Clone](#2-clone)
-  - [3. Python backend (port 8080)](#3-python-backend-port-8080)
-  - [4. Claude (Hono) backend (port 3000)](#4-claude-hono-backend-port-3000)
-  - [5. Frontend (port 5173)](#5-frontend-port-5173)
-  - [6. One-shot launch](#6-one-shot-launch)
-  - [7. Connect your ESP32](#7-connect-your-esp32)
+  - [3. One-shot launch (recommended)](#3-one-shot-launch-recommended)
+  - [4. Manual setup (advanced / for development)](#4-manual-setup-advanced--for-development)
+  - [5. Connect your ESP32](#5-connect-your-esp32)
 - [ESP32 firmware data format](#esp32-firmware-data-format)
 - [Configuration](#configuration)
 - [API & WebSocket](#api--websocket)
@@ -105,9 +103,15 @@ For a deeper dive into the data flow, threading model, and subsystem boundaries,
 
 ## Quick Start
 
+> **TL;DR**
+> 1. Install [Claude Code CLI](https://github.com/anthropics/claude-code) — `npm install -g @anthropic-ai/claude-code`, then `claude --version` to verify.
+> 2. `git clone https://github.com/CZ114/ainone-dashboard.git && cd ainone-dashboard`
+> 3. **Windows:** double-click `start.bat`. **macOS / Linux:** `./start.sh`.
+> 4. Open <http://localhost:5173>. First launch takes a minute or two while it auto-installs `backend/.venv`, `backend/claude/node_modules`, and `frontend/node_modules`. Subsequent launches are instant.
+
 ### 1. Install the Claude Code CLI
 
-Required before the Hono backend will work.
+Required before the Hono backend will work — without it, `/chat` won't function (the sensor dashboard still does).
 
 ```bash
 # Recommended — installs the official Anthropic CLI globally
@@ -133,7 +137,21 @@ git clone https://github.com/CZ114/ainone-dashboard.git
 cd ainone-dashboard
 ```
 
-### 3. Python backend (port 8080)
+### 3. One-shot launch (recommended)
+
+Both helper scripts are **self-installing** — on first run they create `backend/.venv`, run `pip install -r requirements.txt`, and `npm install` for both Node tiers, then boot all three servers. On subsequent runs, the install steps are skipped and start-up is instant.
+
+- **Windows** — double-click `start.bat` (or run it from `cmd`). Opens three console windows, one per tier.
+- **macOS / Linux** — `./start.sh` from the repo root. Boots all three tiers; `Ctrl+C` in the launching terminal shuts everything down.
+
+When all three windows show their respective banners (`Uvicorn running on ...`, `Listening on http://127.0.0.1:3000`, `VITE ready`), open <http://localhost:5173>.
+
+### 4. Manual setup (advanced / for development)
+
+Skip this section if `start.bat` / `start.sh` worked. Three terminals, one per tier.
+
+<details>
+<summary><b>4a. Python backend (port 8080)</b></summary>
 
 **macOS / Linux:**
 
@@ -165,9 +183,10 @@ pip install -r requirements.txt
 python -u run.py
 ```
 
-### 4. Claude (Hono) backend (port 3000)
+</details>
 
-In a new terminal:
+<details>
+<summary><b>4b. Claude (Hono) backend (port 3000)</b></summary>
 
 ```bash
 cd backend/claude
@@ -178,9 +197,10 @@ npm run dev
 
 `generate-version.js` writes `cli/version.ts` from `package.json` — required before the first run. If the backend logs `claude binary not found`, revisit step 1 or set `CLAUDE_CLI_PATH`.
 
-### 5. Frontend (port 5173)
+</details>
 
-In a third terminal:
+<details>
+<summary><b>4c. Frontend (port 5173)</b></summary>
 
 ```bash
 cd frontend
@@ -190,14 +210,9 @@ npm run dev
 
 Open <http://localhost:5173>. Vite proxies all backend API calls automatically (see `frontend/vite.config.ts`).
 
-### 6. One-shot launch
+</details>
 
-For convenience, two scripts boot all three tiers:
-
-- `start.bat` — Windows. Opens three console windows.
-- `start.sh` — macOS / Linux. Boots all three tiers in the background; `Ctrl+C` shuts everything down.
-
-### 7. Connect your ESP32
+### 5. Connect your ESP32
 
 | Transport | How |
 |-----------|-----|
@@ -362,6 +377,8 @@ The reference extension is `whisper-local` — installs `faster-whisper`, downlo
 
 | Symptom | Fix |
 |---------|-----|
+| `ModuleNotFoundError: No module named 'uvicorn'` | The Python venv isn't active or `pip install -r requirements.txt` was never run. Either re-do step 3 of [Quick Start](#3-python-backend-port-8080) inside `backend/`, or use `start.bat` / `start.sh` which auto-installs on first run. |
+| `'tsx' 不是内部或外部命令` / `tsx: command not found` | `node_modules` hasn't been installed in `backend/claude/`. Run `cd backend/claude && npm install` (then `node scripts/generate-version.js && npm run dev`). |
 | `Address already in use` on 8080 / 3000 / 5173 | Another process is bound. `lsof -i :8080` (mac/linux) or `netstat -ano \| findstr :8080` (Windows). Kill it or change the port. |
 | Cannot open COM port (Windows) | Close any other serial monitor (Arduino IDE, PuTTY). On Linux/macOS add yourself to `dialout` / `tty` groups: `sudo usermod -aG dialout $USER`. |
 | BLE never finds the device | Make sure the ESP32 is advertising as `ESP32-S3-MultiSensor`. On Linux, run the backend with `sudo` once or grant the `bluetooth` capability. |
