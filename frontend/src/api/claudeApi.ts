@@ -15,7 +15,12 @@ export interface ChatRequest {
   sessionId?: string;
   allowedTools?: string[];
   workingDirectory?: string;
-  permissionMode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
+  permissionMode?:
+    | 'default'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'auto';
   // Optional SDK knobs driven by the ChatInputTools toolbar. Omit both
   // to let the SDK/model apply native defaults.
   effort?: EffortLevelWire;
@@ -49,10 +54,39 @@ export interface DiscoveredCommand {
   argumentHint?: string;
 }
 
+// Mirror of backend PermissionRequestPayload — see shared/types.ts.
+export interface PermissionSuggestionWire {
+  type: string;
+  behavior?: 'allow' | 'deny' | 'ask';
+  destination?: string;
+  raw: unknown;
+}
+export interface PermissionRequestPayload {
+  id: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  toolUseId: string;
+  title?: string;
+  displayName?: string;
+  description?: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  suggestions?: PermissionSuggestionWire[];
+}
+
+export type PermissionDecisionWire =
+  | {
+      behavior: 'allow';
+      updatedInput?: Record<string, unknown>;
+      acceptedSuggestions?: PermissionSuggestionWire[];
+    }
+  | { behavior: 'deny'; message: string };
+
 export interface StreamResponse {
-  type: 'claude_json' | 'error' | 'done' | 'aborted';
+  type: 'claude_json' | 'error' | 'done' | 'aborted' | 'permission_request';
   data?: unknown;
   error?: string;
+  permission?: PermissionRequestPayload;
 }
 
 export interface ProjectInfo {
@@ -137,6 +171,30 @@ export const claudeApi = {
         method: 'POST',
       });
       return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // Send the user's allow/deny choice for a pending tool-call permission
+  // request. The id matches the one delivered in the permission_request
+  // chunk. Returns true when the backend accepted the decision; false if
+  // the request was already resolved (e.g. user double-clicked).
+  respondPermission: async (
+    id: string,
+    decision: PermissionDecisionWire,
+  ): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/chat/permission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, decision }),
+      });
+      if (!response.ok) return false;
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+      };
+      return data.ok === true;
     } catch {
       return false;
     }

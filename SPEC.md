@@ -1029,4 +1029,322 @@ runtime panel, or via `GET /api/extensions/whisper-local`):
 
 ---
 
-*Last updated: 2026-04-24 (Recordings + Voice Input + Extensions)*
+## 14. Tool Permissions & Interactive Picker (2026-04-26)
+
+> Wraps the SDK's `canUseTool` callback into an inline Web-chat experience.
+> Two interaction surfaces ship together: a generic Allow / Deny / custom-reply
+> bubble for any tool, plus a VS-Code-style numbered picker that takes over
+> when the tool is `AskUserQuestion`. The user can drive everything from the
+> keyboard.
+
+### 14.1 Shipped Features
+
+- **Five permission modes** wired through the toolbar pill (cycle):
+  `Ask before edit` (`default`), `Edit auto` (`acceptEdits`), `Bypass`
+  (`bypassPermissions`), `Plan` (`plan`), `Auto` (`auto` — SDK's built-in
+  classifier picks per tool).
+- **Inline Allow / Deny bubble** for every prompted tool call. Three primary
+  choices: `Allow once`, `Allow always` (when the SDK supplies suggestions),
+  `Deny` → opens a textarea so the user can write a reason that's fed back
+  to Claude verbatim.
+- **VS-Code-style picker** for `AskUserQuestion`: numbered rows, ↑↓
+  navigation across all questions, `1`–`9` jump-pick, `Space` toggle,
+  `Tab` to Submit, `Cmd/Ctrl+Enter` send. Free-text textarea below
+  overrides the picks.
+- **Decision is recorded in chat history**: the bubble collapses to a one-line
+  status (`✓ Allowed`, `✓ Answered — 开发工具: …`, `✗ Denied — <reason>`)
+  so the user can scroll back and audit what they approved.
+- **Abort safety**: when the user aborts mid-turn, all outstanding permission
+  Promises resolve with deny so the SDK unwinds cleanly; outstanding bubbles
+  flip to "Request was no longer pending".
+
+### 14.2 Architecture — How a Tool Call Reaches the User
+
+```
+Claude SDK iterates …
+   │ wants to run Bash("rm -rf foo")
+   ▼
+canUseTool(toolName, input, opts)         ← backend callback
+   │ creates permissionId = uuid()
+   │ pendingPermissions.set(id, {resolve, requestId, originalInput})
+   │ pushes StreamResponse{type: 'permission_request', permission: {…}}
+   │ awaits Promise<PermissionResult>
+   ▼  (chunk flows through NDJSON to frontend)
+useStreamParser sees 'permission_request'
+   │ addMessage({type: 'permission_request', decided: {status: 'pending'}, …})
+   ▼
+ChatMessages renders <PermissionRequestComponent>
+   │ user clicks Allow / Deny / submits picker answers
+   │ POST /api/chat/permission { id, decision: {behavior, …} }
+   ▼
+handlePermissionResponse → resolvePendingPermission(id, decision)
+   │ builds SDK PermissionResult (fills updatedInput on allow)
+   │ entry.resolve(result)  ← un-blocks canUseTool
+   ▼
+SDK proceeds with the (allowed/denied) tool call
+```
+
+The whole loop is single-stream: the same NDJSON connection that delivers
+assistant text also carries permission prompts. The frontend just adds a new
+`StreamResponse.type` and a new message kind in the store.
+
+### 14.3 Backend — Async Queue Model
+
+The original `executeClaudeCommand` was a one-line generator:
+
+```ts
+for await (const m of query(opts)) yield {type:"claude_json", data:m};
+```
+
+That can't host a `canUseTool` callback because the callback needs to push
+events onto the same outbound stream while the SDK is still pulling. The
+refactor flips the producer from "directly yields" to "pushes into a queue
+that the outer generator drains":
+
+```ts
+const queue: StreamResponse[] = [];
+let waker: (() => void) | null = null;
+let producerDone = false;
+
+const push = (chunk: StreamResponse) => { queue.push(chunk); waker?.(); waker = null; };
+
+const canUseTool: CanUseTool = (toolName, input, opts) => new Promise(resolve => {
+  const id = randomUUID();
+  pendingPermissions.set(id, {resolve, requestId, originalInput: input});
+  push({type: "permission_request", permission: {id, toolName, input, …}});
+  opts.signal.addEventListener("abort", () => {
+    if (pendingPermissions.delete(id)) resolve({behavior:"deny", message:"aborted"});
+  });
+});
+
+(async () => {
+  try {
+    for await (const sdkMessage of query({...opts, canUseTool})) {
+      push({type: "claude_json", data: sdkMessage});
+    }
+  } finally { producerDone = true; abortPendingPermissionsForRequest(requestId); waker?.(); }
+})();
+
+while (!producerDone || queue.length) {
+  if (queue.length) yield queue.shift()!;
+  else await new Promise<void>(r => waker = r);
+}
+yield {type: "done"};
+```
+
+Two invariants the queue model preserves:
+
+1. **Order**: the user always sees `permission_request` before any subsequent
+   `claude_json` because both go through the same FIFO queue.
+2. **No leaks on abort**: `abortPendingPermissionsForRequest` runs in
+   `finally` AND in the catch block AND in the outer try's finally — three
+   chances to release every Promise so the SDK can unwind without hanging.
+
+### 14.4 SDK Schema Trap — Allow Requires `updatedInput`
+
+The TS type says `updatedInput?: Record<string, unknown>` but the runtime Zod
+schema rejects `undefined`. Sending `{behavior: "allow"}` blows up with:
+
+```
+ZodError: ["updatedInput"] expected record, received undefined
+```
+
+Fix: stash the original tool input alongside the resolver and default
+`updatedInput` to it on plain allow. The user can still customise input by
+sending `decision.updatedInput` from the frontend (not exposed in the UI yet,
+but the wire shape supports it).
+
+### 14.5 Frontend — Bubble Anatomy
+
+```
+┌────────────────────────────────────────────────┐
+│ ┃ 🔐  Claude wants to run Bash                  │   ← ┃ = 2px amber
+│ ┃    rm -rf foo                                 │       (or blue for
+│ ┃    ▶ Show full input                          │       AskUserQuestion)
+│ ──────────────────────────────────────────────  │
+│   [Allow once]  [Allow always]  [Deny]   …     │
+└────────────────────────────────────────────────┘
+                   after answer
+┌────────────────────────────────────────────────┐
+│ ┃ 🔐  Claude wants to run Bash                  │
+│   ✓ Allowed                          19:03:38  │
+└────────────────────────────────────────────────┘
+```
+
+The bubble uses neutral `card-bg` / `card-border` so it visually matches
+other chat bubbles. The 2px coloured left rule is the only intent cue —
+amber for permission prompts, blue for the question picker.
+
+### 14.6 AskUserQuestion Picker — Keyboard Map
+
+| Key                | Action                                                    |
+| ------------------ | --------------------------------------------------------- |
+| `↑` / `↓`          | Move cursor; wraps across questions at edges              |
+| `1`–`9`            | Pick option N in the active question (toggle for multi)   |
+| `Space`            | Toggle option at cursor (multi-select)                    |
+| `Enter`            | Pick + advance to next question (single-select)           |
+| `Tab` / `Shift+Tab`| Native focus through textarea → Submit button             |
+| `Cmd/Ctrl+Enter`   | Submit from anywhere                                      |
+| `Esc` (in textarea)| Bail back to the option list                              |
+
+The picker auto-focuses on mount so the user can answer without ever touching
+the mouse. The textarea below the options is a fallback: typing anything
+non-empty there overrides selections and the typed text is sent verbatim as
+the answer.
+
+### 14.7 Wire Format
+
+**Stream chunk** (backend → frontend):
+
+```ts
+{
+  type: "permission_request",
+  permission: {
+    id: "uuid",                          // permission resolution key
+    toolName: "Bash" | "AskUserQuestion" | …,
+    input: Record<string, unknown>,      // tool's args verbatim
+    toolUseId: string,                   // SDK's tool_use id (for pairing)
+    title?: string,                      // pre-rendered prompt from SDK
+    displayName?: string, description?: string,
+    decisionReason?: string, blockedPath?: string,
+    suggestions?: PermissionSuggestion[],// "always allow" rules to echo back
+  }
+}
+```
+
+**Decision response** (`POST /api/chat/permission`):
+
+```ts
+{
+  id: string,
+  decision:
+    | { behavior: "allow", updatedInput?: …, acceptedSuggestions?: … }
+    | { behavior: "deny",  message: string }
+}
+```
+
+`AskUserQuestion` answers go through `behavior: "deny"` with the formatted
+answer string in `message` — the SDK has no first-class "user answered"
+return shape, so the deny channel doubles as the reply path. The frontend
+suppresses the resulting `is_error: true` tool_result for `AskUserQuestion`
+so the chat history isn't littered with red ⚠️ bubbles.
+
+### 14.8 New Files / Touched Files
+
+**Backend** (Hono + agent SDK):
+
+- `backend/shared/types.ts` — `StreamResponse.type` extended; new
+  `PermissionRequestPayload`, `PermissionDecisionWire`, `PermissionSuggestion`.
+- `backend/claude/handlers/chat.ts` — async-queue refactor + `canUseTool`
+  + `pendingPermissions` map + `resolvePendingPermission` exported.
+- `backend/claude/handlers/permission.ts` — new file; one-handler module
+  for `POST /api/chat/permission`.
+- `backend/claude/app.ts` — registers the new route.
+
+**Frontend** (React + Zustand):
+
+- `frontend/src/store/chatStore.ts` — `PermissionModeValue` adds `'auto'`;
+  new `PermissionRequestMessage` type with `decided` discriminated union;
+  `setPermissionDecision` action.
+- `frontend/src/api/claudeApi.ts` — `StreamResponse` adds `permission_request`;
+  new `respondPermission(id, decision)` method; `permissionMode` accepts `'auto'`.
+- `frontend/src/hooks/useStreamParser.ts` — handles `permission_request`
+  chunks; suppresses AskUserQuestion tool_results; closes outstanding
+  pending bubbles when the stream ends.
+- `frontend/src/components/chat/ChatInputTools.tsx` — adds `'auto'` to the
+  permission cycle + relabels (`Ask before edit` / `Edit auto` / `Bypass` /
+  `Plan` / `Auto`).
+- `frontend/src/components/chat/ChatMessages.tsx` — `PermissionRequestComponent`
+  + `AskUserQuestionPicker` + the existing `summarizeToolInput` helper.
+
+### 14.9 Bug Fix Log (2026-04-26)
+
+#### Bug #1: Tool bubbles can't be expanded — but only in release dir
+
+**Symptom**: User reports clicking the green Bash/Read/Write tool bubbles does
+nothing — no expand, no detail. Other collapsibles (Session Info, 💭 Reasoning)
+work fine.
+
+**Wrong assumption (mine)**: the React click handler is broken. Investigated
+event bubbling, parent `pointer-events`, nested-button issues. Found nothing.
+
+**Real cause**: I had been editing `d:/Imperial/individual/ainone-dashboard-v1.0.0`
+(the release packaging dir) the entire session, while the user was running the
+dev server out of `d:/Imperial/individual/esp32_sensor_dashboard`. Vite was
+hot-reloading the *dev* dir's old code; my new code only existed in release.
+
+**Diagnostic that broke the assumption**: "Other collapsibles work" — same
+React pattern, same browser, same tab. So the bundle DID have working
+collapsibles. The new tool-bubble code just wasn't in this bundle. Conclusion:
+the running dev server has different source than the files I'm editing.
+
+**Fix**: reverted release with `git checkout -- <files>`, copied the edits
+from release → dev, pinned all future work to the dev folder.
+
+**Lesson**: when the user lists multiple working directories in `cwd`s, the
+*first* listed one is canonical for `cd`-less commands but the user's actual
+project may be elsewhere. Always confirm by reading `git status` against the
+suspected dev dir before editing.
+
+#### Bug #2: ZodError on `Allow once`
+
+**Symptom**: Clicking Allow → backend logs `ZodError: ["updatedInput"]
+expected record, received undefined` → tool fails → red Tool error bubble.
+
+**Wrong assumption (mine)**: SDK type says `updatedInput?` is optional; my wire
+shape `{behavior: 'allow'}` should be fine.
+
+**Reality**: the SDK's *runtime* Zod validator is stricter than the TS type —
+`updatedInput` is required (as a record) on every `allow` reply, even when
+unchanged.
+
+**Fix**: store the original tool input in `pendingPermissions` so
+`resolvePendingPermission` can default `updatedInput` to the unchanged input.
+Permission-decision builder moved out of `permission.ts` (which had no access
+to the input) and into `chat.ts` where the canUseTool closure has it.
+
+**Lesson**: don't trust TS optionality when there's a runtime Zod schema
+behind it. Quick check: search the SDK source for `z.record` / `z.object` and
+see whether `.optional()` is applied. Or just send a probe and read the error.
+
+#### Bug #3: Picker is too heavy / amber background hard to read in light mode
+
+**Symptom**: User: "做的太复杂了 … 琥珀色在浅色模式下看不清". Each option
+was a fat card with description below; whole bubble was filled amber.
+
+**First simplification (rejected)**: kept the cards, just darkened amber for
+light mode. User clarified: they wanted **VS-Code-style** — compact rows,
+number shortcuts, free-text fallback.
+
+**Final design**:
+
+- One option = one row (label + dim description inline).
+- Number chip on the left; selection turns it into ✓.
+- Cursor row gets a subtle `card-hover` background, no bold colour.
+- Card body uses `card-bg` (theme-aware) — amber/blue is now just a 2px left
+  rule, an intent hint, not the dominant fill.
+- Submit button uses `bg-blue-600` (interactive primary), reserves green
+  exclusively for the "✓ Answered" / "✓ Allowed" status.
+
+**Lesson**: when the user says "VS Code style" they mean *terminal-shaped*:
+flat rows, keyboard-first, no decorative chrome.
+
+#### Bug #4: Can't reach Submit with the keyboard
+
+**Symptom**: User can navigate options with ↑↓ but Tab is intercepted to
+cycle questions, so focus never reaches Submit, so `Enter` on Submit doesn't
+work.
+
+**Fix**: drop the custom Tab handler entirely. `↑/↓` now wraps across
+questions at the edges (Q1 last → Q2 first), so cross-question nav stays in
+the option list. Tab is left to the browser, which moves focus naturally:
+picker root → textarea → Submit button. `focus:ring-2` on the button gives
+a visible cue when it's the active focus target.
+
+**Lesson**: don't fight the platform's focus model unless there's a real
+reason. Native `Tab` ordering already does the right thing once the elements
+are arranged in DOM order.
+
+---
+
+*Last updated: 2026-04-26 (Tool Permissions + Interactive Picker)*
