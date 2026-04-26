@@ -54,3 +54,6 @@ desktop.ini
 # Build artifacts
 *.tgz
 *.whl
+
+# Claude Code per-project local config (personal, auto-generated)
+.claude/
