@@ -1,6 +1,6 @@
 {
   "name": "ainone-claude-backend",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "Hono backend for AinOne Dashboard — wraps the Claude Code CLI with streaming SSE chat and an embedded terminal",
   "keywords": [

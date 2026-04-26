@@ -2,6 +2,19 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.2 — 2026-04-26
+
+### Added
+
+- **Frontend startup splash.** Vite is ready in ~1 s but the Python
+  and Hono backends take longer (especially on first run while
+  `pip install` and `npm install` finish). The dashboard now covers
+  itself with a loading screen that polls `/api/health` and
+  `/api/projects` until both come online, with a per-tier status row
+  so the user can see exactly which backend they're waiting on. After
+  8 s a "Continue anyway" button appears for the case where one tier
+  is intentionally off.
+
 ## v1.0.1 — 2026-04-26
 
 Bug-fix release covering issues found in the v1.0.0 first-week test
