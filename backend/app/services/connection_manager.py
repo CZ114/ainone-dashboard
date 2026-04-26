@@ -290,7 +290,13 @@ class ConnectionManager:
         return self.serial_bridge.is_connected
 
     # BLE API
-    def ble_start_scan(self):
+    def ble_start_scan(self, device_name: Optional[str] = None):
+        # An explicit, non-empty device_name re-targets the bridge for
+        # this and all subsequent scans. None / empty leaves whatever
+        # target the bridge already had (initialised to the config
+        # default at startup).
+        if device_name and device_name.strip():
+            self.ble_bridge.device_name = device_name.strip()
         self.ble_bridge.start_scan()
 
     def ble_stop(self):

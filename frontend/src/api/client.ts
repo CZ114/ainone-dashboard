@@ -36,9 +36,28 @@ export const serialApi = {
 
 // BLE API
 export const bleApi = {
-  scan: () => fetchJson('/ble/scan', { method: 'POST' }),
+  // deviceName is optional — when omitted, the backend uses whatever
+  // target the bridge already has (initialised from config). When
+  // supplied, it re-targets the bridge for this and future scans.
+  scan: (deviceName?: string) =>
+    fetchJson('/ble/scan', {
+      method: 'POST',
+      body: JSON.stringify(
+        deviceName && deviceName.trim()
+          ? { device_name: deviceName.trim() }
+          : {},
+      ),
+    }),
 
-  connect: () => fetchJson('/ble/connect', { method: 'POST' }),
+  connect: (deviceName?: string) =>
+    fetchJson('/ble/connect', {
+      method: 'POST',
+      body: JSON.stringify(
+        deviceName && deviceName.trim()
+          ? { device_name: deviceName.trim() }
+          : {},
+      ),
+    }),
 
   disconnect: () => fetchJson('/ble/disconnect', { method: 'POST' }),
 

@@ -2,6 +2,20 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.6 — 2026-04-26
+
+### Added
+
+- **BLE device name and UDP audio port are now user-editable.** Both
+  used to be hardcoded (BLE always scanned for `ESP32-S3-MultiSensor`,
+  audio always listened on UDP 8888) and required a `config.py` edit
+  + restart to change. They're now plain inputs in the connection
+  panel, persisted to `localStorage` per user. Defaults still match
+  the backend constants. The BLE name flows through the existing
+  `/api/ble/scan` endpoint (now accepting an optional `device_name`
+  in the request body); the audio port was already accepted by
+  `/api/audio/start` — only the frontend was hardcoding it.
+
 ## v1.0.5 — 2026-04-26
 
 ### Changed

@@ -15,6 +15,36 @@ export function ConnectionPanel() {
 
   const [selectedPort, setSelectedPort] = useState('');
   const [baudRate, setBaudRate] = useState(115200);
+
+  // BLE device name + UDP audio port — user-editable, persisted to
+  // localStorage so each user keeps their own preferred values across
+  // page reloads. Defaults match config.py constants on the backend.
+  const BLE_NAME_KEY = 'connection-ble-device-name';
+  const AUDIO_PORT_KEY = 'connection-audio-port';
+  const DEFAULT_BLE_NAME = 'ESP32-S3-MultiSensor';
+  const DEFAULT_AUDIO_PORT = 8888;
+  const [bleDeviceName, setBleDeviceName] = useState<string>(() => {
+    try {
+      return localStorage.getItem(BLE_NAME_KEY) ?? DEFAULT_BLE_NAME;
+    } catch {
+      return DEFAULT_BLE_NAME;
+    }
+  });
+  const [audioPort, setAudioPort] = useState<string>(() => {
+    try {
+      return localStorage.getItem(AUDIO_PORT_KEY) ?? String(DEFAULT_AUDIO_PORT);
+    } catch {
+      return String(DEFAULT_AUDIO_PORT);
+    }
+  });
+  // Persist whenever the user commits an edit. Wrapped in try/catch
+  // because Safari private mode + storage quotas can throw.
+  useEffect(() => {
+    try { localStorage.setItem(BLE_NAME_KEY, bleDeviceName); } catch { /* ignore */ }
+  }, [bleDeviceName]);
+  useEffect(() => {
+    try { localStorage.setItem(AUDIO_PORT_KEY, audioPort); } catch { /* ignore */ }
+  }, [audioPort]);
   // Per-tier ACTION INTENT, not "loading flag".
   //
   // The label needs to follow what the USER is doing — not what the
@@ -90,7 +120,10 @@ export function ConnectionPanel() {
       // because the label is driven by `bleAction` not by ble.connected.
       setBleAction('connecting');
       try {
-        await bleApi.scan();
+        // Pass the user's typed device name so the backend re-targets
+        // the bridge before scanning. Empty / blank falls back to the
+        // last-set value on the server.
+        await bleApi.scan(bleDeviceName);
         const deadline = Date.now() + 10_000; // 10 s budget
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 500));
@@ -126,7 +159,11 @@ export function ConnectionPanel() {
     } else {
       setAudioAction('connecting');
       try {
-        await audioApi.start(8888);
+        const portNum = parseInt(audioPort, 10);
+        if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+          throw new Error(`Invalid UDP port: ${audioPort}`);
+        }
+        await audioApi.start(portNum);
         setAudioConnected(true);
       } catch (e) {
         console.error('Failed to start audio:', e);
@@ -241,13 +278,20 @@ export function ConnectionPanel() {
         </div>
 
         <div className="flex gap-2">
-          <span className="flex-1 bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-secondary text-sm">
-            {ble.deviceName || 'ESP32-S3-MultiSensor'}
-          </span>
+          <input
+            type="text"
+            value={ble.connected && ble.deviceName ? ble.deviceName : bleDeviceName}
+            onChange={(e) => setBleDeviceName(e.target.value)}
+            disabled={ble.connected || bleAction !== null}
+            placeholder="ESP32-S3-MultiSensor"
+            spellCheck={false}
+            title="BLE advertised name to scan for"
+            className="flex-1 min-w-0 bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm font-mono disabled:opacity-50"
+          />
 
           <button
             onClick={handleBleConnect}
-            disabled={bleAction !== null}
+            disabled={bleAction !== null || !bleDeviceName.trim()}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               ble.connected
                 ? 'bg-status-disconnected hover:bg-red-600 text-white'
@@ -278,13 +322,25 @@ export function ConnectionPanel() {
         </div>
 
         <div className="flex gap-2">
-          <span className="flex-1 bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-secondary text-sm">
-            Port: 8888
-          </span>
+          <div className="flex-1 flex items-center gap-2 bg-window-bg border border-card-border rounded px-3 py-1.5">
+            <span className="text-xs text-text-muted shrink-0">Port</span>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              step={1}
+              value={audioPort}
+              onChange={(e) => setAudioPort(e.target.value)}
+              disabled={audio.connected || audioAction !== null}
+              placeholder="8888"
+              title="UDP port the ESP32 sends audio frames to (1 – 65535)"
+              className="w-full bg-transparent text-text-primary text-sm font-mono outline-none disabled:opacity-50"
+            />
+          </div>
 
           <button
             onClick={handleAudioConnect}
-            disabled={audioAction !== null}
+            disabled={audioAction !== null || !audioPort.trim()}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               audio.connected
                 ? 'bg-status-disconnected hover:bg-red-600 text-white'
