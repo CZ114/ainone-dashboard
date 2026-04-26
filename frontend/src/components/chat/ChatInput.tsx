@@ -181,15 +181,24 @@ export function ChatInput({
   // --- Recording drop handler --------------------------------------
   //
   // Triggered when the user drags a card from RecordingsPanel and
-  // releases it over the textarea area. We fetch a CSV preview (small
-  // head cut) from the Python backend and materialize a PendingAttachment
-  // with kind='recording'; the prompt builder later inlines the preview
-  // and lists paths so Claude can Read full content on demand.
+  // releases it over the textarea area. Each file the user requested
+  // (CSV, audio, or both) becomes its OWN PendingAttachment so the
+  // pill row shows them separately and the prompt builder emits a
+  // dedicated block per file. The previous single-bundle approach
+  // looked like only the CSV had been attached when the user dragged
+  // "both" — the audio was buried inside the same pill's metadata
+  // and never visually surfaced.
 
-  const buildRecordingAttachment = async (
+  const newAttId = (): string =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `rec_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+  const buildRecordingAttachments = async (
     payload: RecordingDragPayload,
-  ): Promise<PendingAttachment> => {
-    let csvPreview: string | undefined;
+  ): Promise<PendingAttachment[]> => {
+    const out: PendingAttachment[] = [];
+
     if (payload.csvFilename) {
       // Fetch either full content (tiny files) or just a head preview.
       // Full CSV path is always included in the prompt so Claude can
@@ -199,44 +208,45 @@ export function ChatInput({
           ? undefined
           : RECORDING_CSV_PREVIEW_ROWS;
       const res = await recordingsApi.csvContent(payload.csvFilename, { head });
-      if (res.text) csvPreview = res.text;
+      const csvPreview = res.text ?? undefined;
+
+      out.push({
+        id: newAttId(),
+        path: `(ESP32 session ${payload.id} · CSV)`,
+        filename: payload.csvFilename,
+        sizeBytes: payload.csvSizeBytes ?? 0,
+        mimeType: 'text/csv',
+        kind: 'recording',
+        content: csvPreview,
+        recording: {
+          sessionId: payload.id,
+          csvFilename: payload.csvFilename,
+          csvRows: payload.csvRows,
+        },
+      });
     }
 
-    const primaryFilename =
-      payload.csvFilename ||
-      payload.audioFilename ||
-      `recording_${payload.id}`;
-    const sizeBytes =
-      (payload.csvSizeBytes || 0) + (payload.audioSizeBytes || 0);
+    if (payload.audioFilename) {
+      out.push({
+        id: newAttId(),
+        // Use the served audio URL as the path — gives Claude
+        // something it can curl from a Bash tool call.
+        path: recordingsApi.audioUrl(payload.audioFilename),
+        filename: payload.audioFilename,
+        sizeBytes: payload.audioSizeBytes ?? 0,
+        mimeType: 'audio/wav',
+        kind: 'recording',
+        recording: {
+          sessionId: payload.id,
+          audioFilename: payload.audioFilename,
+          audioDurationSeconds: payload.audioDurationSeconds,
+          audioSizeBytes: payload.audioSizeBytes,
+          audioUrl: recordingsApi.audioUrl(payload.audioFilename),
+        },
+      });
+    }
 
-    return {
-      id:
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `rec_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      // We stash the session id into `path` so prompt rendering shows
-      // something meaningful. The real file paths are on the backend
-      // (Python `RECORDINGS_DIR`); Claude doesn't need absolute FS
-      // access because the prompt block includes an HTTP audio URL and
-      // the CSV content preview inline.
-      path: `(ESP32 session ${payload.id})`,
-      filename: primaryFilename,
-      sizeBytes,
-      mimeType: payload.csvFilename ? 'text/csv' : 'audio/wav',
-      kind: 'recording',
-      content: csvPreview,
-      recording: {
-        sessionId: payload.id,
-        csvFilename: payload.csvFilename,
-        csvRows: payload.csvRows,
-        audioFilename: payload.audioFilename,
-        audioDurationSeconds: payload.audioDurationSeconds,
-        audioSizeBytes: payload.audioSizeBytes,
-        audioUrl: payload.audioFilename
-          ? recordingsApi.audioUrl(payload.audioFilename)
-          : undefined,
-      },
-    };
+    return out;
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -282,8 +292,12 @@ export function ChatInput({
     if (!payload.id) return;
 
     try {
-      const att = await buildRecordingAttachment(payload);
-      addPendingAttachments([att]);
+      const atts = await buildRecordingAttachments(payload);
+      if (atts.length === 0) {
+        window.alert(`Recording ${payload.id} has nothing attachable.`);
+        return;
+      }
+      addPendingAttachments(atts);
     } catch (err) {
       window.alert(
         `Failed to attach recording ${payload.id}: ${
