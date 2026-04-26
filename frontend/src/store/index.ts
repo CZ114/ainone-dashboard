@@ -38,12 +38,30 @@ interface AppState {
   channels: ChannelData[];
   channelCount: number;
 
-  // Recording
-  isRecording: boolean;
-  recordingRemaining: number;
-  recordingElapsed: number;
-  recordingDuration: number;     // original duration set at start
-  recordingStartTimeMs: number;  // frontend clock when recording began
+  // Recording — single anchor model.
+  //
+  // Authoritative fields:
+  //   `recording.active`   — is a session currently running?
+  //   `recording.duration` — total seconds the user requested
+  //   `recording.anchorMs` — wall clock corresponding to elapsed = 0
+  //
+  // Derived (refreshed by recordingTick at 100 ms; also patched by
+  // recordingHeartbeat from the backend WS):
+  //   `recording.elapsedSec`  — Math.max(0, (now - anchor) / 1000)
+  //   `recording.remainingSec` — Math.max(0, duration - elapsed)
+  //
+  // The display reads only the derived fields. Anchor is set ONCE per
+  // session (on local Start, or on first heartbeat if some other tab
+  // started the session) and never moved while we're already running,
+  // unless a heartbeat reports a >1.5 s drift — that's the only path
+  // that re-anchors mid-session.
+  recording: {
+    active: boolean;
+    duration: number;
+    anchorMs: number;
+    elapsedSec: number;
+    remainingSec: number;
+  };
 
   // Display settings
   settings: DisplaySettings;
@@ -63,13 +81,22 @@ interface AppState {
   ) => void;
   toggleChannel: (index: number) => void;
 
-  setRecording: (isRecording: boolean, remaining?: number, elapsed?: number) => void;
-  updateRecordingTime: (remaining: number, elapsed: number) => void;
-  // Heartbeat from backend WebSocket. ONLY meant for status sync —
-  // it must NOT clobber recordingStartTimeMs / recordingDuration when
-  // we are already recording, otherwise the local 100 ms timer keeps
-  // re-anchoring its origin and the displayed time jumps around.
-  syncRecordingFromBackend: (isRecording: boolean, remaining: number, elapsed: number) => void;
+  // User-initiated start (called from RecordingControls after the
+  // backend POST returns 200). Anchors at "now" and trusts the
+  // requested duration.
+  recordingStart: (duration: number) => void;
+  // User-initiated stop (or natural completion via heartbeat).
+  recordingStop: () => void;
+  // 100 ms display refresh — pure derivation from anchor + clock.
+  recordingTick: () => void;
+  // WS heartbeat from backend (~1 Hz). Detects natural completion,
+  // re-anchors on big drift, or seeds a session that another tab
+  // started.
+  recordingHeartbeat: (
+    isRecordingOnBackend: boolean,
+    elapsed: number,
+    remaining: number,
+  ) => void;
 
   setSettings: (settings: Partial<DisplaySettings>) => void;
 }
@@ -95,11 +122,13 @@ export const useStore = create<AppState>((set) => ({
   channels: [],
   channelCount: 0,
 
-  isRecording: false,
-  recordingRemaining: 0,
-  recordingElapsed: 0,
-  recordingDuration: 0,
-  recordingStartTimeMs: 0,
+  recording: {
+    active: false,
+    duration: 0,
+    anchorMs: 0,
+    elapsedSec: 0,
+    remainingSec: 0,
+  },
 
   settings: {
     points_per_channel: 100,
@@ -176,56 +205,88 @@ export const useStore = create<AppState>((set) => ({
       return { channels };
     }),
 
-  setRecording: (isRecording, remaining = 0, elapsed = 0) =>
+  recordingStart: (duration) =>
     set(() => ({
-      isRecording,
-      recordingDuration: isRecording ? remaining : 0,
-      recordingStartTimeMs: isRecording ? Date.now() : 0,
-      recordingRemaining: remaining,
-      recordingElapsed: elapsed,
+      recording: {
+        active: true,
+        duration,
+        anchorMs: Date.now(),
+        elapsedSec: 0,
+        remainingSec: duration,
+      },
     })),
 
-  updateRecordingTime: (remaining, elapsed) =>
+  recordingStop: () =>
+    set(() => ({
+      recording: {
+        active: false,
+        duration: 0,
+        anchorMs: 0,
+        elapsedSec: 0,
+        remainingSec: 0,
+      },
+    })),
+
+  recordingTick: () =>
     set((state) => {
-      const computedElapsed = state.recordingStartTimeMs
-        ? (Date.now() - state.recordingStartTimeMs) / 1000
-        : elapsed;
-      const computedRemaining = state.recordingDuration
-        ? Math.max(0, state.recordingDuration - computedElapsed)
-        : remaining;
+      if (!state.recording.active) return {};
+      const elapsed = Math.max(0, (Date.now() - state.recording.anchorMs) / 1000);
+      const remaining = Math.max(0, state.recording.duration - elapsed);
       return {
-        recordingRemaining: computedRemaining,
-        recordingElapsed: computedElapsed,
+        recording: {
+          ...state.recording,
+          elapsedSec: elapsed,
+          remainingSec: remaining,
+        },
       };
     }),
 
-  syncRecordingFromBackend: (isRecording, remaining, elapsed) =>
+  recordingHeartbeat: (isRecordingOnBackend, elapsed, remaining) =>
     set((state) => {
-      // Backend says recording finished — clear timer state.
-      if (!isRecording) {
-        if (!state.isRecording) return {};
+      // Backend says it's done — clear locally.
+      if (!isRecordingOnBackend) {
+        if (!state.recording.active) return {};
         return {
-          isRecording: false,
-          recordingDuration: 0,
-          recordingStartTimeMs: 0,
-          recordingRemaining: 0,
-          recordingElapsed: 0,
+          recording: {
+            active: false,
+            duration: 0,
+            anchorMs: 0,
+            elapsedSec: 0,
+            remainingSec: 0,
+          },
         };
       }
-      // Backend says recording is in progress.
-      // - If we're already recording locally, do NOT touch the anchor;
-      //   the local 100 ms timer is the display authority.
-      // - If not (e.g. backend was started from another tab), seed from
-      //   the heartbeat exactly once so the timer can take over.
-      if (state.isRecording) return {};
-      const total = remaining + elapsed;
-      return {
-        isRecording: true,
-        recordingDuration: total,
-        recordingStartTimeMs: Date.now() - elapsed * 1000,
-        recordingRemaining: remaining,
-        recordingElapsed: elapsed,
-      };
+
+      // Backend says recording, we don't have one locally → seed from
+      // backend (covers "another tab started it" or "backend was
+      // already recording when we connected").
+      if (!state.recording.active) {
+        const duration = elapsed + remaining;
+        return {
+          recording: {
+            active: true,
+            duration,
+            anchorMs: Date.now() - elapsed * 1000,
+            elapsedSec: elapsed,
+            remainingSec: remaining,
+          },
+        };
+      }
+
+      // Both sides agree we're recording. Re-anchor only if our local
+      // clock has drifted from the backend's elapsed by more than
+      // 1.5 s — covers clock skew or a hibernated tab. Otherwise
+      // leave the anchor alone so the 100 ms tick stays smooth.
+      const ourElapsed = (Date.now() - state.recording.anchorMs) / 1000;
+      if (Math.abs(ourElapsed - elapsed) > 1.5) {
+        return {
+          recording: {
+            ...state.recording,
+            anchorMs: Date.now() - elapsed * 1000,
+          },
+        };
+      }
+      return {};
     }),
 
   setSettings: (newSettings) =>

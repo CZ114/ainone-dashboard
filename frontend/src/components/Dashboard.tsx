@@ -17,26 +17,21 @@ function Dashboard() {
   const setAudioConnected = useStore((state) => state.setAudioConnected);
   const setAudioLevel = useStore((state) => state.setAudioLevel);
   const updateSensorData = useStore((state) => state.updateSensorData);
-  const setRecording = useStore((state) => state.setRecording);
-  const updateRecordingTime = useStore((state) => state.updateRecordingTime);
-  const syncRecordingFromBackend = useStore((state) => state.syncRecordingFromBackend);
-  const isRecording = useStore((state) => state.isRecording);
-  const recordingDuration = useStore((state) => state.recordingDuration);
-  const recordingStartTimeMs = useStore((state) => state.recordingStartTimeMs);
+  const recordingTick = useStore((state) => state.recordingTick);
+  const recordingHeartbeat = useStore((state) => state.recordingHeartbeat);
+  const recordingActive = useStore((state) => state.recording.active);
 
-  // Frontend timer — runs every 100ms, computes elapsed/remaining from clock.
-  // Mirrors the old Tkinter GUI's _recording_countdown_tick() approach.
+  // 100 ms display refresh while a session is active. The store action
+  // recomputes elapsed/remaining from the anchor + wall clock — no
+  // dependency on recordingDuration / startTimeMs in the deps array,
+  // so re-anchoring (in heartbeat) doesn't restart the interval and
+  // the displayed time stays smooth.
   useEffect(() => {
-    if (isRecording && recordingStartTimeMs > 0) {
-      updateRecordingTime(recordingDuration, 0);
-      const id = setInterval(() => {
-        const elapsed = (Date.now() - recordingStartTimeMs) / 1000;
-        const remaining = Math.max(0, recordingDuration - elapsed);
-        updateRecordingTime(remaining, elapsed);
-      }, 100);
-      return () => clearInterval(id);
-    }
-  }, [isRecording, recordingStartTimeMs, recordingDuration, updateRecordingTime]);
+    if (!recordingActive) return;
+    recordingTick();
+    const id = setInterval(recordingTick, 100);
+    return () => clearInterval(id);
+  }, [recordingActive, recordingTick]);
 
   useEffect(() => {
     const handleMessage = (message: WSMessage) => {
@@ -69,13 +64,13 @@ function Dashboard() {
         }
 
         case 'recording_status': {
-          // Use the dedicated sync action so heartbeats can't reset the
-          // local timer's origin. setRecording remains the entry-point
-          // for user-initiated start/stop in RecordingControls.
-          syncRecordingFromBackend(
+          // Backend heartbeat. The store action only re-anchors if
+          // (a) backend says active and we don't, (b) drift > 1.5 s,
+          // or (c) backend says inactive — otherwise it's a no-op.
+          recordingHeartbeat(
             message.is_recording,
+            message.elapsed_seconds,
             message.remaining_seconds,
-            message.elapsed_seconds
           );
           break;
         }
@@ -94,9 +89,7 @@ function Dashboard() {
     setAudioConnected,
     setAudioLevel,
     updateSensorData,
-    setRecording,
-    updateRecordingTime,
-    syncRecordingFromBackend,
+    recordingHeartbeat,
   ]);
 
   return (

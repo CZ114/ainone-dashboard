@@ -9,7 +9,7 @@ export function Header() {
   const ble = useStore((state) => state.ble);
   const audio = useStore((state) => state.audio);
   const channelCount = useStore((state) => state.channelCount);
-  const isRecording = useStore((state) => state.isRecording);
+  const isRecording = useStore((state) => state.recording.active);
   const location = useLocation();
 
   return (
