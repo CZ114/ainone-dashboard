@@ -96,9 +96,11 @@ interface AppState {
   recordingStop: () => void;
   // 100 ms display refresh — pure derivation from anchor + clock.
   recordingTick: () => void;
-  // WS heartbeat from backend (~1 Hz). Detects natural completion,
-  // re-anchors on big drift, or seeds a session that another tab
-  // started.
+  // WS heartbeat from backend (~1 Hz). Used SOLELY to detect that
+  // backend has stopped (natural completion at duration end, or
+  // external stop) and clear local state. The elapsed/remaining
+  // arguments are accepted for API compatibility but ignored —
+  // local clock is the sole authority for the displayed countdown.
   recordingHeartbeat: (
     isRecordingOnBackend: boolean,
     elapsed: number,
@@ -277,17 +279,19 @@ export const useStore = create<AppState>((set) => ({
       };
     }),
 
-  recordingHeartbeat: (isRecordingOnBackend, elapsed, remaining) =>
+  recordingHeartbeat: (isRecordingOnBackend, _elapsed, _remaining) =>
     set((state) => {
-      // Within the quarantine window, the user just took a local
-      // action and we don't trust WS messages that may predate it.
+      // Heartbeats now do exactly ONE thing: clear local state when
+      // backend says it's no longer recording (natural completion /
+      // external stop). We deliberately do NOT seed cross-tab sessions
+      // and do NOT re-anchor on drift — both produced visible time
+      // jumps in practice (back to 0 on stale seed, jumping forward
+      // on catch-up). Local timer is the sole authority for the
+      // displayed elapsed once recordingStart anchors it.
       if (Date.now() < state.recording.ignoreHeartbeatsUntilMs) {
         return {};
       }
-
-      // Backend says it's done — clear locally.
-      if (!isRecordingOnBackend) {
-        if (!state.recording.active) return {};
+      if (!isRecordingOnBackend && state.recording.active) {
         return {
           recording: {
             active: false,
@@ -296,38 +300,6 @@ export const useStore = create<AppState>((set) => ({
             elapsedSec: 0,
             remainingSec: 0,
             ignoreHeartbeatsUntilMs: 0,
-          },
-        };
-      }
-
-      // Backend says recording, we don't have one locally → seed from
-      // backend (covers "another tab started it" or "backend was
-      // already recording when we connected").
-      if (!state.recording.active) {
-        const duration = elapsed + remaining;
-        return {
-          recording: {
-            active: true,
-            duration,
-            anchorMs: Date.now() - elapsed * 1000,
-            elapsedSec: elapsed,
-            remainingSec: remaining,
-            ignoreHeartbeatsUntilMs: 0,
-          },
-        };
-      }
-
-      // Both sides agree we're recording. Only catch up if WE have
-      // fallen significantly behind backend (tab hibernation, GC
-      // pause). Never re-anchor when we're ahead of backend — that
-      // produces visible backward time jumps because the 1 Hz
-      // heartbeat is always ~1 s stale in transit.
-      const ourElapsed = (Date.now() - state.recording.anchorMs) / 1000;
-      if (elapsed - ourElapsed > 2.0) {
-        return {
-          recording: {
-            ...state.recording,
-            anchorMs: Date.now() - elapsed * 1000,
           },
         };
       }
