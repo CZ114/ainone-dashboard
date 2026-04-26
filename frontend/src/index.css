@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme tokens — each color is an RGB triplet so Tailwind can apply
+ * alpha modifiers (bg-card-bg/50 etc.) via the `rgb(var(...) / <alpha>)`
+ * syntax declared in tailwind.config.js.
+ *
+ * Strategy:
+ *   - .dark on <html> → dark palette (the project's original look)
+ *   - .light on <html> → light palette
+ *   - no class on <html> → fall back to dark (safety net if ThemeProvider
+ *     hasn't mounted yet)
+ *
+ * ThemeContext sets the class on initial mount based on stored preference
+ * or system `prefers-color-scheme`.
+ */
+:root,
+html.dark {
+  --color-window-bg:    15 20 25;    /* #0F1419 */
+  --color-card-bg:      26 35 50;    /* #1A2332 */
+  --color-card-border:  42 52 65;    /* #2A3441 */
+  --color-card-hover:   36 45 61;    /* #242D3D */
+
+  --color-text-primary:    248 250 252; /* #F8FAFC */
+  --color-text-secondary:  148 163 184; /* #94A3B8 */
+  --color-text-muted:      100 116 139; /* #64748B */
+}
+
+html.light {
+  --color-window-bg:    248 250 252;  /* #F8FAFC */
+  --color-card-bg:      255 255 255;  /* #FFFFFF */
+  --color-card-border:  226 232 240;  /* #E2E8F0 */
+  --color-card-hover:   241 245 249;  /* #F1F5F9 */
+
+  --color-text-primary:    15 23 42;    /* #0F172A */
+  --color-text-secondary:  71 85 105;   /* #475569 */
+  --color-text-muted:      148 163 184; /* #94A3B8 */
+}
+
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: rgb(var(--color-window-bg));
+  color: rgb(var(--color-text-primary));
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+#root {
+  min-height: 100vh;
+}

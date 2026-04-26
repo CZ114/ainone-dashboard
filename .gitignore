@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+
+# Virtual environments (both legacy Scripts/ and modern bin/ styles)
+backend/.venv/
+backend/.venv
+venv/
+.venv/
+.venv
+
+# Backend
+backend/claude/node_modules/
+*.egg-info/
+dist/
+build/
+
+# Frontend
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/dist/
+
+# Generated / runtime state
+*.db
+*.db-journal
+*.log
+logs/
+recordings/
+backend/data/audio/
+backend/data/csv/
+backend/data/serial_logs/
+extensions_state.json
+
+# Environment (contains secrets — never commit)
+.env
+.env.local
+.env.*.local
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artifacts
+*.tgz
+*.whl

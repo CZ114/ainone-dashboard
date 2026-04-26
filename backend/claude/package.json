@@ -1,0 +1,82 @@
+{
+  "name": "ainone-claude-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Hono backend for AinOne Dashboard — wraps the Claude Code CLI with streaming SSE chat and an embedded terminal",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "chat",
+    "anthropic",
+    "esp32",
+    "dashboard",
+    "hono"
+  ],
+  "author": "CZ114",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CZ114/ainone-dashboard.git",
+    "directory": "backend/claude"
+  },
+  "bugs": {
+    "url": "https://github.com/CZ114/ainone-dashboard/issues"
+  },
+  "homepage": "https://github.com/CZ114/ainone-dashboard#readme",
+  "main": "dist/cli/node.js",
+  "bin": {
+    "ainone-claude-backend": "dist/cli/node.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "predev": "node scripts/generate-version.js",
+    "dev": "tsx watch cli/node.ts --debug",
+    "prebuild": "node scripts/generate-version.js",
+    "build": "npm run build:clean && npm run build:bundle && npm run build:static",
+    "build:clean": "rimraf dist",
+    "build:bundle": "node scripts/build-bundle.js",
+    "build:static": "node scripts/copy-frontend.js",
+    "start": "node dist/cli/node.js",
+    "test": "vitest --run --reporter=verbose",
+    "lint": "eslint \"**/*.ts\" --ignore-pattern dist/",
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepack": "node scripts/prepack.js",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.118",
+    "@hono/node-server": "^1.0.0",
+    "@logtape/logtape": "^1.0.0",
+    "@logtape/pretty": "^1.0.0",
+    "@types/ws": "^8.18.1",
+    "commander": "^14.0.0",
+    "hono": "^4.8.5",
+    "node-pty": "^1.2.0-beta.12",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
+    "esbuild": "^0.25.6",
+    "eslint": "^9.0.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.118"
+  }
+}
