@@ -45,8 +45,15 @@ export interface PendingAttachment {
   recording?: RecordingAttachmentMeta;
 }
 
-// Total-size guardrail for a single message — prevents pathological
-// "100 x 40KB file" prompts from blowing up tokens.
+// Guardrail for one message's total inlined-text payload — prevents
+// pathological "100 × 40 KB text file" prompts from blowing the
+// model's context window.
+//
+// IMPORTANT: this caps the bytes that actually land in the PROMPT,
+// not the on-disk file size. Image / recording-audio / other-binary
+// attachments only contribute a one-line path reference, so a 1 GB
+// WAV counts as ~200 bytes here, not 1 GB. See `promptBytesFor` for
+// the per-kind accounting.
 export const MAX_TOTAL_ATTACHMENT_BYTES = 500 * 1024;
 
 // Drag-and-drop MIME used to shuttle a recording session payload from
@@ -60,8 +67,28 @@ export const RECORDING_DRAG_MIME = 'application/x-esp32-recording';
 export const RECORDING_CSV_PREVIEW_ROWS = 50;
 export const RECORDING_CSV_INLINE_BYTES = 50 * 1024;
 
+// Approximate prompt cost of one attachment, in bytes. The pill UI
+// still SHOWS att.sizeBytes (file size — that's what the user
+// expects to see), but the cap is enforced against this effective
+// figure so a multi-MB WAV doesn't get rejected when only its URL
+// makes it into the prompt.
+export function promptBytesFor(att: PendingAttachment): number {
+  // Text attachment: full content inlined as a fenced block.
+  if (att.kind === 'text' && att.content !== undefined) {
+    return att.content.length;
+  }
+  // Recording attachment: CSV preview (already capped at
+  // RECORDING_CSV_INLINE_BYTES upstream) + a few hundred bytes of
+  // metadata header. Audio-only recording = pure metadata.
+  if (att.kind === 'recording') {
+    return (att.content?.length ?? 0) + 256;
+  }
+  // Image / other: only a one-liner path reference goes to the model.
+  return 256;
+}
+
 export function totalAttachmentBytes(attachments: PendingAttachment[]): number {
-  return attachments.reduce((sum, a) => sum + a.sizeBytes, 0);
+  return attachments.reduce((sum, a) => sum + promptBytesFor(a), 0);
 }
 
 export function formatSize(bytes: number): string {
