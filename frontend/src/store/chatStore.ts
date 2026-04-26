@@ -33,15 +33,17 @@ export interface ToolMessage {
   type: 'tool';
   toolName: string;
   input?: Record<string, unknown>;
+  toolUseId?: string;
   timestamp: number;
 }
 
 export interface ToolResultMessage {
   id: string;
   type: 'tool_result';
-  toolName: string;
+  toolName?: string;
+  toolUseId?: string;
   content: string;
-  summary?: string;
+  isError?: boolean;
   timestamp: number;
 }
 
@@ -73,6 +75,44 @@ export interface PlanMessage {
   timestamp: number;
 }
 
+// Mirror of backend PermissionSuggestion. `raw` is opaque; we round-trip
+// it back to the backend untouched when the user picks "Allow always".
+export interface PermissionSuggestionWire {
+  type: string;
+  behavior?: 'allow' | 'deny' | 'ask';
+  destination?: string;
+  raw: unknown;
+}
+
+export type PermissionDecidedStatus =
+  | { status: 'pending' }
+  | { status: 'allowed'; always: boolean }
+  | { status: 'denied'; message: string }
+  | { status: 'aborted' }
+  // AskUserQuestion-style answer. Wire-wise it's a deny+message back to
+  // Claude (SDK has no "tool answered" behavior), but UX-wise it's a
+  // first-class outcome so the bubble shouldn't read as "denied".
+  | { status: 'answered'; summary: string };
+
+export interface PermissionRequestMessage {
+  id: string;
+  type: 'permission_request';
+  // Server-side id for the SDK callback resolution. Different from the
+  // store-side id (this.id) so we don't conflate UI identity and RPC.
+  permissionId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  toolUseId: string;
+  title?: string;
+  displayName?: string;
+  description?: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  suggestions?: PermissionSuggestionWire[];
+  decided: PermissionDecidedStatus;
+  timestamp: number;
+}
+
 export type AllMessage =
   | ChatMessage
   | SystemMessage
@@ -80,21 +120,29 @@ export type AllMessage =
   | ToolResultMessage
   | ThinkingMessage
   | TodoMessage
-  | PlanMessage;
+  | PlanMessage
+  | PermissionRequestMessage;
 
 // Message input types (without id and timestamp)
 export type ChatMessageInput = Omit<ChatMessage, 'id' | 'timestamp'>;
 export type SystemMessageInput = Omit<SystemMessage, 'id' | 'timestamp'>;
 export type ToolMessageInput = Omit<ToolMessage, 'id' | 'timestamp'>;
+export type ToolResultMessageInput = Omit<ToolResultMessage, 'id' | 'timestamp'>;
 export type ThinkingMessageInput = Omit<ThinkingMessage, 'id' | 'timestamp'>;
 export type TodoMessageInput = Omit<TodoMessage, 'id' | 'timestamp'>;
+export type PermissionRequestMessageInput = Omit<
+  PermissionRequestMessage,
+  'id' | 'timestamp'
+>;
 
 export type MessageInput =
   | ChatMessageInput
   | SystemMessageInput
   | ToolMessageInput
+  | ToolResultMessageInput
   | ThinkingMessageInput
-  | TodoMessageInput;
+  | TodoMessageInput
+  | PermissionRequestMessageInput;
 
 // Session summary from backend
 export interface SessionSummary {
@@ -119,7 +167,8 @@ export type PermissionModeValue =
   | 'default'
   | 'plan'
   | 'acceptEdits'
-  | 'bypassPermissions';
+  | 'bypassPermissions'
+  | 'auto';
 export type ThinkingModeValue = 'default' | 'enabled' | 'disabled';
 export type EffortModeValue =
   | 'default'
@@ -159,7 +208,13 @@ export const VOICE_LANGS: VoiceLangOption[] = [
 function loadPermissionMode(): PermissionModeValue {
   try {
     const v = localStorage.getItem(LS_PERMISSION);
-    if (v === 'default' || v === 'plan' || v === 'acceptEdits' || v === 'bypassPermissions') {
+    if (
+      v === 'default' ||
+      v === 'plan' ||
+      v === 'acceptEdits' ||
+      v === 'bypassPermissions' ||
+      v === 'auto'
+    ) {
       return v;
     }
   } catch {
@@ -254,6 +309,13 @@ interface ChatState {
   // Actions
   addMessage: (msg: MessageInput) => string;
   updateLastMessage: (id: string, content: string) => void;
+  // Mark an outstanding permission_request bubble as decided. Looked up
+  // by permissionId (server-side id) so the UI can update the right
+  // bubble even when there are several pending in the conversation.
+  setPermissionDecision: (
+    permissionId: string,
+    decided: PermissionDecidedStatus,
+  ) => void;
   setInput: (input: string) => void;
   setIsLoading: (loading: boolean) => void;
   setIsThinking: (thinking: boolean) => void;
@@ -322,6 +384,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (index !== -1 && messages[index].type === 'chat') {
         messages[index] = { ...messages[index], content } as AllMessage;
       }
+      return { messages };
+    }),
+
+  setPermissionDecision: (permissionId, decided) =>
+    set((state) => {
+      const messages = state.messages.map((m) => {
+        if (m.type !== 'permission_request') return m;
+        if (m.permissionId !== permissionId) return m;
+        return { ...m, decided };
+      });
       return { messages };
     }),
 

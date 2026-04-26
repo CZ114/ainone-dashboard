@@ -52,9 +52,10 @@ interface ChatInputToolsProps {
 
 const PERMISSION_CYCLE: PermissionModeValue[] = [
   'default',
-  'plan',
   'acceptEdits',
   'bypassPermissions',
+  'plan',
+  'auto',
 ];
 const THINKING_CYCLE: ThinkingModeValue[] = ['default', 'enabled', 'disabled'];
 const EFFORT_CYCLE: EffortModeValue[] = [
@@ -91,24 +92,24 @@ interface ModeMeta {
 
 const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
   default: {
-    value: 'Ask',
+    value: 'Ask before edit',
     detail:
-      'Ask — Claude asks before running anything potentially destructive. ' +
-      'Safest for exploratory work.',
+      'Ask before edit — Claude asks before running anything that could ' +
+      'modify your machine (edits, shell, network). Safest for exploratory work.',
     dot: 'bg-gray-400',
   },
   plan: {
     value: 'Plan',
     detail:
-      'Plan — Claude drafts a plan and proposes changes WITHOUT executing. ' +
-      'Useful for review-before-act workflows.',
+      'Plan — Claude drafts a plan with read-only tools and stops to ask ' +
+      'for approval before executing anything. Best for review-first workflows.',
     dot: 'bg-blue-400',
   },
   acceptEdits: {
-    value: 'Auto-Edit',
+    value: 'Edit auto',
     detail:
-      'Auto-Edit — file edits go through silently; other risky ops (shell, ' +
-      'network) still prompt.',
+      'Edit auto — file edits go through silently; other risky ops (shell, ' +
+      'network) still prompt for approval.',
     dot: 'bg-green-400',
   },
   bypassPermissions: {
@@ -117,6 +118,13 @@ const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
       'Bypass — every permission check is skipped; Claude runs fully ' +
       'autonomously. Use only in a trusted sandbox / project.',
     dot: 'bg-orange-400',
+  },
+  auto: {
+    value: 'Auto',
+    detail:
+      'Auto — a model classifier decides per-tool whether to run it ' +
+      'automatically or escalate to you. Good middle ground.',
+    dot: 'bg-purple-400',
   },
 };
 

@@ -16,6 +16,7 @@ import { handleProjectsRequest } from "./handlers/projects.ts";
 import { handleHistoriesRequest } from "./handlers/histories.ts";
 import { handleConversationRequest } from "./handlers/conversations.ts";
 import { handleChatRequest } from "./handlers/chat.ts";
+import { handlePermissionResponse } from "./handlers/permission.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
 import {
   handleSessionList,
@@ -80,6 +81,7 @@ export function createApp(
   );
 
   app.post("/api/chat", (c) => handleChatRequest(c, requestAbortControllers));
+  app.post("/api/chat/permission", (c) => handlePermissionResponse(c));
 
   app.get("/api/sessions", (c) => handleSessionList(c));
   app.get("/api/sessions/:sessionId/messages", (c) => handleSessionMessages(c));

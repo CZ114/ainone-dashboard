@@ -10,7 +10,19 @@ interface SDKMessage {
   subtype?: string;
   message?: {
     role?: 'user' | 'assistant';
-    content?: string | Array<{ type: string; text?: string; name?: string; input?: unknown; thinking?: string; tool_use_id?: string }>;
+    content?:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          name?: string;
+          input?: unknown;
+          thinking?: string;
+          tool_use_id?: string;
+          id?: string;
+          content?: string | Array<{ type: string; text?: string }>;
+          is_error?: boolean;
+        }>;
     id?: string;
   };
   session_id?: string;
@@ -39,7 +51,21 @@ export function useStreamParser() {
   const setIsLoading = useChatStore((s) => s.setIsLoading);
   const setIsThinking = useChatStore((s) => s.setIsThinking);
   const setError = useChatStore((s) => s.setError);
+  const setPermissionDecision = useChatStore((s) => s.setPermissionDecision);
   const messages = useChatStore((s) => s.messages);
+
+  // When the stream ends (done / error / aborted), any permission_request
+  // bubble still in 'pending' state will never get answered — the SDK
+  // has already moved on (denied internally on the backend's abort path).
+  // Mark them aborted so the UI doesn't show a forever-spinning waiter.
+  const closeOutstandingPermissions = useCallback(() => {
+    const live = useChatStore.getState().messages;
+    for (const m of live) {
+      if (m.type === 'permission_request' && m.decided.status === 'pending') {
+        setPermissionDecision(m.permissionId, { status: 'aborted' });
+      }
+    }
+  }, [setPermissionDecision]);
 
   const getLastAssistantMessageId = useCallback(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -132,12 +158,14 @@ export function useStreamParser() {
                     });
                     setIsThinking(false);
                   } else if (item.type === 'tool_use') {
-                    // Tool being used - create new bubble
+                    // Tool being used - create new bubble. Keep tool_use_id so
+                    // the matching tool_result block can be paired up later.
                     const toolName = item.name || 'Tool';
                     addMessage({
                       type: 'tool',
                       toolName,
                       input: item.input as Record<string, unknown>,
+                      toolUseId: item.id,
                     });
                     setIsThinking(true);
                   }
@@ -180,8 +208,69 @@ export function useStreamParser() {
               continue;
             }
 
-            // User message echo - skip (already added before sending)
+            // User message — the SDK uses this both for the echoed user
+            // prompt (skip; we already showed it locally) and for tool
+            // results posted back after a tool_use. Pull the tool_result
+            // blocks out so we can render success/error feedback.
             if (data.type === 'user') {
+              const content = data.message?.content;
+              if (Array.isArray(content)) {
+                for (const item of content) {
+                  if (item.type !== 'tool_result') continue;
+                  let resultText = '';
+                  if (typeof item.content === 'string') {
+                    resultText = item.content;
+                  } else if (Array.isArray(item.content)) {
+                    for (const block of item.content) {
+                      if (block.type === 'text' && block.text) {
+                        resultText += block.text;
+                      }
+                    }
+                  }
+                  // Look up the originating tool_use OR permission_request
+                  // bubble to label this result with its tool name. Read
+                  // from the store directly because the captured `messages`
+                  // closure can be stale — the matching tool_use may have
+                  // been added in an earlier chunk of this very stream,
+                  // after this callback closed.
+                  let toolName: string | undefined;
+                  if (item.tool_use_id) {
+                    const live = useChatStore.getState().messages;
+                    for (let i = live.length - 1; i >= 0; i--) {
+                      const m = live[i];
+                      const candidateId =
+                        m.type === 'tool'
+                          ? (m as { toolUseId?: string }).toolUseId
+                          : m.type === 'permission_request'
+                            ? (m as { toolUseId?: string }).toolUseId
+                            : undefined;
+                      if (candidateId === item.tool_use_id) {
+                        toolName =
+                          m.type === 'tool'
+                            ? (m as { toolName: string }).toolName
+                            : (m as { toolName: string }).toolName;
+                        break;
+                      }
+                    }
+                  }
+                  // AskUserQuestion answers are routed via SDK deny+message
+                  // (no first-class "user answered" return), so the SDK
+                  // synthesises an is_error tool_result echoing the
+                  // answer text. The permission bubble already shows the
+                  // answer as "✓ Answered — ..."; rendering this as a
+                  // red error bubble is redundant and confusing. Drop it.
+                  if (toolName === 'AskUserQuestion') {
+                    continue;
+                  }
+                  addMessage({
+                    type: 'tool_result',
+                    toolName,
+                    toolUseId: item.tool_use_id,
+                    content: resultText,
+                    isError: item.is_error === true,
+                  });
+                }
+              }
               continue;
             }
 
@@ -193,15 +282,40 @@ export function useStreamParser() {
               setIsThinking(false);
               continue;
             }
+          } else if (chunk.type === 'permission_request' && chunk.permission) {
+            // Tool-use approval prompt from the SDK's canUseTool callback.
+            // Render an inline bubble; the bubble's button handler POSTs
+            // back to /api/chat/permission to resolve the SDK's Promise.
+            const p = chunk.permission;
+            addMessage({
+              type: 'permission_request',
+              permissionId: p.id,
+              toolName: p.toolName,
+              input: p.input,
+              toolUseId: p.toolUseId,
+              title: p.title,
+              displayName: p.displayName,
+              description: p.description,
+              decisionReason: p.decisionReason,
+              blockedPath: p.blockedPath,
+              suggestions: p.suggestions,
+              decided: { status: 'pending' },
+            });
+            // SDK is paused until the user answers — show a clear
+            // not-thinking state so the spinner doesn't keep spinning.
+            setIsThinking(false);
+            continue;
           } else if (chunk.type === 'done') {
             // Stream completed
             setIsLoading(false);
             setIsThinking(false);
+            closeOutstandingPermissions();
             yield;
           } else if (chunk.type === 'error') {
             setError(chunk.error || 'Unknown error occurred');
             setIsLoading(false);
             setIsThinking(false);
+            closeOutstandingPermissions();
             yield;
           }
         }
@@ -209,9 +323,10 @@ export function useStreamParser() {
         setError(err instanceof Error ? err.message : 'Stream processing error');
         setIsLoading(false);
         setIsThinking(false);
+        closeOutstandingPermissions();
       }
     },
-    [addMessage, updateLastMessage, replaceTemporarySession, temporarySessionId, setIsLoading, setIsThinking, setError, messages, getLastAssistantMessageId],
+    [addMessage, updateLastMessage, replaceTemporarySession, temporarySessionId, setIsLoading, setIsThinking, setError, messages, getLastAssistantMessageId, closeOutstandingPermissions],
   );
 
   return { processStreamLine };

@@ -4,8 +4,18 @@ import {
   type PermissionMode,
   type EffortLevel,
   type ThinkingConfig,
+  type CanUseTool,
+  type PermissionResult,
+  type PermissionUpdate,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { ChatRequest, StreamResponse } from "../../shared/types.ts";
+import { randomUUID } from "node:crypto";
+import type {
+  ChatRequest,
+  StreamResponse,
+  PermissionDecisionWire,
+  PermissionRequestPayload,
+  PermissionSuggestion,
+} from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 import { getHomeDir, getEnv } from "../utils/os.ts";
 import { readTextFile } from "../utils/fs.ts";
@@ -148,6 +158,101 @@ const sessionRegistry: Map<string, string> = new Map();
 
 // Lock to prevent concurrent Claude command executions
 let commandLock: { released: boolean } | null = null;
+
+/**
+ * Pending permission requests awaiting a user decision.
+ *
+ * Lifecycle:
+ *   - canUseTool callback creates a permission_id, registers a resolver
+ *     here, pushes a `permission_request` chunk to the chat stream, and
+ *     awaits the resolver.
+ *   - POST /api/chat/permission resolves the matching entry with the
+ *     user's PermissionResult.
+ *   - Request abort resolves any orphans with a deny so the SDK doesn't
+ *     hang forever.
+ */
+interface PendingPermission {
+  resolve: (result: PermissionResult) => void;
+  // requestId of the chat call this permission belongs to — used so
+  // aborts only deny their own pending requests, not other concurrent
+  // chats. (Today we lock to one at a time, but cleanup is cheap.)
+  requestId: string;
+  // The tool's original input. Carried alongside the resolver because
+  // the SDK's PermissionResult Zod schema requires `updatedInput` to be
+  // present (as a record) on every `allow` reply — even when the user
+  // didn't change anything. We default updatedInput to this on allow.
+  originalInput: Record<string, unknown>;
+}
+const pendingPermissions = new Map<string, PendingPermission>();
+
+/**
+ * Resolve a pending tool-permission request with the user's wire-level
+ * decision. Returns false when the id is unknown or already resolved.
+ *
+ * Lives here (not in permission.ts) because we need access to the
+ * stored `originalInput` to satisfy the SDK schema for `allow`.
+ */
+export function resolvePendingPermission(
+  id: string,
+  decision: PermissionDecisionWire,
+): boolean {
+  const entry = pendingPermissions.get(id);
+  if (!entry) return false;
+  pendingPermissions.delete(id);
+
+  if (decision.behavior === "allow") {
+    // SDK Zod requires updatedInput to be a record on `allow` even
+    // when unchanged. Default to the original tool input.
+    const updatedPermissions = decision.acceptedSuggestions
+      ?.map((s) => s.raw)
+      .filter((raw): raw is PermissionUpdate => Boolean(raw));
+    entry.resolve({
+      behavior: "allow",
+      updatedInput: decision.updatedInput ?? entry.originalInput,
+      ...(updatedPermissions && updatedPermissions.length > 0
+        ? { updatedPermissions }
+        : {}),
+    });
+  } else {
+    entry.resolve({
+      behavior: "deny",
+      message: decision.message || "Denied by user.",
+    });
+  }
+  return true;
+}
+
+function abortPendingPermissionsForRequest(requestId: string) {
+  for (const [id, entry] of pendingPermissions.entries()) {
+    if (entry.requestId !== requestId) continue;
+    pendingPermissions.delete(id);
+    entry.resolve({
+      behavior: "deny",
+      message: "Request aborted before permission decision.",
+    });
+  }
+}
+
+/**
+ * Convert SDK PermissionUpdate suggestions to a wire-friendly summary.
+ * The `raw` field round-trips so the frontend can hand the original
+ * blob back unmodified when the user picks "Allow always".
+ */
+function suggestionsToWire(
+  suggestions: PermissionUpdate[] | undefined,
+): PermissionSuggestion[] | undefined {
+  if (!suggestions || suggestions.length === 0) return undefined;
+  return suggestions.map((s) => {
+    const wire: PermissionSuggestion = { type: s.type, raw: s };
+    if ("behavior" in s && typeof s.behavior === "string") {
+      wire.behavior = s.behavior;
+    }
+    if ("destination" in s && typeof s.destination === "string") {
+      wire.destination = s.destination;
+    }
+    return wire;
+  });
+}
 
 function acquireLock(): { released: boolean } {
   const lock = { released: false };
@@ -298,26 +403,16 @@ async function* executeClaudeCommand(
     }
 
     // MCP server configuration
-    //
-    // The MiniMax MCP server is opt-in: set MINIMAX_API_KEY in your
-    // environment (or in `~/.claude/settings.json`) to enable it. Without
-    // a key, no MCP servers are registered for the chat session.
-    const mcpServers: Record<string, {
-      command: string;
-      args: string[];
-      env: Record<string, string>;
-    }> = {};
-    const minimaxApiKey = getEnv("MINIMAX_API_KEY");
-    if (minimaxApiKey) {
-      mcpServers.MiniMax = {
+    const mcpServers = {
+      MiniMax: {
         command: "uvx",
         args: ["minimax-coding-plan-mcp", "-y"],
         env: {
           MINIMAX_API_HOST: getEnv("MINIMAX_API_HOST") || "https://api.minimaxi.com",
-          MINIMAX_API_KEY: minimaxApiKey,
+          MINIMAX_API_KEY: getEnv("MINIMAX_API_KEY") || "",
         },
-      };
-    }
+      },
+    };
 
     // Build query options
     //
@@ -395,10 +490,79 @@ async function* executeClaudeCommand(
       },
     };
 
-    // Ground-truth log: EXACTLY which keys are reaching the SDK. If
-    // effort/thinking/permissionMode aren't here, they were never set
-    // — diff against `[chat] request body` above to see which leg
-    // of the pipeline dropped them.
+    // --- Manual async queue ------------------------------------------
+    // The SDK loop and the canUseTool callback both produce stream
+    // chunks, but the latter runs *inside* the for-await iteration —
+    // it can't `yield` directly. We run the SDK loop in the background
+    // and have both producers `push()` into a queue that the outer
+    // generator drains.
+    const queue: StreamResponse[] = [];
+    let waker: (() => void) | null = null;
+    let producerDone = false;
+    let producerError: unknown = null;
+
+    const wake = () => {
+      const w = waker;
+      waker = null;
+      if (w) w();
+    };
+    const push = (chunk: StreamResponse) => {
+      queue.push(chunk);
+      wake();
+    };
+
+    // canUseTool: pause the SDK on every tool call, surface a
+    // permission_request chunk on the stream, await the user's reply
+    // posted via /api/chat/permission. If the request is aborted while
+    // a decision is pending we resolve with a synthetic deny so the
+    // SDK can unwind cleanly instead of hanging.
+    const canUseTool: CanUseTool = (toolName, input, opts) => {
+      return new Promise<PermissionResult>((resolve) => {
+        const id = randomUUID();
+        pendingPermissions.set(id, {
+          resolve,
+          requestId,
+          originalInput: input,
+        });
+
+        const payload: PermissionRequestPayload = {
+          id,
+          toolName,
+          input,
+          toolUseId: opts.toolUseID,
+          title: opts.title,
+          displayName: opts.displayName,
+          description: opts.description,
+          decisionReason: opts.decisionReason,
+          blockedPath: opts.blockedPath,
+          suggestions: suggestionsToWire(opts.suggestions),
+        };
+        push({ type: "permission_request", permission: payload });
+
+        const onAbort = () => {
+          if (pendingPermissions.delete(id)) {
+            resolve({
+              behavior: "deny",
+              message: "Request aborted before permission decision.",
+            });
+          }
+        };
+        if (opts.signal.aborted) {
+          onAbort();
+        } else {
+          opts.signal.addEventListener("abort", onAbort, { once: true });
+        }
+      });
+    };
+
+    queryOptions.options.canUseTool = canUseTool;
+    // canUseTool only fires under the SDK's prompting modes (`default`
+    // and `plan`). `acceptEdits`/`bypassPermissions` skip the prompt
+    // path; `auto` runs its own classifier. We leave canUseTool wired
+    // in either way — it simply never gets called for the silent modes.
+    void permissionMode;
+
+    // Ground-truth log: EXACTLY which keys are reaching the SDK.
     console.log("[chat] query options keys:", Object.keys(queryOptions.options).sort());
     if (queryOptions.options.permissionMode) {
       console.log("[chat] → permissionMode:", queryOptions.options.permissionMode);
@@ -410,29 +574,52 @@ async function* executeClaudeCommand(
       console.log("[chat] → thinking:", JSON.stringify(queryOptions.options.thinking));
     }
 
-    for await (const sdkMessage of query(queryOptions)) {
-      // When a new session is created (system/init), store its session_id -> cwd mapping
-      // This ensures future resume calls use the correct cwd
-      if (
-        sdkMessage.type === "system" &&
-        (sdkMessage as { subtype?: string }).subtype === "init" &&
-        (sdkMessage as { session_id?: string }).session_id
-      ) {
-        const incomingSessionId = (sdkMessage as { session_id: string }).session_id;
-        // Only register if we don't already have this session (avoid overwriting on resume)
-        if (!sessionRegistry.has(incomingSessionId)) {
-          sessionRegistry.set(incomingSessionId, cwd);
+    // Background SDK loop.
+    const sdkLoop = (async () => {
+      try {
+        for await (const sdkMessage of query(queryOptions)) {
+          // Register session_id -> cwd on first system/init so future
+          // --resume calls find the right working directory.
+          if (
+            sdkMessage.type === "system" &&
+            (sdkMessage as { subtype?: string }).subtype === "init" &&
+            (sdkMessage as { session_id?: string }).session_id
+          ) {
+            const incomingSessionId = (sdkMessage as { session_id: string }).session_id;
+            if (!sessionRegistry.has(incomingSessionId)) {
+              sessionRegistry.set(incomingSessionId, cwd);
+            }
+          }
+          push({ type: "claude_json", data: sdkMessage });
         }
+      } catch (err) {
+        producerError = err;
+      } finally {
+        producerDone = true;
+        // Any permission requests still outstanding now would block
+        // forever; release them as denies.
+        abortPendingPermissionsForRequest(requestId);
+        wake();
       }
+    })();
 
-      yield {
-        type: "claude_json",
-        data: sdkMessage,
-      };
+    // Drain.
+    while (!producerDone || queue.length > 0) {
+      if (queue.length > 0) {
+        yield queue.shift()!;
+        continue;
+      }
+      await new Promise<void>((r) => {
+        waker = r;
+      });
     }
+    await sdkLoop; // surface any unhandled rejection
+
+    if (producerError) throw producerError;
 
     yield { type: "done" };
   } catch (error) {
+    abortPendingPermissionsForRequest(requestId);
     if (error instanceof Error && error.name === "AbortError") {
       yield { type: "error", error: "Request aborted" };
     } else {
@@ -443,6 +630,7 @@ async function* executeClaudeCommand(
       };
     }
   } finally {
+    abortPendingPermissionsForRequest(requestId);
     if (requestAbortControllers.has(requestId)) {
       requestAbortControllers.delete(requestId);
     }

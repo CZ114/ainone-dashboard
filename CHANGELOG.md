@@ -2,6 +2,62 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.7 — 2026-04-26
+
+### Added
+
+- **Inline tool-permission prompts in chat.** When the SDK is in `Ask
+  before edit` or `Plan` mode, every tool call now surfaces an inline
+  bubble with three primary actions: `Allow once`, `Allow always` (when
+  the SDK supplies suggestions), and `Deny` — Deny opens a textarea so
+  the user's reason is fed back to Claude verbatim. Decisions collapse
+  to a one-line audit trail (`✓ Allowed`, `✗ Denied — <reason>`) so
+  scrolling the chat shows exactly what was approved.
+- **Fifth permission mode `Auto`.** Added to the toolbar pill alongside
+  the existing four. Maps to the SDK's built-in `'auto'` mode where a
+  model classifier decides per-tool whether to run silently or escalate
+  — no more hand-tuning between "ask everything" and "ask nothing".
+  Toolbar labels also clarified: `Ask before edit` / `Edit auto` /
+  `Bypass` / `Plan` / `Auto`.
+- **VS-Code-style picker for `AskUserQuestion`.** When Claude calls the
+  built-in question tool, the bubble swaps the Allow/Deny pair for a
+  numbered, keyboard-first picker: ↑↓ navigates options (wraps across
+  questions at the edges), `1`–`9` jumps directly, `Space` toggles in
+  multi-select, `Tab` lands on Submit, `Cmd/Ctrl+Enter` sends. A
+  textarea below the options accepts a free-form custom answer that
+  overrides the picks.
+- **Expandable tool-call bubbles.** Tool bubbles (`Bash`, `Read`, `Edit`,
+  `Grep`, `WebFetch`, …) are now collapsed by default but expand to
+  show the full input JSON plus the SDK's `tool_use_id`. The collapsed
+  preview is per-tool — Bash shows the command, Read/Edit/Write show
+  the file path, Grep shows the pattern, etc. — instead of just listing
+  argument names.
+- **Tool-result bubbles.** Tool results stream back from the SDK as
+  collapsed slate-grey bubbles (or auto-expanded red ones when
+  `is_error: true`), matched to their originating call by
+  `tool_use_id`. Provides post-execution feedback that was previously
+  silent.
+
+### Changed
+
+- Permission and AskUserQuestion bubbles use the project's neutral
+  card-bg theme tokens with a thin coloured left rule (amber for
+  permission, blue for ask-question) instead of full coloured fills.
+  Visually consistent with other chat bubbles in both light and dark
+  modes.
+
+### Internal
+
+- Backend `executeClaudeCommand` refactored from "directly yield" to a
+  manual async-queue model so the SDK loop and the new `canUseTool`
+  callback can both push events onto the same NDJSON stream.
+- New endpoint `POST /api/chat/permission` accepts the user's decision
+  and resolves the pending SDK Promise. Aborts cleanly when the user
+  cancels the request mid-prompt.
+- New developer tutorial: `WRAPPING_NATIVE_PICKER_GUIDE.md` — step-by-
+  step rebuild of the picker pipeline, with the actual failed attempts
+  and how each one was diagnosed.
+
 ## v1.0.6 — 2026-04-26
 
 ### Added
