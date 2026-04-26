@@ -23,7 +23,7 @@
 //
 // Renders nothing. State only.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { wsClient } from '../api/websocket';
 import { useStore } from '../store';
 import type {
@@ -42,21 +42,64 @@ export function AppBridge() {
   const recordingHeartbeat = useStore((s) => s.recordingHeartbeat);
   const recordingActive = useStore((s) => s.recording.active);
 
+  // rAF throttle for sensor_data — see WS subscription effect for why.
+  const pendingSensorRef = useRef<SensorDataMessage | null>(null);
+  const pendingAudioRef = useRef<AudioLevelMessage | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
   // ---- WS subscription (app-lifetime) ------------------------------
   useEffect(() => {
+    // Apply any buffered high-rate updates on the next animation frame.
+    // sensor_data arrives at the backend's poll cadence (often 50 Hz);
+    // calling updateSensorData on every message used to re-render
+    // ChannelGrid + N WaveformCharts 50× per second, which monopolised
+    // the main thread and made user clicks (e.g. the "Claude Chat"
+    // link during recording) take seconds to register. Coalescing to
+    // animation-frame cadence caps re-renders at the display refresh
+    // rate; visually identical, leaves CPU for input handling.
+    const flush = () => {
+      rafIdRef.current = null;
+      const sensor = pendingSensorRef.current;
+      const audio = pendingAudioRef.current;
+      pendingSensorRef.current = null;
+      pendingAudioRef.current = null;
+      if (sensor) {
+        updateSensorData(
+          sensor.channels,
+          sensor.values,
+          sensor.waveforms,
+          sensor.stats,
+        );
+      }
+      if (audio) {
+        setAudioLevel(audio.rms_db, audio.peak_db);
+      }
+    };
+    const scheduleFlush = () => {
+      if (rafIdRef.current === null) {
+        rafIdRef.current = window.requestAnimationFrame(flush);
+      }
+    };
+
     const handleMessage = (message: WSMessage) => {
       switch (message.type) {
         case 'sensor_data': {
-          const data = message as SensorDataMessage;
-          updateSensorData(data.channels, data.values, data.waveforms, data.stats);
+          // Keep only the most recent payload — the dashboard only
+          // ever shows the latest sample/waveform anyway, so dropping
+          // intermediate frames at high WS rates costs us nothing.
+          pendingSensorRef.current = message as SensorDataMessage;
+          scheduleFlush();
           break;
         }
         case 'audio_level': {
-          const data = message as AudioLevelMessage;
-          setAudioLevel(data.rms_db, data.peak_db);
+          pendingAudioRef.current = message as AudioLevelMessage;
+          scheduleFlush();
           break;
         }
         case 'connection_status': {
+          // Low-frequency events bypass the rAF batch — they should
+          // land in the store immediately so UI status (Connect /
+          // Disconnect button labels) reflects reality with no lag.
           setSerialConnected(message.serial.connected, message.serial.port);
           setBleConnected(message.ble.connected, message.ble.device_name);
           setAudioConnected(message.audio.connected);
@@ -83,6 +126,10 @@ export function AppBridge() {
       // the singleton is shared with ChatAudioStatus and stays alive
       // for the life of the page.
       unsubscribe();
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
   }, [
     setSerialConnected,
