@@ -2,6 +2,20 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.4 — 2026-04-26
+
+### Fixed
+
+- **Audio attachments no longer hit the 500 KB attachment cap.** The
+  `MAX_TOTAL_ATTACHMENT_BYTES` guardrail used to count on-disk file
+  size, which rejected any audio file larger than 500 KB (a 30 s
+  mono WAV is ~960 KB) even though only its URL ever lands in the
+  prompt. The cap now measures actual prompt-bytes per attachment
+  kind (text inlines content, recording counts CSV preview only,
+  image/binary count just the path reference). The displayed pill
+  size is unchanged — that's the file size, which is what users
+  expect to see.
+
 ## v1.0.3 — 2026-04-26
 
 ### Fixed
