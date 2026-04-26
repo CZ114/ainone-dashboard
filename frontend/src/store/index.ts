@@ -45,22 +45,29 @@ interface AppState {
   //   `recording.duration` — total seconds the user requested
   //   `recording.anchorMs` — wall clock corresponding to elapsed = 0
   //
-  // Derived (refreshed by recordingTick at 100 ms; also patched by
-  // recordingHeartbeat from the backend WS):
+  // Derived (refreshed by recordingTick at 100 ms):
   //   `recording.elapsedSec`  — Math.max(0, (now - anchor) / 1000)
   //   `recording.remainingSec` — Math.max(0, duration - elapsed)
   //
-  // The display reads only the derived fields. Anchor is set ONCE per
-  // session (on local Start, or on first heartbeat if some other tab
-  // started the session) and never moved while we're already running,
-  // unless a heartbeat reports a >1.5 s drift — that's the only path
-  // that re-anchors mid-session.
+  // Heartbeat quarantine:
+  //   `recording.ignoreHeartbeatsUntilMs` — wall clock; heartbeats arriving
+  //   before this time are dropped. Set on every local Start / Stop so a
+  //   stale `is_recording=false` WS frame can't clobber a freshly-started
+  //   session, and a stale `is_recording=true` frame can't resurrect a
+  //   freshly-stopped one.
+  //
+  // The local 100 ms tick is the single display authority. Heartbeats can
+  // (a) fire the natural-completion transition, (b) seed a session that
+  // started in another tab, or (c) catch us up if our local clock fell
+  // behind (tab hibernation). They NEVER re-anchor backward — that was
+  // the source of the visible 27→28→29→28 jumps.
   recording: {
     active: boolean;
     duration: number;
     anchorMs: number;
     elapsedSec: number;
     remainingSec: number;
+    ignoreHeartbeatsUntilMs: number;
   };
 
   // Display settings
@@ -128,6 +135,7 @@ export const useStore = create<AppState>((set) => ({
     anchorMs: 0,
     elapsedSec: 0,
     remainingSec: 0,
+    ignoreHeartbeatsUntilMs: 0,
   },
 
   settings: {
@@ -213,6 +221,12 @@ export const useStore = create<AppState>((set) => ({
         anchorMs: Date.now(),
         elapsedSec: 0,
         remainingSec: duration,
+        // Quarantine: drop any WS heartbeat for the next 3 s so a
+        // stale `is_recording=false` frame in flight (broadcast just
+        // before the user clicked Start) can't clobber the session
+        // we just initiated. 3 s covers the data_loop's ~1 Hz cadence
+        // plus the asyncio drain queue lag.
+        ignoreHeartbeatsUntilMs: Date.now() + 3000,
       },
     })),
 
@@ -224,6 +238,9 @@ export const useStore = create<AppState>((set) => ({
         anchorMs: 0,
         elapsedSec: 0,
         remainingSec: 0,
+        // Same quarantine on stop: a stale `is_recording=true` from
+        // before the user clicked Stop must not resurrect the session.
+        ignoreHeartbeatsUntilMs: Date.now() + 3000,
       },
     })),
 
@@ -243,6 +260,12 @@ export const useStore = create<AppState>((set) => ({
 
   recordingHeartbeat: (isRecordingOnBackend, elapsed, remaining) =>
     set((state) => {
+      // Within the quarantine window, the user just took a local
+      // action and we don't trust WS messages that may predate it.
+      if (Date.now() < state.recording.ignoreHeartbeatsUntilMs) {
+        return {};
+      }
+
       // Backend says it's done — clear locally.
       if (!isRecordingOnBackend) {
         if (!state.recording.active) return {};
@@ -253,6 +276,7 @@ export const useStore = create<AppState>((set) => ({
             anchorMs: 0,
             elapsedSec: 0,
             remainingSec: 0,
+            ignoreHeartbeatsUntilMs: 0,
           },
         };
       }
@@ -269,16 +293,18 @@ export const useStore = create<AppState>((set) => ({
             anchorMs: Date.now() - elapsed * 1000,
             elapsedSec: elapsed,
             remainingSec: remaining,
+            ignoreHeartbeatsUntilMs: 0,
           },
         };
       }
 
-      // Both sides agree we're recording. Re-anchor only if our local
-      // clock has drifted from the backend's elapsed by more than
-      // 1.5 s — covers clock skew or a hibernated tab. Otherwise
-      // leave the anchor alone so the 100 ms tick stays smooth.
+      // Both sides agree we're recording. Only catch up if WE have
+      // fallen significantly behind backend (tab hibernation, GC
+      // pause). Never re-anchor when we're ahead of backend — that
+      // produces visible backward time jumps because the 1 Hz
+      // heartbeat is always ~1 s stale in transit.
       const ourElapsed = (Date.now() - state.recording.anchorMs) / 1000;
-      if (Math.abs(ourElapsed - elapsed) > 1.5) {
+      if (elapsed - ourElapsed > 2.0) {
         return {
           recording: {
             ...state.recording,
