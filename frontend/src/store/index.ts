@@ -248,6 +248,25 @@ export const useStore = create<AppState>((set) => ({
     set((state) => {
       if (!state.recording.active) return {};
       const elapsed = Math.max(0, (Date.now() - state.recording.anchorMs) / 1000);
+      // Local end-of-duration auto-stop. The backend's _monitor_recording
+      // thread also ends the session at this point, but if its WS
+      // notification is lost or delayed, the dashboard would otherwise
+      // keep ticking past `duration` (we saw 00:46 elapsed / 00:30 total
+      // sticking on screen). Self-stopping closes that gap.
+      if (elapsed >= state.recording.duration) {
+        return {
+          recording: {
+            active: false,
+            duration: 0,
+            anchorMs: 0,
+            elapsedSec: 0,
+            remainingSec: 0,
+            // Quarantine briefly: a stale `is_recording=true` heartbeat
+            // in flight must not resurrect the session.
+            ignoreHeartbeatsUntilMs: Date.now() + 3000,
+          },
+        };
+      }
       const remaining = Math.max(0, state.recording.duration - elapsed);
       return {
         recording: {

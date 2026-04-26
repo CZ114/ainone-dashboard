@@ -68,11 +68,13 @@ export function RecordingControls() {
     setBusy('stopping');
     try {
       await recordingApi.stop();
-      recordingStop();
     } catch (e) {
+      // Even on a 400 ("no recording in progress" — backend already
+      // auto-stopped at duration), the right move is to clear local
+      // state so the user gets out of the stuck UI.
       console.error('[Recording] stop failed:', e);
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to stop');
     } finally {
+      recordingStop();
       setBusy(null);
     }
   };

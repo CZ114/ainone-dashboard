@@ -29,8 +29,13 @@ class ConnectionManager:
         # Initialize data processor
         self.data_processor = DataProcessor()
 
-        # Initialize recording service
+        # Initialize recording service. Wire the auto-stop callback
+        # so the WS broadcast fires the moment the monitor thread ends
+        # the session (rather than up to 1 s later on the next tick).
         self.recording_service = RecordingService()
+        self.recording_service.on_status_changed = lambda: (
+            self._broadcast_queue.put(('recording_status', None))
+        )
 
         # State
         self.is_running = False
