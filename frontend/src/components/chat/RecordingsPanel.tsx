@@ -47,8 +47,18 @@ function formatDuration(sec: number | null | undefined): string {
 // What we put on dataTransfer. Intentionally tiny — just enough for
 // the drop handler to fetch the preview and build an attachment.
 // Full type lives in lib/attachments.ts consumers.
+//
+// `mode` selects which files of the session are being attached:
+//   'csv'   — sensor CSV only
+//   'audio' — WAV audio only
+//   'both'  — both files (default for whole-card drags)
+// Drop handlers in ChatInput respect this so the user can attach
+// just the readings, just the audio, or the full bundle.
+export type RecordingDragMode = 'csv' | 'audio' | 'both';
+
 export interface RecordingDragPayload {
   id: string;
+  mode: RecordingDragMode;
   csvFilename?: string;
   audioFilename?: string;
   csvSizeBytes?: number;
@@ -57,15 +67,20 @@ export interface RecordingDragPayload {
   audioDurationSeconds?: number | null;
 }
 
-function payloadFromSession(s: RecordingSession): RecordingDragPayload {
+function payloadFromSession(
+  s: RecordingSession,
+  mode: RecordingDragMode,
+): RecordingDragPayload {
   return {
     id: s.id,
-    csvFilename: s.csv?.filename,
-    csvSizeBytes: s.csv?.size_bytes,
-    csvRows: s.csv?.rows,
-    audioFilename: s.audio?.filename,
-    audioSizeBytes: s.audio?.size_bytes,
-    audioDurationSeconds: s.audio?.duration_seconds,
+    mode,
+    csvFilename: mode !== 'audio' ? s.csv?.filename : undefined,
+    csvSizeBytes: mode !== 'audio' ? s.csv?.size_bytes : undefined,
+    csvRows: mode !== 'audio' ? s.csv?.rows : undefined,
+    audioFilename: mode !== 'csv' ? s.audio?.filename : undefined,
+    audioSizeBytes: mode !== 'csv' ? s.audio?.size_bytes : undefined,
+    audioDurationSeconds:
+      mode !== 'csv' ? s.audio?.duration_seconds : undefined,
   };
 }
 
@@ -94,36 +109,40 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
   }, [open, refresh]);
 
   const handleDragStart = (
-    e: React.DragEvent<HTMLDivElement>,
+    e: React.DragEvent<HTMLElement>,
     session: RecordingSession,
+    mode: RecordingDragMode,
   ) => {
-    const payload = payloadFromSession(session);
+    const payload = payloadFromSession(session, mode);
     e.dataTransfer.setData(RECORDING_DRAG_MIME, JSON.stringify(payload));
     // text/plain fallback so if the user drops on a non-chat target
     // (say, a regular textarea elsewhere), they get something sensible.
+    const summary =
+      mode === 'csv'
+        ? session.csv?.filename || 'sensor data'
+        : mode === 'audio'
+        ? session.audio?.filename || 'audio'
+        : `${session.csv?.filename || ''} ${session.audio?.filename || ''}`.trim();
     e.dataTransfer.setData(
       'text/plain',
-      `ESP32 recording ${session.id} — ` +
-        (session.csv?.filename || session.audio?.filename || 'empty'),
+      `ESP32 recording ${session.id}${mode === 'both' ? '' : ` (${mode})`} — ${summary}`,
     );
     e.dataTransfer.effectAllowed = 'copy';
+    e.stopPropagation();
   };
 
   return (
     <>
-      {/* Backdrop — click to close */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40"
-          onClick={onClose}
-          aria-hidden
-        />
-      )}
+      {/* No backdrop on purpose — the chat must remain interactive
+          while the user drags a session card across the page. The
+          previous black/40 overlay greyed out the chat and stole all
+          pointer events, breaking drag-to-attach. The X button in
+          the panel header is the only dismissal affordance. */}
 
       {/* Drawer — slides in from right */}
       <aside
         className={`fixed right-0 top-0 bottom-0 w-80 bg-card-bg border-l border-card-border shadow-2xl z-50 flex flex-col transition-transform duration-200 ${
-          open ? 'translate-x-0' : 'translate-x-full'
+          open ? 'translate-x-0' : 'translate-x-full pointer-events-none'
         }`}
         aria-hidden={!open}
       >
@@ -134,7 +153,7 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
               🎙️ Recordings
             </h2>
             <p className="text-xs text-text-muted">
-              Drag a session into chat to attach
+              Drag CSV, audio, or both into chat to attach
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -178,39 +197,75 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
           )}
 
           {!error &&
-            sessions.map((s) => (
-              <div
-                key={s.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, s)}
-                className="mx-1 my-1 p-3 rounded-md bg-window-bg border border-card-border hover:border-blue-500/50 hover:bg-card-border/30 cursor-grab active:cursor-grabbing transition-colors"
-                title="Drag into chat to attach"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-lg shrink-0">
-                    {s.csv && s.audio ? '🎙️' : s.csv ? '📊' : '🔊'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-mono text-text-primary truncate">
-                      {formatTimestamp(s.started_at_iso, s.id)}
+            sessions.map((s) => {
+              const hasBoth = !!s.csv && !!s.audio;
+              return (
+                <div
+                  key={s.id}
+                  className="mx-1 my-1 p-3 rounded-md bg-window-bg border border-card-border hover:border-blue-500/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg shrink-0">
+                      {hasBoth ? '🎙️' : s.csv ? '📊' : '🔊'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-mono text-text-primary truncate">
+                        {formatTimestamp(s.started_at_iso, s.id)}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-text-muted flex flex-wrap gap-x-2">
-                      {s.csv && (
-                        <span>
+                  </div>
+
+                  {/* Per-file drag handles. Each row is its own drag
+                      source so the user can attach CSV alone, audio
+                      alone, or — via the bundle handle below — both. */}
+                  <div className="space-y-1">
+                    {s.csv && (
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, s, 'csv')}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
+                        title="Drag CSV into chat"
+                      >
+                        <span className="text-[11px] text-text-secondary truncate">
                           📊 {s.csv.rows ?? '?'} rows · {formatSize(s.csv.size_bytes)}
                         </span>
-                      )}
-                      {s.audio && (
-                        <span>
+                        <span className="text-[10px] text-text-muted shrink-0">
+                          drag CSV
+                        </span>
+                      </div>
+                    )}
+                    {s.audio && (
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, s, 'audio')}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
+                        title="Drag audio into chat"
+                      >
+                        <span className="text-[11px] text-text-secondary truncate">
                           🔊 {formatDuration(s.audio.duration_seconds)} ·{' '}
                           {formatSize(s.audio.size_bytes)}
                         </span>
-                      )}
-                    </div>
+                        <span className="text-[10px] text-text-muted shrink-0">
+                          drag audio
+                        </span>
+                      </div>
+                    )}
+                    {hasBoth && (
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, s, 'both')}
+                        className="flex items-center justify-center gap-2 px-2 py-1.5 rounded bg-blue-500/10 border border-blue-500/40 hover:bg-blue-500/20 cursor-grab active:cursor-grabbing transition-colors"
+                        title="Drag both files into chat as a single attachment"
+                      >
+                        <span className="text-[11px] text-blue-300">
+                          📊 + 🔊 drag both
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
 
         {/* Footer hint */}

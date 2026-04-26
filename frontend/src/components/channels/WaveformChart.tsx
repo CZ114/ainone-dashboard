@@ -75,6 +75,13 @@ export function WaveformChart({
             fill={`url(#${gradientId})`}
             isAnimationActive={false}
             strokeWidth={1.5}
+            // Anchor the gradient fill to the visible chart bottom
+            // (yMin) so it always reads as "area UNDER the line",
+            // regardless of sign. Recharts' default baseValue is 0,
+            // which produced the wrong-side fill for all-negative
+            // channels (the shading appeared ABOVE the line, since
+            // the line sat below the y=0 anchor that was off-screen).
+            baseValue={yMin}
           />
         </AreaChart>
       </ResponsiveContainer>

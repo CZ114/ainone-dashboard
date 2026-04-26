@@ -98,8 +98,14 @@ class SerialBridge:
                             text = data.decode('utf-8', errors='ignore')
                             buffer += text
 
-                            # Process complete lines
+                            # Process complete lines. Re-check `running`
+                            # on every iteration: a single `read()` can
+                            # return dozens of buffered lines, and we
+                            # don't want any of them firing once the
+                            # user has hit Disconnect.
                             while '\n' in buffer:
+                                if not self.running or self._stop_event.is_set():
+                                    break
                                 line, buffer = buffer.split('\n', 1)
                                 line = line.strip()
                                 if line:

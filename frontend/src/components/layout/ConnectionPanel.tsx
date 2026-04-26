@@ -15,7 +15,21 @@ export function ConnectionPanel() {
 
   const [selectedPort, setSelectedPort] = useState('');
   const [baudRate, setBaudRate] = useState(115200);
-  const [loading, setLoading] = useState(false);
+  // Per-tier ACTION INTENT, not "loading flag".
+  //
+  // The label needs to follow what the USER is doing — not what the
+  // current ble.connected boolean says. Otherwise: clicking Scan flips
+  // ble.connected=true mid-scan (the backend's WS sends connection_status
+  // as soon as it actually attaches), and the button suddenly reads
+  // "Disconnecting…" while we're still finishing the connect flow.
+  //
+  // 'connecting' = user-initiated connect / scan in progress
+  // 'disconnecting' = user-initiated disconnect / stop in progress
+  // null = idle, follow ble.connected for the label
+  type Action = null | 'connecting' | 'disconnecting';
+  const [serialAction, setSerialAction] = useState<Action>(null);
+  const [bleAction, setBleAction] = useState<Action>(null);
+  const [audioAction, setAudioAction] = useState<Action>(null);
 
   // Fetch available ports on mount
   useEffect(() => {
@@ -36,76 +50,106 @@ export function ConnectionPanel() {
 
   const handleSerialConnect = async () => {
     if (serial.connected) {
-      setLoading(true);
+      setSerialAction('disconnecting');
       try {
         await serialApi.disconnect();
         setSerialConnected(false);
       } catch (e) {
         console.error('Failed to disconnect:', e);
+      } finally {
+        setSerialAction(null);
       }
-      setLoading(false);
     } else {
-      setLoading(true);
+      setSerialAction('connecting');
       try {
         await serialApi.connect(selectedPort, baudRate);
         setSerialConnected(true, selectedPort);
       } catch (e) {
         console.error('Failed to connect:', e);
+      } finally {
+        setSerialAction(null);
       }
-      setLoading(false);
     }
   };
 
   const handleBleConnect = async () => {
     if (ble.connected) {
-      setLoading(true);
+      setBleAction('disconnecting');
       try {
         await bleApi.disconnect();
         setBleConnected(false);
       } catch (e) {
         console.error('Failed to disconnect BLE:', e);
+      } finally {
+        setBleAction(null);
       }
-      setLoading(false);
     } else {
-      setLoading(true);
+      // Action stays 'connecting' across the entire scan + poll cycle.
+      // Even when the backend WS pushes ble.connected=true mid-scan,
+      // the button keeps reading "Connecting…" until we end the action,
+      // because the label is driven by `bleAction` not by ble.connected.
+      setBleAction('connecting');
       try {
         await bleApi.scan();
-        // Give it a moment then check status
-        setTimeout(async () => {
+        const deadline = Date.now() + 10_000; // 10 s budget
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 500));
           try {
             const status = await bleApi.getStatus();
-            setBleConnected(status.connected);
-          } catch (e) {
-            console.error('Failed to get BLE status:', e);
+            if (status.connected) {
+              setBleConnected(true);
+              break;
+            }
+          } catch {
+            // keep polling — backend may be momentarily busy
           }
-        }, 2000);
+        }
       } catch (e) {
         console.error('Failed to scan BLE:', e);
+      } finally {
+        setBleAction(null);
       }
-      setLoading(false);
     }
   };
 
   const handleAudioConnect = async () => {
     if (audio.connected) {
-      setLoading(true);
+      setAudioAction('disconnecting');
       try {
         await audioApi.stop();
         setAudioConnected(false);
       } catch (e) {
         console.error('Failed to stop audio:', e);
+      } finally {
+        setAudioAction(null);
       }
-      setLoading(false);
     } else {
-      setLoading(true);
+      setAudioAction('connecting');
       try {
         await audioApi.start(8888);
         setAudioConnected(true);
       } catch (e) {
         console.error('Failed to start audio:', e);
+      } finally {
+        setAudioAction(null);
       }
-      setLoading(false);
     }
+  };
+
+  // Helper: pick the right button label given the current action and
+  // connection state. Verbs are passed in fully (no string concat) so
+  // we don't end up with malformed gerunds like "Scaning…".
+  const labelFor = (
+    action: Action,
+    connected: boolean,
+    idleConnect: string, // e.g. "Connect" / "Scan" / "Start"
+    idleDisconnect: string, // e.g. "Disconnect" / "Stop"
+    busyConnecting: string, // e.g. "Connecting…" / "Scanning…" / "Starting…"
+    busyDisconnecting: string, // e.g. "Disconnecting…" / "Stopping…"
+  ): string => {
+    if (action === 'connecting') return busyConnecting;
+    if (action === 'disconnecting') return busyDisconnecting;
+    return connected ? idleDisconnect : idleConnect;
   };
 
   return (
@@ -130,7 +174,7 @@ export function ConnectionPanel() {
           <select
             value={selectedPort}
             onChange={(e) => setSelectedPort(e.target.value)}
-            disabled={serial.connected || loading}
+            disabled={serial.connected || serialAction !== null}
             title={
               serial.availablePorts.find((p) => p.port === selectedPort)?.desc
                 ? `${selectedPort} — ${serial.availablePorts.find((p) => p.port === selectedPort)?.desc}`
@@ -155,7 +199,7 @@ export function ConnectionPanel() {
           <select
             value={baudRate}
             onChange={(e) => setBaudRate(Number(e.target.value))}
-            disabled={serial.connected || loading}
+            disabled={serial.connected || serialAction !== null}
             className="w-24 shrink-0 bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm"
           >
             <option value={9600}>9600</option>
@@ -166,14 +210,21 @@ export function ConnectionPanel() {
 
           <button
             onClick={handleSerialConnect}
-            disabled={loading || !selectedPort}
+            disabled={serialAction !== null || !selectedPort}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               serial.connected
                 ? 'bg-status-disconnected hover:bg-red-600 text-white'
                 : 'bg-status-connected hover:bg-green-600 text-white'
             } disabled:opacity-50`}
           >
-            {loading ? '...' : serial.connected ? 'Disconnect' : 'Connect'}
+            {labelFor(
+              serialAction,
+              serial.connected,
+              'Connect',
+              'Disconnect',
+              'Connecting…',
+              'Disconnecting…',
+            )}
           </button>
         </div>
       </div>
@@ -196,14 +247,21 @@ export function ConnectionPanel() {
 
           <button
             onClick={handleBleConnect}
-            disabled={loading}
+            disabled={bleAction !== null}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               ble.connected
                 ? 'bg-status-disconnected hover:bg-red-600 text-white'
                 : 'bg-ch-ble hover:opacity-80 text-white'
             } disabled:opacity-50`}
           >
-            {loading ? '...' : ble.connected ? 'Disconnect' : 'Scan'}
+            {labelFor(
+              bleAction,
+              ble.connected,
+              'Scan',
+              'Disconnect',
+              'Connecting…',
+              'Disconnecting…',
+            )}
           </button>
         </div>
       </div>
@@ -226,14 +284,21 @@ export function ConnectionPanel() {
 
           <button
             onClick={handleAudioConnect}
-            disabled={loading}
+            disabled={audioAction !== null}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               audio.connected
                 ? 'bg-status-disconnected hover:bg-red-600 text-white'
                 : 'bg-ch-audio hover:opacity-80 text-white'
             } disabled:opacity-50`}
           >
-            {loading ? '...' : audio.connected ? 'Stop' : 'Start'}
+            {labelFor(
+              audioAction,
+              audio.connected,
+              'Start',
+              'Stop',
+              'Starting…',
+              'Stopping…',
+            )}
           </button>
         </div>
       </div>

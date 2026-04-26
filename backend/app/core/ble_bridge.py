@@ -105,6 +105,14 @@ class BLEBridge:
 
     def _on_ble_notify(self, sender, data):
         """BLE notification callback"""
+        # Hard guard: once stop() flips `running`, drop any in-flight
+        # notifications immediately. Without this, bleak keeps firing
+        # callbacks for ~1-2 s while it tears down the GATT subscription
+        # and the dashboard would keep updating waveforms after the user
+        # already clicked Disconnect.
+        if not self.running or self._stop_event.is_set():
+            return
+
         if not data or len(data) < 2:
             return
 

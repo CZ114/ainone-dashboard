@@ -29,8 +29,13 @@ class ConnectionManager:
         # Initialize data processor
         self.data_processor = DataProcessor()
 
-        # Initialize recording service
+        # Initialize recording service. Wire the auto-stop callback
+        # so the WS broadcast fires the moment the monitor thread ends
+        # the session (rather than up to 1 s later on the next tick).
         self.recording_service = RecordingService()
+        self.recording_service.on_status_changed = lambda: (
+            self._broadcast_queue.put(('recording_status', None))
+        )
 
         # State
         self.is_running = False
@@ -48,6 +53,29 @@ class ConnectionManager:
         # Bind callbacks
         self._bind_callbacks()
 
+    def _drain_data_queue(self, source: Optional[str] = None):
+        """Drop pending data items so the UI stops receiving stale frames
+        the moment a transport is disconnected.
+
+        Without this, the dashboard would keep updating waveforms for a
+        beat or two after the user clicks Disconnect — the bridge thread
+        had already enqueued a final batch that the data loop was about
+        to broadcast.
+        """
+        kept: list = []
+        while True:
+            try:
+                item = self._data_queue.get_nowait()
+            except queue.Empty:
+                break
+            # If `source` is set, only drop items from that transport so
+            # disconnecting Serial doesn't also nuke pending BLE frames.
+            if source is None or item[0] == source:
+                continue
+            kept.append(item)
+        for item in kept:
+            self._data_queue.put(item)
+
     def _bind_callbacks(self):
         """Bind callbacks for all bridges"""
         # Serial data callback - just put raw data in queue
@@ -59,8 +87,11 @@ class ConnectionManager:
         def on_serial_connect(connected: bool, port: str = None, baud: int = None):
             if not connected:
                 # Wipe channel state so a stale narrow first-packet from
-                # last session doesn't cap the channel count next time.
+                # last session doesn't cap the channel count next time,
+                # AND drop any in-flight serial frames so the dashboard
+                # stops the instant the user clicks Disconnect.
                 self.data_processor.reset()
+                self._drain_data_queue(source='serial')
             self._broadcast_queue.put(('connection_status', None))
 
         self.serial_bridge.on_connection_change = on_serial_connect
@@ -76,6 +107,7 @@ class ConnectionManager:
         def on_ble_connect(connected: bool, device: str = None):
             if not connected:
                 self.data_processor.reset()
+                self._drain_data_queue(source='ble')
             self._broadcast_queue.put(('connection_status', None))
 
         self.ble_bridge.on_connection_change = on_ble_connect

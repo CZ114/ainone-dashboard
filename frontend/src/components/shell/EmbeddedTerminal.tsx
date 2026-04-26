@@ -114,11 +114,18 @@ export function EmbeddedTerminal({ cwd, onExit }: EmbeddedTerminalProps) {
     if (!container) return;
 
     // --- xterm.js setup ---------------------------------------------
+    // lineHeight is intentionally 1.0. Anything above 1.0 makes xterm's
+    // internal cell-pixel metrics and the FitAddon's cols/rows
+    // calculation drift apart, which corrupts in-place redraws like
+    // Claude Code's animated spinner / mascot — the cursor returns to
+    // a column that's a fraction of a cell off, and successive frames
+    // wrap onto a new line. Stick to 1.0 for spinner correctness.
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
       fontSize: 13,
-      lineHeight: 1.2,
+      lineHeight: 1.0,
+      letterSpacing: 0,
       scrollback: 10000,
       theme: resolvedTheme === 'light' ? LIGHT_THEME : DARK_THEME,
       allowProposedApi: true,

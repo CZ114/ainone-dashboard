@@ -1,7 +1,8 @@
 // Header component with navigation
 
+import { startTransition } from 'react';
 import { useStore } from '../../store';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../ThemeToggle';
 
 export function Header() {
@@ -9,8 +10,25 @@ export function Header() {
   const ble = useStore((state) => state.ble);
   const audio = useStore((state) => state.audio);
   const channelCount = useStore((state) => state.channelCount);
-  const isRecording = useStore((state) => state.isRecording);
+  const isRecording = useStore((state) => state.recording.active);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Wrap route changes in startTransition so React 18 treats the
+  // unmount/mount work as a non-urgent update — meaning sensor-data
+  // re-renders that would otherwise hog the main thread can no
+  // longer block the navigation. Without this, clicking "Claude
+  // Chat" while recording felt like it had a multi-second latency
+  // because each pending re-render had to land before the navigation
+  // update could be committed.
+  const goTo = (path: string) => {
+    if (location.pathname === path) return;
+    startTransition(() => {
+      // navigate in v7 returns Promise<void> | void; the transition
+      // callback expects void, so swallow the promise explicitly.
+      void navigate(path);
+    });
+  };
 
   return (
     <header className="bg-card-bg border-b border-card-border px-6 py-3">
@@ -24,10 +42,12 @@ export function Header() {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation — buttons (not <Link>) so we can wrap navigate
+            in startTransition. */}
         <nav className="flex items-center gap-2">
-          <Link
-            to="/dashboard"
+          <button
+            type="button"
+            onClick={() => goTo('/dashboard')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               location.pathname === '/dashboard'
                 ? 'bg-blue-600 text-white'
@@ -35,9 +55,10 @@ export function Header() {
             }`}
           >
             Dashboard
-          </Link>
-          <Link
-            to="/chat"
+          </button>
+          <button
+            type="button"
+            onClick={() => goTo('/chat')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               location.pathname === '/chat'
                 ? 'bg-blue-600 text-white'
@@ -45,7 +66,7 @@ export function Header() {
             }`}
           >
             Claude Chat
-          </Link>
+          </button>
         </nav>
 
         {/* Status indicators */}

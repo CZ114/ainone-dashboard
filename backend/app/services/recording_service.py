@@ -7,24 +7,28 @@ import struct
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Union
+from typing import Optional, List, Callable
 import numpy as np
 
-from app.config import RECORDINGS_DIR, CSV_DIR, AUDIO_DIR
+from app.config import CSV_DIR, AUDIO_DIR
 
 
 class RecordingService:
     """Handles recording sensor data to CSV and audio to WAV"""
 
-    def __init__(self, base_dir: Optional[Union[str, Path]] = None):
-        # Default to the project-wide recordings dir from app.config so the
-        # writer and the listing API always agree on one location, regardless
-        # of which directory the backend is started from.
-        self.base_dir = Path(base_dir) if base_dir is not None else RECORDINGS_DIR
+    def __init__(self, base_dir: Optional[str] = None):
+        # Pull the canonical recordings dir from config so the writer
+        # and the recordings-listing API always agree on one location.
+        # Previously the writer defaulted to "./recordings" relative
+        # to the CWD, which silently sent files into backend/recordings/
+        # while the listing API read from project_root/recordings/ —
+        # the chat sidebar then showed an empty list.
         if base_dir is None:
             self.csv_dir = CSV_DIR
             self.audio_dir = AUDIO_DIR
+            self.base_dir = CSV_DIR.parent
         else:
+            self.base_dir = Path(base_dir)
             self.csv_dir = self.base_dir / "csv"
             self.audio_dir = self.base_dir / "audio"
         self.csv_dir.mkdir(parents=True, exist_ok=True)
@@ -42,6 +46,10 @@ class RecordingService:
         self.sample_rate = 16000
         self._recording_thread: Optional[threading.Thread] = None
         self._stop_recording_event = threading.Event()
+        # Callback fired when a session ends (auto or manual). Wired up
+        # by ConnectionManager so the WS broadcast goes out the instant
+        # we stop, instead of waiting for the next 1 Hz heartbeat.
+        self.on_status_changed: Optional[Callable[[], None]] = None
 
     def start_recording(self, duration: int = 60, include_audio: bool = True,
                        channel_names: List[str] = None):
@@ -81,6 +89,14 @@ class RecordingService:
             elapsed = (datetime.now() - self.start_time).total_seconds() if self.start_time else 0
             if elapsed >= self.duration:
                 self.stop_recording()
+                # Tell the world we just auto-stopped — without this the
+                # frontend has to wait up to ~1 s for the next data_loop
+                # tick to discover the change.
+                if self.on_status_changed:
+                    try:
+                        self.on_status_changed()
+                    except Exception:
+                        pass
                 break
             time.sleep(0.5)
 
