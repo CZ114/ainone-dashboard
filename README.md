@@ -10,6 +10,32 @@ A real-time multi-sensor dashboard for ESP32 hardware with built-in AI chat powe
 
 AinOne Dashboard streams data from an ESP32-S3 multi-sensor board over USB serial, BLE (Nordic UART), or WiFi UDP, visualises every channel as a live waveform in the browser, and lets you talk to the data through an embedded Claude Code chat — complete with slash commands, file attachments, voice dictation, and a real PTY-backed terminal.
 
+> **Heads up — Claude Code CLI is required for the AI chat tier.** Install it from the official Anthropic repo at <https://github.com/anthropics/claude-code> (or follow the [quickstart](https://docs.claude.com/en/docs/claude-code/quickstart)) **before** starting the Hono backend. The sensor dashboard works without it, but `/chat` will not.
+
+## Table of contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Architecture overview](#architecture-overview)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+  - [1. Install the Claude Code CLI](#1-install-the-claude-code-cli)
+  - [2. Clone](#2-clone)
+  - [3. Python backend (port 8080)](#3-python-backend-port-8080)
+  - [4. Claude (Hono) backend (port 3000)](#4-claude-hono-backend-port-3000)
+  - [5. Frontend (port 5173)](#5-frontend-port-5173)
+  - [6. One-shot launch](#6-one-shot-launch)
+  - [7. Connect your ESP32](#7-connect-your-esp32)
+- [ESP32 firmware data format](#esp32-firmware-data-format)
+- [Configuration](#configuration)
+- [API & WebSocket](#api--websocket)
+- [Project Structure](#project-structure)
+- [Extension system](#extension-system)
+- [Recording & playback](#recording--playback)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
 ## Screenshots
 
 ![Sensor dashboard with live waveforms](docs/screenshots/page1_sensorBoard.png)
@@ -71,7 +97,7 @@ For a deeper dive into the data flow, threading model, and subsystem boundaries,
 
 - **Python ≥ 3.10**
 - **Node.js ≥ 20**, npm ≥ 10
-- **Claude Code CLI** installed and on `PATH` (or pointed to via `CLAUDE_CLI_PATH`). See <https://docs.claude.com/en/docs/claude-code/quickstart>.
+- **[Claude Code CLI](https://github.com/anthropics/claude-code)** — required for the AI chat tier. Install from the [official Anthropic repo](https://github.com/anthropics/claude-code) or via `npm i -g @anthropic-ai/claude-code`. The Hono backend probes the standard Anthropic install locations automatically; if your CLI lives elsewhere, set `CLAUDE_CLI_PATH=/abs/path/to/claude`.
 - **ESP32-S3 board** (or any device that emits CSV over Serial / BLE NUS / UDP).
 - *Optional* — `faster-whisper` for the on-device speech-to-text extension. The dashboard installs it for you with one click via Settings → Extensions.
 
@@ -79,14 +105,35 @@ For a deeper dive into the data flow, threading model, and subsystem boundaries,
 
 ## Quick Start
 
-### 1. Clone
+### 1. Install the Claude Code CLI
+
+Required before the Hono backend will work.
+
+```bash
+# Recommended — installs the official Anthropic CLI globally
+npm install -g @anthropic-ai/claude-code
+
+# Verify
+claude --version
+```
+
+If you'd rather install from source or use the vendored installer, follow the upstream instructions at <https://github.com/anthropics/claude-code> and the [quickstart guide](https://docs.claude.com/en/docs/claude-code/quickstart). On the first run, `claude` will walk you through authentication (Anthropic API key or Claude Pro / Team account).
+
+If your `claude` binary is not on `PATH`, point the Hono backend at it explicitly:
+
+```bash
+export CLAUDE_CLI_PATH=/abs/path/to/claude   # macOS / Linux
+$env:CLAUDE_CLI_PATH = "C:\path\to\claude.exe"   # Windows PowerShell
+```
+
+### 2. Clone
 
 ```bash
 git clone https://github.com/CZ114/ainone-dashboard.git
 cd ainone-dashboard
 ```
 
-### 2. Python backend (port 8080)
+### 3. Python backend (port 8080)
 
 **macOS / Linux:**
 
@@ -118,7 +165,7 @@ pip install -r requirements.txt
 python -u run.py
 ```
 
-### 3. Claude (Hono) backend (port 3000)
+### 4. Claude (Hono) backend (port 3000)
 
 In a new terminal:
 
@@ -129,9 +176,9 @@ node scripts/generate-version.js
 npm run dev
 ```
 
-`generate-version.js` writes `cli/version.ts` from `package.json` — required before the first run.
+`generate-version.js` writes `cli/version.ts` from `package.json` — required before the first run. If the backend logs `claude binary not found`, revisit step 1 or set `CLAUDE_CLI_PATH`.
 
-### 4. Frontend (port 5173)
+### 5. Frontend (port 5173)
 
 In a third terminal:
 
@@ -143,14 +190,14 @@ npm run dev
 
 Open <http://localhost:5173>. Vite proxies all backend API calls automatically (see `frontend/vite.config.ts`).
 
-### 5. One-shot launch
+### 6. One-shot launch
 
 For convenience, two scripts boot all three tiers:
 
 - `start.bat` — Windows. Opens three console windows.
 - `start.sh` — macOS / Linux. Boots all three tiers in the background; `Ctrl+C` shuts everything down.
 
-### 6. Connect your ESP32
+### 7. Connect your ESP32
 
 | Transport | How |
 |-----------|-----|
@@ -325,7 +372,7 @@ The reference extension is `whisper-local` — installs `faster-whisper`, downlo
 
 ## License
 
-[MIT](LICENSE) © 2026 CZ114. The `backend/claude/` directory is derived from [`sugyan/claude-code-webui`](https://github.com/sugyan/claude-code-webui) (MIT) — see [LICENSE](LICENSE) for the full attribution.
+[MIT](LICENSE) © 2026 CZ114.
 
 ## Acknowledgements
 
@@ -335,5 +382,4 @@ Built on the shoulders of:
 - [Hono](https://hono.dev/), [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), [node-pty](https://github.com/microsoft/node-pty), [ws](https://github.com/websockets/ws)
 - [React](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS](https://tailwindcss.com/), [Zustand](https://zustand-demo.pmnd.rs/), [Recharts](https://recharts.org/), [xterm.js](https://xtermjs.org/)
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for on-device speech-to-text
-- [Claude Code](https://docs.claude.com/en/docs/claude-code/) — the CLI that powers the AI chat
-- [`sugyan/claude-code-webui`](https://github.com/sugyan/claude-code-webui) — the upstream project whose Hono backend forms the foundation of `backend/claude/`
+- [Claude Code](https://github.com/anthropics/claude-code) — the official Anthropic CLI that powers the AI chat tier
