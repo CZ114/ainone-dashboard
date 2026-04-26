@@ -649,8 +649,10 @@ export async function handlePickFolder(c: Context) {
  *   multiple?: boolean;         // default false
  *   initialDir?: string;        // hint to open dialog in this dir
  *   includeContent?: boolean;   // default true; read text bodies
- *   maxContentBytes?: number;   // default 50 KB; file larger is treated
- *                               // as "other" and returned without body
+ *   maxContentBytes?: number;   // default 1 MB, hard cap 20 MB; files
+ *                               // larger than the chosen value are
+ *                               // returned as "other" without body
+ *                               // (caller falls back to path reference)
  * }
  *
  * Response: {
@@ -707,7 +709,12 @@ export async function handlePickFile(c: Context) {
   let multiple = false;
   let initialDir = "";
   let includeContent = true;
-  let maxContentBytes = 50 * 1024;
+  // Default 1 MB per text file inlined; hard ceiling 20 MB so the
+  // caller can't push an arbitrary-size file through. Anything above
+  // the per-call maxContentBytes is degraded to "other" kind (path
+  // reference only — Claude's Read tool can still open it).
+  let maxContentBytes = 1024 * 1024;
+  const HARD_CONTENT_BYTES_CAP = 20 * 1024 * 1024;
   try {
     const body = await c.req.json();
     if (body && typeof body === "object") {
@@ -715,7 +722,7 @@ export async function handlePickFile(c: Context) {
       if (typeof body.initialDir === "string") initialDir = body.initialDir.trim();
       if (typeof body.includeContent === "boolean") includeContent = body.includeContent;
       if (typeof body.maxContentBytes === "number" && body.maxContentBytes > 0) {
-        maxContentBytes = Math.min(body.maxContentBytes, 1024 * 1024); // cap at 1MB
+        maxContentBytes = Math.min(body.maxContentBytes, HARD_CONTENT_BYTES_CAP);
       }
     }
   } catch {

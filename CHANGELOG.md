@@ -2,6 +2,21 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.0.5 — 2026-04-26
+
+### Changed
+
+- **Attachment ceiling raised to 20 MB end-to-end.** Two layers held
+  the previous low caps:
+  - Frontend `MAX_TOTAL_ATTACHMENT_BYTES`: 500 KB → 20 MB (this counts
+    prompt-bytes, so audio / image attachments still cost ~256 B each
+    — the 20 MB is a real text/CSV ceiling, not a binary-file guard).
+  - Hono picker default `maxContentBytes`: 50 KB → 1 MB; hard cap
+    1 MB → 20 MB. Reasonable text files now inline by default; the
+    caller can push up to 20 MB explicitly.
+
+  Past this, Claude's own context window is the binding constraint.
+
 ## v1.0.4 — 2026-04-26
 
 ### Fixed
