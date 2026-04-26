@@ -37,7 +37,13 @@ export function RecordingControls() {
   const recordingStop = useStore((state) => state.recordingStop);
 
   // User input — only used while idle.
-  const [duration, setDuration] = useState<number>(DEFAULT_DURATION_S);
+  // Duration is held as a STRING so the user can briefly type an
+  // empty / partial value (after backspacing all digits) without
+  // React snapping it back to "0". A controlled `<input type="number"
+  // value={number}>` re-renders 0 the instant Number("") is committed,
+  // making the field appear glued to "0" no matter what you type.
+  // We parse + validate on Start / blur instead.
+  const [durationStr, setDurationStr] = useState<string>(String(DEFAULT_DURATION_S));
   const [includeAudio, setIncludeAudio] = useState(true);
   const [busy, setBusy] = useState<'starting' | 'stopping' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -45,9 +51,39 @@ export function RecordingControls() {
   const clamp = (n: number) =>
     Math.max(MIN_DURATION_S, Math.min(MAX_DURATION_S, Math.round(n)));
 
+  // Parse the input. Returns null if the field is empty / not a finite
+  // number; the caller decides whether to surface an error.
+  const parseDuration = (): number | null => {
+    const trimmed = durationStr.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return null;
+    return clamp(n);
+  };
+
+  // Used by the start button + preset highlight + error display.
+  const parsedDuration = (() => {
+    const trimmed = durationStr.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  })();
+  const isValidDuration =
+    parsedDuration !== null &&
+    parsedDuration >= MIN_DURATION_S &&
+    parsedDuration <= MAX_DURATION_S;
+
   const handleStart = async () => {
-    const d = clamp(duration);
-    setDuration(d);
+    const d = parseDuration();
+    if (d === null) {
+      setErrorMsg(
+        `Enter a duration between ${MIN_DURATION_S} and ${MAX_DURATION_S} seconds.`,
+      );
+      return;
+    }
+    // Normalise the input to the clamped value so the user sees what
+    // they're actually committing.
+    setDurationStr(String(d));
     setErrorMsg(null);
     setBusy('starting');
     try {
@@ -110,19 +146,26 @@ export function RecordingControls() {
               Duration (seconds)
             </label>
             <input
-              type="number"
-              min={MIN_DURATION_S}
-              max={MAX_DURATION_S}
-              step={1}
-              value={duration}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v)) setDuration(v);
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={durationStr}
+              onChange={(e) => setDurationStr(e.target.value)}
+              onBlur={() => {
+                // Normalise on blur ONLY if the user typed something
+                // valid. Empty / partially-typed text is left alone so
+                // the cursor doesn't jump while they're still editing.
+                const trimmed = durationStr.trim();
+                if (trimmed === '') return;
+                const n = Number(trimmed);
+                if (Number.isFinite(n)) {
+                  setDurationStr(String(clamp(n)));
+                }
               }}
-              onBlur={() => setDuration((d) => clamp(d))}
               disabled={busy !== null}
               className="w-full bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm font-mono disabled:opacity-50"
               title={`Any value from ${MIN_DURATION_S} to ${MAX_DURATION_S} seconds`}
+              placeholder={String(DEFAULT_DURATION_S)}
             />
           </div>
 
@@ -132,10 +175,10 @@ export function RecordingControls() {
               <button
                 key={s}
                 type="button"
-                onClick={() => setDuration(s)}
+                onClick={() => setDurationStr(String(s))}
                 disabled={busy !== null}
                 className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
-                  duration === s
+                  parsedDuration === s
                     ? 'bg-blue-500/20 border-blue-500/60 text-blue-200'
                     : 'bg-window-bg border-card-border text-text-secondary hover:border-card-border/80'
                 }`}
@@ -157,10 +200,11 @@ export function RecordingControls() {
             <span className="text-sm text-text-secondary">Include audio</span>
           </label>
 
-          {/* Start button */}
+          {/* Start button — disabled when the typed duration parses
+              to nothing valid, so an empty field can't slip through. */}
           <button
             onClick={handleStart}
-            disabled={busy !== null}
+            disabled={busy !== null || !isValidDuration}
             className="w-full bg-status-disconnected hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
             {busy === 'starting' ? 'Starting…' : 'Start Recording'}
