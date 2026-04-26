@@ -1,0 +1,17 @@
+# ESP32 Sensor Dashboard - Backend Python Dependencies
+# Pinned versions from pip freeze
+#
+# Core sensor/ble/audio stack
+fastapi==0.124.4
+uvicorn[standard]==0.33.0
+websockets==13.1
+pydantic==2.10.6
+pyserial==3.5
+bleak==0.22.3
+numpy==1.24.4
+
+# Whisper-local extension (optional)
+# faster-whisper is installed on-demand via Settings > Extensions in the UI.
+# It is NOT required for the core dashboard to function.
+# Uncomment to pin a specific version:
+# faster-whisper>=1.0.0
