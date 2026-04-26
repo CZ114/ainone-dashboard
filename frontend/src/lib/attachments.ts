@@ -45,16 +45,20 @@ export interface PendingAttachment {
   recording?: RecordingAttachmentMeta;
 }
 
-// Guardrail for one message's total inlined-text payload — prevents
-// pathological "100 × 40 KB text file" prompts from blowing the
-// model's context window.
+// Guardrail for one message's total inlined-text payload.
 //
 // IMPORTANT: this caps the bytes that actually land in the PROMPT,
 // not the on-disk file size. Image / recording-audio / other-binary
-// attachments only contribute a one-line path reference, so a 1 GB
-// WAV counts as ~200 bytes here, not 1 GB. See `promptBytesFor` for
-// the per-kind accounting.
-export const MAX_TOTAL_ATTACHMENT_BYTES = 500 * 1024;
+// attachments only contribute a one-line path reference, so a 20 MB
+// WAV counts as ~256 bytes here. See `promptBytesFor` for the
+// per-kind accounting.
+//
+// 20 MB is the ceiling: in practice Claude's context will start
+// truncating well before that for fully-inlined text, but for the
+// realistic mix (one preview-capped CSV + a couple of audio URLs +
+// some short text snippets) the cap is effectively a "100 × 200 KB
+// text file" backstop, nothing more.
+export const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
 // Drag-and-drop MIME used to shuttle a recording session payload from
 // RecordingsPanel → ChatInput. Custom MIME keeps our drops distinguishable
