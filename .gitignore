@@ -63,3 +63,10 @@ desktop.ini
 
 # Claude Code per-project local config (personal, auto-generated)
 .claude/
+
+# Local-only docs (kept in working tree, not pushed). Source repo
+# (esp32_sensor_dashboard) is the source of truth for these.
+WHISPER_LOCAL_DEBUG_JOURNEY.md
+WRAPPING_NATIVE_PICKER_GUIDE.md
+SPEC.md
+start.sh
