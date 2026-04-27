@@ -84,10 +84,26 @@ function payloadFromSession(
   };
 }
 
+// Per-session transcription state. Stored in a Map keyed by session
+// id so each row renders independently — clicking Transcribe on one
+// recording doesn't reset another's state.
+type TranscriptStatus = 'idle' | 'loading' | 'done' | 'error';
+interface TranscriptEntry {
+  status: TranscriptStatus;
+  text?: string;
+  language?: string | null;
+  duration_seconds?: number;
+  transcribe_ms?: number;
+  error?: string;
+}
+
 export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transcripts, setTranscripts] = useState<Map<string, TranscriptEntry>>(
+    new Map(),
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -100,6 +116,44 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
       setSessions(result.sessions);
     }
     setLoading(false);
+  }, []);
+
+  const handleTranscribe = useCallback(
+    async (sessionId: string, audioFilename: string) => {
+      // Set loading immediately so the UI flips before the network
+      // request — the user sees their click acknowledged within one
+      // frame, not after the round-trip.
+      setTranscripts((prev) => {
+        const next = new Map(prev);
+        next.set(sessionId, { status: 'loading' });
+        return next;
+      });
+      const r = await recordingsApi.transcribeAudio(audioFilename);
+      setTranscripts((prev) => {
+        const next = new Map(prev);
+        if (r.error) {
+          next.set(sessionId, { status: 'error', error: r.error });
+        } else {
+          next.set(sessionId, {
+            status: 'done',
+            text: r.text,
+            language: r.language,
+            duration_seconds: r.duration_seconds,
+            transcribe_ms: r.transcribe_ms,
+          });
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleClearTranscript = useCallback((sessionId: string) => {
+    setTranscripts((prev) => {
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -188,6 +242,21 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
             </div>
           )}
 
+          {/* Feature hint — visible whenever there's at least one
+              audio recording so the user discovers the new
+              click-to-transcribe action. Sits above the list, not
+              inside any individual card, so it doesn't repeat. */}
+          {!error && sessions.some((s) => !!s.audio) && (
+            <div className="mx-1 my-2 p-2 rounded bg-blue-500/10 border border-blue-500/30 text-[11px] text-blue-300 leading-relaxed">
+              ✨ <span className="font-semibold">New:</span> click{' '}
+              <span className="font-mono px-1 py-0.5 bg-blue-500/20 rounded">
+                Transcribe
+              </span>{' '}
+              on any audio row to convert it to text via Whisper. Runs
+              locally — no audio leaves your machine.
+            </div>
+          )}
+
           {!error && sessions.length === 0 && !loading && (
             <div className="text-center text-xs text-text-muted px-4 py-10">
               No recordings yet.
@@ -235,20 +304,18 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
                       </div>
                     )}
                     {s.audio && (
-                      <div
-                        draggable
+                      <AudioRow
+                        session={s}
+                        audioFilename={s.audio.filename}
+                        durationSeconds={s.audio.duration_seconds}
+                        sizeBytes={s.audio.size_bytes}
+                        transcript={transcripts.get(s.id)}
+                        onTranscribe={() =>
+                          handleTranscribe(s.id, s.audio!.filename)
+                        }
+                        onClearTranscript={() => handleClearTranscript(s.id)}
                         onDragStart={(e) => handleDragStart(e, s, 'audio')}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
-                        title="Drag audio into chat"
-                      >
-                        <span className="text-[11px] text-text-secondary truncate">
-                          🔊 {formatDuration(s.audio.duration_seconds)} ·{' '}
-                          {formatSize(s.audio.size_bytes)}
-                        </span>
-                        <span className="text-[10px] text-text-muted shrink-0">
-                          drag audio
-                        </span>
-                      </div>
+                      />
                     )}
                     {hasBoth && (
                       <div
@@ -274,5 +341,154 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
         </div>
       </aside>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AudioRow — one row of the per-session audio listing. Holds its own
+// drag source AND a Transcribe button + animated transcript panel.
+//
+// Animation strategy: we use `display: grid` with `grid-template-rows`
+// transitioning from `0fr` to `1fr`. This is the modern way to
+// animate to/from intrinsic content height — `max-height` workarounds
+// require guessing a "tall enough" value and produce abrupt collapses
+// on long content. grid-template-rows gives true content-driven
+// animation in 4 lines of CSS.
+
+interface AudioRowProps {
+  session: RecordingSession;
+  audioFilename: string;
+  durationSeconds: number | null | undefined;
+  sizeBytes: number;
+  transcript: TranscriptEntry | undefined;
+  onTranscribe: () => void;
+  onClearTranscript: () => void;
+  onDragStart: (e: React.DragEvent<HTMLElement>) => void;
+}
+
+function AudioRow({
+  audioFilename,
+  durationSeconds,
+  sizeBytes,
+  transcript,
+  onTranscribe,
+  onClearTranscript,
+  onDragStart,
+}: AudioRowProps) {
+  const status = transcript?.status ?? 'idle';
+  const expanded = status !== 'idle';
+
+  return (
+    <div className="space-y-1">
+      <div
+        draggable
+        onDragStart={onDragStart}
+        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
+        title="Drag audio into chat"
+      >
+        <span className="text-[11px] text-text-secondary truncate flex-1 min-w-0">
+          🔊 {formatDuration(durationSeconds)} · {formatSize(sizeBytes)}
+        </span>
+        <button
+          // Keep the click off the drag source: stopPropagation
+          // prevents the click triggering the drag's onDragStart on
+          // browsers that fire one before the other.
+          onClick={(e) => {
+            e.stopPropagation();
+            if (status === 'loading') return;
+            onTranscribe();
+          }}
+          disabled={status === 'loading'}
+          draggable={false}
+          onDragStart={(e) => {
+            // Don't let the drag bubble up — the parent row is the
+            // intended drag source, the button isn't.
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-blue-500/40 text-blue-300 hover:bg-blue-500/10 disabled:opacity-50 disabled:cursor-wait"
+          title={
+            status === 'loading'
+              ? 'Whisper is decoding…'
+              : status === 'done'
+                ? 'Re-transcribe'
+                : 'Transcribe with Whisper (runs locally)'
+          }
+        >
+          {status === 'loading'
+            ? '⏳ Transcribing'
+            : status === 'done'
+              ? '↻ Re-transcribe'
+              : 'Transcribe'}
+        </button>
+      </div>
+
+      {/* Animated transcript panel. Closed = grid-template-rows:0fr,
+          open = 1fr. The inner div has overflow:hidden so collapsed
+          content is clipped. Transition runs on grid-template-rows
+          + opacity for a subtle fade-in, ~250ms ease-in-out. */}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          expanded
+            ? 'grid-rows-[1fr] opacity-100'
+            : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden min-h-0">
+          <div className="mx-1 mt-1 p-2 rounded bg-window-bg border border-card-border/40 text-[11px] text-text-secondary">
+            {status === 'loading' && (
+              <div className="flex items-center gap-2 text-amber-400">
+                <span className="animate-pulse">●</span>
+                <span>Whisper is decoding{' '}{audioFilename}…</span>
+              </div>
+            )}
+
+            {status === 'error' && (
+              <div className="space-y-1">
+                <div className="text-red-400 font-semibold">
+                  Transcription failed
+                </div>
+                <div className="text-red-400/80 break-all">
+                  {transcript?.error}
+                </div>
+                <button
+                  onClick={onClearTranscript}
+                  className="mt-1 text-[10px] text-text-muted hover:text-text-primary underline"
+                >
+                  dismiss
+                </button>
+              </div>
+            )}
+
+            {status === 'done' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                  <span>
+                    {transcript?.language ?? '?'} ·{' '}
+                    {transcript?.transcribe_ms != null
+                      ? `decoded in ${(transcript.transcribe_ms / 1000).toFixed(1)}s`
+                      : ''}
+                  </span>
+                  <button
+                    onClick={onClearTranscript}
+                    className="ml-auto text-[10px] text-text-muted hover:text-text-primary"
+                    title="Hide transcript"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="whitespace-pre-wrap break-words leading-relaxed text-text-primary">
+                  {transcript?.text || (
+                    <span className="text-text-muted italic">
+                      (empty — VAD filtered the audio as silence)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

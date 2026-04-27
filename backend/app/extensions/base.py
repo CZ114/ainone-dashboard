@@ -3,7 +3,7 @@
 Subclasses override `on_install`, optionally `on_start` / `on_stop`,
 and expose class-level metadata (`id`, `name`, `description`, `version`).
 """
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 
 class InstallContext:
@@ -59,3 +59,61 @@ class Extension:
         """Optional: return runtime status for the /api/extensions
         response. Keep keys JSON-serializable."""
         return {}
+
+    @classmethod
+    def get_config_schema(cls) -> List[Dict[str, Any]]:
+        """Optional: declarative description of configurable fields, used
+        by the frontend to render a settings UI without bespoke code per
+        extension. Each entry shape:
+            {
+              "key": "model_name",          # path into the config dict
+              "type": "select" | "slider",  # widget kind
+              "label": "Model",             # UI label
+              "default": <any>,             # value when not set
+              # For type=='select' — at least ONE of these:
+              "options": [...],             # flat list of values
+              "option_groups": [            # grouped — renders as <optgroup>
+                {"label": "...", "options": [...]},
+                ...
+              ],
+              # For type=='slider':
+              "min": ..., "max": ..., "step": ...,
+              "requires_reload": bool,      # see note below
+              "help": "..."                 # tooltip / hint
+            }
+
+        `requires_reload`: true means the field can't be applied
+        in-process — the frontend persists the value but shows a
+        "Restart required" badge until the running runtime value
+        catches up. Triggering an actual restart is a separate user
+        action via POST /api/system/restart.
+
+        Empty list (the default) means the extension exposes no config
+        UI."""
+        return []
+
+    async def on_config_change(self, config: Dict[str, Any]) -> None:
+        """Called by the manager AFTER the persisted config has been
+        merged with the API patch. Receives the FULL merged config, not
+        just the patch — so subclasses can trust it as the new ground
+        truth without re-reading state.
+
+        Subclasses apply the change: update internal fields for hot
+        params (chunk size, beam, thresholds), reload heavy subsystems
+        for cold params (model swap). Default: no-op so existing
+        extensions don't have to care."""
+        return
+
+    async def delete_cache_entry(self, key: str) -> Dict[str, Any]:
+        """Optional: remove one of the extension's on-disk cache
+        entries. Used by the Settings UI to surface a per-cache delete
+        action (e.g. each Whisper model under
+        ~/.cache/huggingface/hub/). Subclasses that own no deletable
+        caches should leave the default below; the API endpoint maps
+        NotImplementedError to a 400 with a clear message.
+
+        Returns a dict describing what was freed; the frontend uses it
+        for the toast/feedback ("freed 1.5 GB")."""
+        raise NotImplementedError(
+            f"Extension '{self.id}' does not expose any deletable caches"
+        )

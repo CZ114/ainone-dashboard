@@ -1347,4 +1347,455 @@ are arranged in DOM order.
 
 ---
 
-*Last updated: 2026-04-26 (Tool Permissions + Interactive Picker)*
+## 15. Whisper Streaming Quality, GPU Acceleration & Config Framework (2026-04-27)
+
+This section documents the dev-branch Whisper overhaul. It rebuilds the
+local-STT pipeline around streaming dedup + GPU acceleration, adds a
+generic per-extension config + cache UI, and introduces a supervisor
+process so model swaps that can't run in-place still feel like a single
+click. The narrative-form debug journey lives in
+[`POST_V1_0_0_DEBUG_JOURNEY.md`](POST_V1_0_0_DEBUG_JOURNEY.md) and
+[`WHISPER_LOCAL_DEBUG_JOURNEY.md`](WHISPER_LOCAL_DEBUG_JOURNEY.md).
+
+### 15.1 Shipped Features
+
+| ID  | Feature                                                                    | Lives in                                    |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------- |
+| W1  | Sliding-window streaming with overlap dedup + cross-window prompt          | Backend (`whisper_local.py`)                |
+| W2  | CUDA auto-detection + float16 GPU / int8 CPU fallback + warmup pass        | Backend                                     |
+| W3  | Smart per-platform default model (CUDA → turbo, Apple Silicon → small, …) | Backend                                     |
+| W4  | Windows CUDA DLL path injection (PATH + `os.add_dll_directory`)            | Backend                                     |
+| W5  | Project-local model cache under `VoiceModel/` (instead of HF default)      | Backend + `.gitignore`                      |
+| W6  | Async background model load (lifespan no longer blocks on 1.5 GB download) | Backend                                     |
+| W7  | Generic extension config schema + `on_config_change` hook + REST endpoint  | Backend (`base.py`, `manager.py`)           |
+| W8  | Schema-driven settings UI (select / slider widgets + dirty-diff Apply)     | Frontend (`ExtensionConfigPanel.tsx`)       |
+| W9  | "Restart required" badge + 3-min restart-poll state machine                | Frontend                                    |
+| W10 | Cache management — list cached models + per-row delete                     | Backend + Frontend (`ExtensionCachePanel.tsx`) |
+| W11 | Heavyweight-load (GPU tier) confirm dialog before save                     | Frontend                                    |
+| W12 | Backend supervisor (`run.py`) + `POST /api/system/restart` (exit code 42)  | Backend                                     |
+| W13 | Audio-file batch transcription on the Recordings drawer                    | Backend + Frontend                          |
+
+In-process model swap is **disabled** — see § 15.7.
+
+### 15.2 New / Modified Files
+
+**Backend**
+
+| File                                                                                            | Change                                                                                  |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`backend/app/extensions/whisper_local.py`](backend/app/extensions/whisper_local.py)            | Rewritten: streaming dedup, GPU detect, async load, config schema, cache enumeration, file batch transcribe |
+| [`backend/app/extensions/base.py`](backend/app/extensions/base.py)                              | New `get_config_schema`, `on_config_change`, `delete_cache_entry` hooks                 |
+| [`backend/app/extensions/manager.py`](backend/app/extensions/manager.py)                        | `update_config(ext_id, patch)`, `delete_cache_entry`; config applied **before** `on_start` in both `init_from_state` and `enable` |
+| [`backend/app/api/extensions.py`](backend/app/api/extensions.py)                                | `POST /api/extensions/{id}/config`, `POST /api/extensions/{id}/cache/delete`            |
+| [`backend/app/api/recordings.py`](backend/app/api/recordings.py)                                | `POST /api/recordings/transcribe/{filename}` (batch transcribe a saved WAV)             |
+| [`backend/app/api/system.py`](backend/app/api/system.py)                                        | **New file** — `POST /api/system/restart` returns 200, then `os._exit(42)` after 1 s    |
+| [`backend/app/main.py`](backend/app/main.py)                                                    | Registers the `system` router                                                           |
+| [`backend/run.py`](backend/run.py)                                                              | Replaced with supervisor: spawns `python -m uvicorn` as a subprocess and respawns on exit code 42 |
+
+**Frontend**
+
+| File                                                                                                                            | Change                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`frontend/src/components/settings/ExtensionConfigPanel.tsx`](frontend/src/components/settings/ExtensionConfigPanel.tsx)        | **New file** — generic select/slider widget renderer    |
+| [`frontend/src/components/settings/ExtensionCachePanel.tsx`](frontend/src/components/settings/ExtensionCachePanel.tsx)          | **New file** — per-cache delete buttons + total size    |
+| [`frontend/src/components/settings/ExtensionCard.tsx`](frontend/src/components/settings/ExtensionCard.tsx)                      | Mounts the new panels when the schema / cache list is non-empty |
+| [`frontend/src/components/chat/RecordingsPanel.tsx`](frontend/src/components/chat/RecordingsPanel.tsx)                          | New `AudioRow` sub-component — Transcribe button, animated transcript panel via `grid-template-rows`, idle/loading/done/error states, Re-transcribe + dismiss |
+| [`frontend/src/api/extensionsApi.ts`](frontend/src/api/extensionsApi.ts)                                                        | `updateConfig`, `deleteCache`, `restartBackend`         |
+| [`frontend/src/api/recordingsApi.ts`](frontend/src/api/recordingsApi.ts)                                                        | `transcribeAudio(filename)`                             |
+| [`frontend/vite.config.ts`](frontend/vite.config.ts)                                                                            | `/api/system` proxy (port 8080) added                   |
+| [`.gitignore`](.gitignore)                                                                                                      | `VoiceModel/` and `extensions_state.json` excluded      |
+
+### 15.3 Streaming Pipeline — Sliding-Window Dedup + Prompt Continuity
+
+Defaults changed: `CHUNK_SECONDS 3.0 → 1.5`, `OVERLAP_SECONDS 0.5 → 0.3`.
+Smaller windows lower latency (one transcribe arrives ~every 1.2 s of
+real time instead of every 2.5 s) at the cost of less acoustic context
+per decode — which the next two mechanisms restore.
+
+**Two distinct text buffers** —
+[`whisper_local.py:275-283`](backend/app/extensions/whisper_local.py#L275-L283):
+
+- `_last_raw_text` — verbatim model output of the previous chunk. Fed
+  back into the next call as `initial_prompt` (truncated to the trailing
+  ~120 chars to fit Whisper's ~224-token prompt slot) so the decoder
+  carries linguistic context across the overlap region.
+- `_last_text` — what the user has actually seen, after dedup. Never
+  fed back to the model.
+
+**Overlap dedup** —
+[`whisper_local.py:1200-1220`](backend/app/extensions/whisper_local.py#L1200-L1220).
+Static helper `_strip_overlap_prefix(prev, new)` finds the longest `k`
+where `prev[-k:] == new[:k]`, with a 4-char minimum and a 60-char cap.
+Char-level (not word-level) so the same code path works for CJK and
+space-separated languages. If the entire new chunk is already covered
+by the overlap, broadcast is skipped but `_last_raw_text` is still
+updated so the next chunk's prompt and dedup reference stays current —
+[`whisper_local.py:1044-1053`](backend/app/extensions/whisper_local.py#L1044-L1053).
+
+**Window advance** —
+[`whisper_local.py:952-969`](backend/app/extensions/whisper_local.py#L952-L969).
+Buffer is sliced to the full chunk size, then trimmed by `chunk - overlap`
+(not by the full chunk). The trailing `OVERLAP_SECONDS` of audio stays
+in the buffer to become the leading audio of the next chunk, so a word
+that straddles a boundary appears whole in at least one chunk.
+
+### 15.4 GPU Acceleration
+
+**Auto-detect** —
+[`whisper_local.py:506-539`](backend/app/extensions/whisper_local.py#L506-L539).
+`ctranslate2.get_cuda_device_count() > 0` selects CUDA + `float16`;
+construction failure falls back to CPU + `int8`. Float16 is the sweet
+spot on Ada/Ampere — half the memory bandwidth of float32, natively
+accelerated by tensor cores. `int8_float16` is ~10 % faster but slightly
+less robust on noisy audio, so the default is plain `float16`.
+
+**Smart default model** —
+[`whisper_local.py:100-126`](backend/app/extensions/whisper_local.py#L100-L126).
+
+| Platform                 | Default model    | Rationale                                                              |
+| ------------------------ | ---------------- | ---------------------------------------------------------------------- |
+| Windows / Linux + CUDA   | `large-v3-turbo` | Near-large-v3 quality, ~6× faster on tensor cores                      |
+| Apple Silicon (arm64)    | `small`          | faster-whisper has no MPS support — CPU only; small is the largest snappy size |
+| Intel Mac                | `base`           | Older hardware, conservative                                           |
+| Plain CPU (no CUDA)      | `small`          | Acceptable on modern x86; users can downgrade to `base`/`tiny`         |
+| Pre-install (no CT2 yet) | `base`           | Failure-tolerant fallback; corrected by `on_config_change` post-install |
+
+**Warmup pass** —
+[`whisper_local.py:547-591`](backend/app/extensions/whisper_local.py#L547-L591).
+Right after model load, one dummy transcribe is driven through the
+freshly-loaded model with low-amplitude white noise (not pure silence,
+which the VAD might swallow). This forces CUDA kernel JIT, cuDNN handle
+init, and CT2 internal allocators all to happen at boot instead of
+during the user's first real chunk. Costs ~3-8 s on a 4060, ~1-2 s on
+CPU, paid once.
+
+**Windows CUDA DLL injection** —
+[`whisper_local.py:467-491`](backend/app/extensions/whisper_local.py#L467-L491).
+This is the highest-impact line of code in the rewrite. CT2 can construct
+a CUDA model using just `nvcuda.dll` (already in `C:\Windows\System32`),
+so model load misleadingly succeeds even when the cuBLAS DLLs aren't
+discoverable. The first matmul then needs `cublas64_12.dll`, which lives
+inside the `nvidia-cublas-cu12` pip wheel at
+`<venv>/Lib/site-packages/nvidia/cublas/bin/`. Without that path on the
+DLL search order, CT2's internal generator iteration **hangs forever**
+instead of raising — see § 2 of `WHISPER_LOCAL_DEBUG_JOURNEY.md`.
+
+The fix prepends every `nvidia/*/bin` directory to **both** `os.environ["PATH"]`
+and `os.add_dll_directory`. `os.add_dll_directory` alone is insufficient
+because CT2's native code uses bare `LoadLibrary`, which only consults
+the legacy DLL search order (PATH being the last entry). macOS / Linux
+skip this entirely — CT2 ships `.dylib` / `.so` bundled inside the
+`ctranslate2` wheel, and the dynamic loader resolves them via
+`@rpath` / RPATH.
+
+### 15.5 Project-Local Model Cache
+
+[`whisper_local.py:86`](backend/app/extensions/whisper_local.py#L86) —
+`MODELS_DIR = BASE_DIR / "VoiceModel"` (`BASE_DIR` resolves to the
+project root, not `backend/`). Passed through as
+`WhisperModel(..., download_root=str(MODELS_DIR))`. The HF cache layout
+is preserved (`models--<org>--<repo>/snapshots/...`) so faster-whisper
+resolves paths normally; only the parent dir is overridden. Effects:
+
+- Models stay inside the repo — easier to back up, ship to a
+  collaborator, or wipe when iterating.
+- `VoiceModel/` is in `.gitignore` (per-model size 75 MB to 3 GB; not
+  committable).
+- The currently-cached set on this machine is `base`, `small`,
+  `large-v3-turbo` (~2 GB total). Other models are downloaded on first
+  use.
+
+### 15.6 Async Background Model Load
+
+[`whisper_local.py:595-619`](backend/app/extensions/whisper_local.py#L595-L619).
+`on_start` no longer awaits `_load_model_blocking` — it subscribes to
+`AudioBridge` first (so future arrivals are at least seen), then spawns
+`_load_model_async` as `asyncio.create_task`. FastAPI's lifespan
+completes in seconds even when the model needs a 1.5 GB download.
+
+Three guards in `_on_frame` prevent crashes during the load window —
+[`whisper_local.py:976-987`](backend/app/extensions/whisper_local.py#L976-L987):
+
+- Model not loaded yet → drop chunk, increment `_not_ready_drop_count`,
+  log every 20th drop.
+- Previous transcribe still in-flight → drop chunk, increment
+  `_drop_count`, log immediately.
+- No event loop → log warning, return.
+
+`on_stop` cancels any in-flight load before tearing down state —
+[`whisper_local.py:660-684`](backend/app/extensions/whisper_local.py#L660-L684).
+Otherwise the load task could finish AFTER on_stop returns and leak a
+CUDA context with no owner.
+
+### 15.7 In-Process Model Swap is Disabled
+
+[`whisper_local.py:828-862`](backend/app/extensions/whisper_local.py#L828-L862).
+Two attempts (sync reload + `gc.collect`, async load + `gc.collect`)
+both crashed CT2 native code on the Windows + CUDA combination — the
+CUDA destructor of the outgoing model can segfault when a fresh
+allocation runs nearby, and Python can't catch it. The whole backend
+process goes down with no traceback.
+
+The runtime branch of `on_config_change` for `model_name` therefore:
+
+1. Persists the new value via `manager.update_config` (already done by
+   the manager before this hook is called).
+2. Logs the deferral.
+3. **Reverts the in-memory mirror** (`self._model_name`) back to the
+   running model, so `status()` reflects what's actually loaded. The
+   persisted config keeps the new value — `init_from_state` at next
+   boot calls `on_config_change` *before* `on_start`, so the fresh
+   process loads the new model directly.
+
+The `requires_reload: true` schema flag on `model_name` surfaces this
+in the UI as an amber "Restart required" badge plus a "Restart now"
+button (see § 15.10).
+
+### 15.8 Configuration Framework
+
+**Schema declaration on the class** —
+[`base.py:64-93`](backend/app/extensions/base.py#L64-L93).
+`Extension.get_config_schema()` returns a list of field descriptors:
+
+```python
+{
+  "key":   "model_name",
+  "type":  "select" | "slider",
+  "label": "Model",
+  "default": <any>,
+  "options" / "option_groups": [...],   # for select
+  "min" / "max" / "step": ...,          # for slider
+  "requires_reload": bool,
+  "help": "..."
+}
+```
+
+`option_groups` is the grouped form (`<optgroup>` in the UI) —
+Whisper's groups are `CPU-friendly` (`tiny`, `base`, `small`) and
+`GPU recommended` (`medium`, `large-v3`, `large-v3-turbo`,
+`distil-large-v3`).
+
+**Whisper config fields** —
+[`whisper_local.py:155-227`](backend/app/extensions/whisper_local.py#L155-L227):
+
+| Key               | Type   | Range / options                  | Default                         | Reload? |
+| ----------------- | ------ | -------------------------------- | ------------------------------- | ------- |
+| `model_name`      | select | 7 models in 2 option groups      | platform-smart                  | yes     |
+| `chunk_seconds`   | slider | 0.8 – 5.0, step 0.1              | 1.5                             | no      |
+| `overlap_seconds` | slider | 0.0 – 1.0, step 0.05             | 0.3                             | no      |
+| `beam_size`       | slider | 1 – 10, step 1                   | 5                               | no      |
+
+`on_config_change` —
+[`whisper_local.py:787-868`](backend/app/extensions/whisper_local.py#L787-L868).
+Hot fields (chunk / overlap / beam) are simple field assignments that
+the next dispatched chunk picks up — no downtime. `overlap` is clamped
+to `< chunk - 0.1` so the buffer always advances. `beam` is clamped to
+`>= 1`.
+
+**Manager glue** —
+[`manager.py:246-280`](backend/app/extensions/manager.py#L246-L280).
+`update_config(ext_id, patch)` does a shallow merge into the persisted
+state, **then** calls the running instance's `on_config_change` (if
+any). Persistence happens before the hook so a config write survives
+even if the subsystem reload fails. Returns the full merged config so
+the API caller doesn't need a re-read.
+
+**Init order** —
+[`manager.py:62-88`](backend/app/extensions/manager.py#L62-L88) and
+[`manager.py:192-211`](backend/app/extensions/manager.py#L192-L211).
+Both `init_from_state` (lifespan startup) and `enable` (user toggled
+on) now run `on_config_change(persisted_config)` **before** `on_start`.
+This is what lets the freshly-spawned process boot directly into the
+user's chosen model — no double-load.
+
+**REST surface** —
+[`extensions.py:130-173`](backend/app/api/extensions.py#L130-L173):
+
+- `POST /api/extensions/{id}/config` — body is a partial patch; merges
+  into persisted config and returns the full merged config.
+- `POST /api/extensions/{id}/cache/delete` — body `{"key": "<name>"}`;
+  401 → 400/404/501 mapping documented in the route docstring.
+
+### 15.9 Schema-Driven Settings UI
+
+[`ExtensionConfigPanel.tsx`](frontend/src/components/settings/ExtensionConfigPanel.tsx).
+Generic — no per-extension code. Each schema entry's `type` selects the
+widget and the rest parameterises it.
+
+- **Dirty-diff Apply** — `pending` state tracks user edits;
+  `dirtyKeys = schema.filter(f => pending[f.key] !== currentConfig[f.key])`.
+  Apply sends only the dirty keys (so the backend's shallow merge doesn't
+  overwrite values we never touched).
+- **Reset to defaults** — sets `pending` to `Object.fromEntries(schema.map(f => [f.key, f.default]))`,
+  not back to `currentConfig`. Distinct from "discard edits" — the more
+  useful escape hatch.
+- **Heavyweight-load warning** — before save, every dirty `select` field
+  whose new value sits in an `option_groups` entry whose label matches
+  `/gpu/i` triggers a `window.confirm`. Generic on the schema; any
+  extension can opt-in by labelling a group `GPU recommended`.
+  [`ExtensionConfigPanel.tsx:124-142`](frontend/src/components/settings/ExtensionConfigPanel.tsx#L124-L142).
+- **Restart-required badge** — visible when at least one
+  `requires_reload` field is dirty OR has been applied but the running
+  `runtime[key]` still differs from the configured value. The badge
+  must stay visible **after** Apply because in-process model swap is
+  disabled — the user still has work to do until they restart.
+  [`ExtensionConfigPanel.tsx:108-117`](frontend/src/components/settings/ExtensionConfigPanel.tsx#L108-L117).
+
+### 15.10 Restart Flow
+
+```
+User clicks "Restart now"
+   │
+   ▼
+ConfigPanel: POST /api/system/restart           ← restartPhase: 'requesting'
+   │
+   ▼
+Backend (system.py): respond 200, then
+   asyncio.create_task(_delayed_exit())
+   await asyncio.sleep(1)
+   os._exit(42)
+   │
+   ▼
+run.py supervisor: child exit code 42 → respawn ← restartPhase: 'polling'
+   │
+   ▼
+Frontend: poll /api/extensions every 1.5 s,
+   timeout 3 min                                ← typical 10-30 s,
+                                                   longer if Whisper
+                                                   fresh-downloads
+   │
+   ▼
+First successful poll → onChanged() refreshes  ← restartPhase: 'idle'
+   parent so currentConfig matches runtime
+```
+
+[`ExtensionConfigPanel.tsx:160-205`](frontend/src/components/settings/ExtensionConfigPanel.tsx#L160-L205)
+holds the polling state machine. 3 min timeout covers the worst case
+(fresh `large-v3` download) without hanging the UI forever if the
+supervisor itself was killed.
+
+### 15.11 Cache Management
+
+[`whisper_local.py:699-785`](backend/app/extensions/whisper_local.py#L699-L785).
+`_enumerate_cached_models()` walks `MODELS_DIR` for any
+`models--*--faster-whisper-*` directory and returns
+`{name, size_bytes, size_human, is_active}`. The split happens on the
+literal `--faster-whisper-` substring so model names containing dashes
+(`large-v3`, `distil-large-v3`) survive intact.
+
+`delete_cache_entry(key)` refuses to delete the live model (`key ==
+self._model_name and self._model is not None`). The frontend disables
+the delete button on the active row instead of letting the request hit
+the server; the backend guard is a defence-in-depth.
+
+`runtime.cached_models` is exposed via `status()` —
+[`whisper_local.py:884-887`](backend/app/extensions/whisper_local.py#L884-L887) —
+and rendered in
+[`ExtensionCachePanel.tsx`](frontend/src/components/settings/ExtensionCachePanel.tsx)
+as a list with per-row delete buttons and a total-size header.
+
+### 15.12 Audio File Batch Transcription
+
+[`whisper_local.py:1125-1198`](backend/app/extensions/whisper_local.py#L1125-L1198) —
+`transcribe_audio_file(path)`. Three deliberate differences from the
+streaming path (`transcribe_pcm16`):
+
+1. **No silence gate / pre-amp** — offline audio is trusted to be
+   well-recorded.
+2. **No `initial_prompt` continuity** — each file is independent;
+   carrying state from the live stream would pollute results.
+3. **Single decode pass** — faster-whisper handles long audio
+   internally via its own VAD-driven segmentation; chunking would
+   actively hurt accuracy.
+
+Returns `{text, language, language_probability, duration_seconds, transcribe_ms}`.
+
+[`recordings.py:176-227`](backend/app/api/recordings.py#L176-L227) —
+`POST /api/recordings/transcribe/{filename}`. Status code map:
+
+| Code | Reason                                                          |
+| ---- | --------------------------------------------------------------- |
+| 400  | Filename doesn't match writer's regex / WAV format unexpected   |
+| 404  | File doesn't exist on disk                                      |
+| 503  | Whisper extension not enabled / model still loading             |
+| 500  | Unexpected failure inside the model                             |
+
+Frontend UI lives in `RecordingsPanel.tsx` as the new `AudioRow`
+sub-component
+([`RecordingsPanel.tsx:348-460+`](frontend/src/components/chat/RecordingsPanel.tsx#L348-L460)).
+Highlights:
+
+- Per-session transcript state stored in a `Map<sessionId, TranscriptEntry>`
+  so clicking Transcribe on one row doesn't reset another's state.
+- Animated transcript panel uses `display: grid` with
+  `grid-template-rows` transitioning from `0fr` to `1fr` — the modern
+  way to animate to/from intrinsic content height. No `max-height`
+  guess, no abrupt collapse on long content.
+- Three states: `idle` (Transcribe button), `loading` (animated dot +
+  filename), `done` (transcript text + language + decode time +
+  Re-transcribe button), `error` (red message + dismiss).
+
+### 15.13 Backend Supervisor
+
+[`backend/run.py`](backend/run.py) is now ~90 lines. The supervisor:
+
+- Spawns `python -m uvicorn app.main:app --host 0.0.0.0 --port 8080` as
+  a child via `subprocess.Popen`.
+- Blocks on `proc.wait()`.
+- On exit code 42 (`RESTART_EXIT_CODE`), respawns after a 1 s sleep.
+- On any other code, exits with the child's code (preserves signal /
+  error semantics).
+- On `KeyboardInterrupt`, terminates the child gracefully (5 s timeout
+  → kill), exits cleanly with the child's code.
+
+Why subprocess instead of `os.execv`: on Windows `os.execv` is actually
+`_spawnv`, which detaches stdout/stderr from the original terminal and
+the supervisor's logs vanish. `subprocess.Popen` inherits parent file
+handles cleanly on both Unix and Windows.
+
+Why `os._exit(42)` not `sys.exit(42)` —
+[`system.py:36-43`](backend/app/api/system.py#L36-L43) — `os._exit`
+bypasses Python's atexit hooks, which can hang on background threads or
+asyncio loops with pending tasks. The supervisor + OS clean up file
+handles and sockets at process death; we don't need polite tear-down.
+
+### 15.14 Diagnostic Counters
+
+`status()` now exposes —
+[`whisper_local.py:870-911`](backend/app/extensions/whisper_local.py#L870-L911):
+
+```json
+{
+  "model_name": "large-v3-turbo",
+  "model_loaded": true,
+  "model_loading": false,
+  "ws_clients": 1,
+  "active_lang": "en",
+  "chunk_seconds": 1.5,
+  "overlap_seconds": 0.3,
+  "beam_size": 5,
+  "silence_rms_db": -55.0,
+  "cached_models": [
+    {"name": "base", "size_bytes": ..., "size_human": "...", "is_active": false},
+    ...
+  ],
+  "frames_received": 12345,
+  "buffer_bytes": 18432,
+  "chunks_dispatched": 42,
+  "chunks_dropped_busy": 3,
+  "chunks_dropped_not_ready": 8,
+  "transcribe_count": 39,
+  "empty_transcribes": 12,
+  "last_transcribe_ms": 458.2,
+  "last_text_preview": "...",
+  "last_frame_age_sec": 0.03
+}
+```
+
+`chunks_dropped_not_ready` is new (chunks discarded while the async
+load was still in flight); typically nonzero only during the first few
+seconds after backend boot.
+
+---
+
+*Last updated: 2026-04-27 (Whisper streaming quality, GPU acceleration, config framework)*
