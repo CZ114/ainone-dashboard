@@ -34,6 +34,12 @@ backend/data/csv/
 backend/data/serial_logs/
 extensions_state.json
 
+# Whisper model weights — downloaded to project-local cache instead
+# of ~/.cache/huggingface/hub. Per-model size: 75 MB (tiny) to 3 GB
+# (large-v3); never committable. See app/extensions/whisper_local.py
+# MODELS_DIR.
+VoiceModel/
+
 # Environment (contains secrets — never commit)
 .env
 .env.local
@@ -54,3 +60,6 @@ desktop.ini
 # Build artifacts
 *.tgz
 *.whl
+
+# Claude Code per-project local config (personal, auto-generated)
+.claude/

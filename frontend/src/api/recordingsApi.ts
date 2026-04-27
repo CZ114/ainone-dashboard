@@ -103,4 +103,52 @@ export const recordingsApi = {
   // Claude's Read tool via a path-style reference in the prompt).
   audioUrl: (filename: string): string =>
     `${BASE}/api/recordings/audio/${encodeURIComponent(filename)}`,
+
+  // Run a saved WAV through the Whisper extension and return the
+  // transcript. Batch mode — request blocks until decoding finishes
+  // (typically 0.5-2 s per minute on GPU; longer on CPU). Frontend
+  // should show a loading state.
+  // 503 errors are surfaced verbatim because they're actionable
+  // ("install the extension", "model still loading").
+  transcribeAudio: async (
+    filename: string,
+  ): Promise<{
+    text?: string;
+    language?: string | null;
+    duration_seconds?: number;
+    transcribe_ms?: number;
+    error?: string;
+  }> => {
+    try {
+      const r = await fetch(
+        `${BASE}/api/recordings/transcribe/${encodeURIComponent(filename)}`,
+        { method: 'POST' },
+      );
+      if (!r.ok) {
+        const body = await r.text();
+        // Try to extract FastAPI's `detail` so the user sees a clean
+        // message (e.g. "Whisper extension is not enabled...") rather
+        // than the JSON wrapper.
+        let detail = body;
+        try {
+          const parsed = JSON.parse(body);
+          if (typeof parsed?.detail === 'string') detail = parsed.detail;
+        } catch {
+          /* leave raw */
+        }
+        return { error: `${r.status}: ${detail.slice(0, 240)}` };
+      }
+      const data = await r.json();
+      return {
+        text: data.text,
+        language: data.language,
+        duration_seconds: data.duration_seconds,
+        transcribe_ms: data.transcribe_ms,
+      };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 };

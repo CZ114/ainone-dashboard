@@ -10,7 +10,7 @@ The manager is a pure in-process object; no threads, no subprocesses
 """
 import asyncio
 import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 
@@ -72,6 +72,15 @@ class ExtensionManager:
                 continue
             try:
                 inst = cls()
+                # Apply persisted config BEFORE on_start. Why this order:
+                # extensions whose on_start loads heavy resources (e.g.
+                # Whisper downloading 1.5 GB of weights) need to know
+                # which model the user picked first, otherwise on_start
+                # loads the default and on_config_change has to throw it
+                # away and reload — wasteful, especially on fresh boots.
+                config = info.get("config", {})
+                if config:
+                    await inst.on_config_change(config)
                 await inst.on_start(app)
                 self._instances[ext_id] = inst
                 print(f"[Extensions] Started: {ext_id}")
@@ -108,6 +117,10 @@ class ExtensionManager:
             "installing": bool(job and not job.done),
             "installed_at": info.get("installed_at"),
             "config": info.get("config", {}),
+            # Class-level schema describing which fields the UI may
+            # render. Empty list = extension declares no configurable
+            # surface, frontend hides the panel entirely.
+            "config_schema": cls.get_config_schema(),
             "last_error": info.get("last_error"),
         }
         inst = self._instances.get(ext_id)
@@ -188,6 +201,11 @@ class ExtensionManager:
             return
         update_extension_state(ext_id, {"enabled": True})
         inst = cls()
+        # Same ordering rationale as init_from_state: config first, so
+        # on_start sees the user's preferred values.
+        config = info.get("config", {})
+        if config:
+            await inst.on_config_change(config)
         if self._app is not None:
             await inst.on_start(self._app)
         self._instances[ext_id] = inst
@@ -207,6 +225,59 @@ class ExtensionManager:
         potentially breaking other things in shared site-packages."""
         await self.disable(ext_id)
         update_extension_state(ext_id, {"installed": False, "enabled": False})
+
+    async def delete_cache_entry(
+        self, ext_id: str, key: str,
+    ) -> Dict[str, Any]:
+        """Forward a cache-delete request to the running instance.
+        Requires the extension to be currently running (not just
+        installed) — caches typically live next to their consumer and
+        deleting them while the consumer is offline isn't useful."""
+        cls = get_extension_class(ext_id)
+        if cls is None:
+            raise ValueError(f"Unknown extension: {ext_id}")
+        inst = self._instances.get(ext_id)
+        if inst is None:
+            raise ValueError(
+                f"Extension '{ext_id}' is not running — enable it first."
+            )
+        return await inst.delete_cache_entry(key)
+
+    async def update_config(
+        self, ext_id: str, patch: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Merge `patch` into the persisted config dict, then notify the
+        running instance via on_config_change so it can apply the
+        change. Persistence happens BEFORE the hook runs — this means a
+        config write survives even if the subsystem reload fails (the
+        next process boot will re-apply from state).
+
+        Allowed before install (config can be pre-set), but on_config_change
+        only fires when an instance is currently running; otherwise the
+        new value is picked up at next on_start.
+
+        Returns the FULL merged config, so callers don't have to re-read."""
+        cls = get_extension_class(ext_id)
+        if cls is None:
+            raise ValueError(f"Unknown extension: {ext_id}")
+
+        info = load_state().get(ext_id, {})
+        merged = dict(info.get("config", {}))
+        merged.update(patch)
+        update_extension_state(ext_id, {"config": merged})
+
+        inst = self._instances.get(ext_id)
+        if inst is not None:
+            try:
+                await inst.on_config_change(merged)
+            except Exception as e:
+                # Persisted state is already updated; surface the apply
+                # failure on the card without rolling back. Operator can
+                # inspect logs and decide whether to revert manually.
+                err_str = f"config apply: {e}"
+                print(f"[Extensions] on_config_change error for {ext_id}: {e}")
+                update_extension_state(ext_id, {"last_error": err_str})
+        return merged
 
 
 # -------- Singleton accessor ----------------------------------------------

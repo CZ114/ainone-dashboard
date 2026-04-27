@@ -171,3 +171,57 @@ async def get_audio_file(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(path, media_type="audio/wav", filename=filename)
+
+
+@router.post("/transcribe/{filename}")
+async def transcribe_audio(filename: str):
+    """Run the saved WAV through the Whisper extension and return the
+    text. Batch mode (NOT streaming) — we feed the entire file in one
+    call. Typical latency: 0.5-2 s per minute of audio on GPU; 2-10x
+    slower on CPU.
+
+    Status codes:
+      400  filename doesn't match our writer's pattern
+      404  file doesn't exist on disk
+      503  Whisper extension isn't enabled / model isn't loaded yet
+      400  WAV format not what we expect (not 16k mono PCM16)
+      500  unexpected failure inside the model
+    """
+    import asyncio as _asyncio
+
+    if not AUDIO_NAME_RE.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = AUDIO_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Lazy import to avoid creating a hard dependency on the extension
+    # for the recordings router. If the user has Whisper uninstalled
+    # the rest of /api/recordings still works fine.
+    from app.extensions.manager import get_manager
+
+    inst = get_manager().get_instance("whisper-local")
+    if inst is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Whisper extension is not enabled. "
+                "Install/enable it from Settings → Extensions."
+            ),
+        )
+
+    try:
+        # transcribe_audio_file is synchronous (blocks on the GPU/CPU
+        # decode). Run in a worker thread so we don't stall the
+        # event loop while a long file decodes.
+        result = await _asyncio.to_thread(inst.transcribe_audio_file, path)
+    except RuntimeError as e:
+        # "model not loaded yet" lives here
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Transcription failed: {e}",
+        )
+    return {"filename": filename, **result}

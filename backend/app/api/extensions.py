@@ -8,12 +8,14 @@ Routes:
     POST /api/extensions/{id}/enable
     POST /api/extensions/{id}/disable
     POST /api/extensions/{id}/uninstall
+    POST /api/extensions/{id}/config               update extension config
+    POST /api/extensions/{id}/cache/delete         delete one cache entry
 """
 import asyncio
 import json
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.extensions.manager import get_manager, InstallJob
@@ -123,3 +125,49 @@ async def disable_extension(ext_id: str):
 async def uninstall_extension(ext_id: str):
     await get_manager().uninstall(ext_id)
     return {"ext_id": ext_id, "installed": False}
+
+
+@router.post("/{ext_id}/config")
+async def update_extension_config(
+    ext_id: str, body: Dict[str, Any] = Body(...),
+):
+    """Merge `body` into the extension's persisted config and notify the
+    running instance. Body is a partial patch — only the keys present
+    are updated; existing config keys not in the patch are preserved.
+
+    Returns the FULL merged config so the frontend can replace its
+    pending state with what the backend now considers authoritative."""
+    try:
+        new_config = await get_manager().update_config(ext_id, body)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"ext_id": ext_id, "config": new_config}
+
+
+@router.post("/{ext_id}/cache/delete")
+async def delete_extension_cache(
+    ext_id: str, body: Dict[str, Any] = Body(...),
+):
+    """Delete one cache entry owned by the extension. Body shape:
+        {"key": "<entry-id-the-extension-understands>"}
+    For whisper-local the key is a model name like 'medium'.
+
+    Status codes:
+      400  bad input (missing key, can't delete active model, etc.)
+      404  unknown extension id
+      501  extension exposes no deletable caches"""
+    key = body.get("key")
+    if not isinstance(key, str) or not key:
+        raise HTTPException(
+            status_code=400, detail="Body must include 'key' (string)",
+        )
+    try:
+        result = await get_manager().delete_cache_entry(ext_id, key)
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except ValueError as e:
+        # Both "unknown id" and "active model" map to 400 here; the
+        # message text disambiguates. 404 would be ambiguous for the
+        # active-model case (the resource exists, just isn't deletable).
+        raise HTTPException(status_code=400, detail=str(e))
+    return result

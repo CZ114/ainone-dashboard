@@ -9,9 +9,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   extensionsApi,
+  type ExtensionCacheEntry,
   type ExtensionStatus,
   type InstallProgressEvent,
 } from '../../api/extensionsApi';
+import { ExtensionConfigPanel } from './ExtensionConfigPanel';
+import { ExtensionCachePanel } from './ExtensionCachePanel';
 
 interface ExtensionCardProps {
   ext: ExtensionStatus;
@@ -283,14 +286,70 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
         </div>
       )}
 
-      {/* Runtime status (if extension is running) */}
+      {/* Configuration panel — only when the extension is live AND
+          declares a non-empty schema. Hides itself entirely otherwise,
+          so cards for non-configurable extensions look like before.
+          We pass `runtime` so the panel can detect configured-vs-running
+          mismatches (e.g. user saved a new model_name but hasn't
+          restarted yet — the panel keeps the "Restart required" badge
+          up until the running model matches the configured one). */}
+      {ext.installed &&
+        ext.enabled &&
+        ext.config_schema &&
+        ext.config_schema.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-card-border/50">
+            <ExtensionConfigPanel
+              extensionId={ext.id}
+              schema={ext.config_schema}
+              currentConfig={ext.config}
+              runtime={ext.runtime}
+              onChanged={onChanged}
+            />
+          </div>
+        )}
+
+      {/* Cache panel — only for extensions that expose
+          runtime.cached_models (currently just whisper-local). The
+          shape narrowing below keeps TS happy AND tolerates future
+          extensions that put unrelated arrays under the same key by
+          checking the entry shape, not just the array's existence. */}
+      {ext.installed && ext.enabled && (() => {
+        const raw = ext.runtime?.cached_models;
+        if (!Array.isArray(raw)) return null;
+        // Shape-check defensively — runtime is typed Record<string,unknown>
+        // and a stale frontend pointed at a different backend version
+        // could see anything here.
+        const entries = raw.filter(
+          (e): e is ExtensionCacheEntry =>
+            !!e &&
+            typeof e === 'object' &&
+            typeof (e as ExtensionCacheEntry).name === 'string' &&
+            typeof (e as ExtensionCacheEntry).size_bytes === 'number',
+        );
+        return (
+          <div className="mt-4 pt-4 border-t border-card-border/50">
+            <ExtensionCachePanel
+              extensionId={ext.id}
+              entries={entries}
+              onChanged={onChanged}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Runtime status — verbose dump for debugging. We hide
+          cached_models from this row since the CachePanel above already
+          renders it as a structured table; printing it twice is just
+          noise. */}
       {ext.runtime && Object.keys(ext.runtime).length > 0 && (
         <div className="mt-3 pt-3 border-t border-card-border/50 text-[11px] text-text-muted font-mono">
-          {Object.entries(ext.runtime).map(([k, v]) => (
-            <span key={k} className="mr-3">
-              {k}: <span className="text-text-secondary">{String(v)}</span>
-            </span>
-          ))}
+          {Object.entries(ext.runtime)
+            .filter(([k]) => k !== 'cached_models')
+            .map(([k, v]) => (
+              <span key={k} className="mr-3">
+                {k}: <span className="text-text-secondary">{String(v)}</span>
+              </span>
+            ))}
         </div>
       )}
     </div>
