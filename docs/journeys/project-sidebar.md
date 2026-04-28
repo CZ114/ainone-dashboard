@@ -1,3 +1,10 @@
+---
+type: journey
+status: archived
+last_updated: 2026-04-24
+tags: [sidebar, ui, theme, picker, claude-cli]
+---
+
 # 项目分组侧栏 Debug 全记录
 
 > 起点只是想修 "点击 New Chat 当前对话消失" 的一个小 bug，中途被拖进 sidebar 重构 / 主题系统 / CLI 路径 / 后端 spawn / native 文件夹选择器五条独立战线，每一条都长着一个非直观的坑。这篇复盘按 **每一步为什么那样走** 记录，不是整理最终方案——每一关卡都说明当时假设、证据、被否证、下一步换的方向。

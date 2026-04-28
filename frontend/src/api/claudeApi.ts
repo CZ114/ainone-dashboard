@@ -25,6 +25,10 @@ export interface ChatRequest {
   // to let the SDK/model apply native defaults.
   effort?: EffortLevelWire;
   thinking?: ThinkingConfigWire;
+  // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+  // Was the diary-Reply injection knob; SDK's claude_code preset
+  // doesn't surface it to the model, so no caller sets it now.
+  additionalSystemPrompt?: string;
 }
 
 // Response from POST /api/system/pick-file — matches backend handler.

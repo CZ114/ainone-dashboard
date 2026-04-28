@@ -1,3 +1,10 @@
+---
+type: plan
+status: active
+last_updated: 2026-04-26
+tags: [architecture, ad-prediction, multi-repo, integration]
+---
+
 # Lab Project — 集成架构分析与计划
 
 **Status**: 进行中 · 由 2026-04-26 一次会话整理而成 · 后续将按章节继续细化

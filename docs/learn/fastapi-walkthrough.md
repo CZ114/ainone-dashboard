@@ -1,3 +1,10 @@
+---
+type: learn
+status: active
+last_updated: 2026-04-21
+tags: [fastapi, learning, backend-architecture]
+---
+
 # ESP32 Sensor Dashboard - 从零理解后端架构
 
 > 目标：理解 Python 后端如何把传感器数据送到网页上

@@ -1,3 +1,10 @@
+---
+type: plan
+status: shipped
+last_updated: 2026-04-24
+tags: [recordings, voice, whisper, requirements, extensions]
+---
+
 # 需求表：录音数据集成 + 语音输入 + 可插拔扩展系统
 
 版本：2026-04-24 · 落地对象：`esp32_sensor_dashboard`

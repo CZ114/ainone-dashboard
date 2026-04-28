@@ -1,3 +1,10 @@
+---
+type: journey
+status: archived
+last_updated: 2026-04-27
+tags: [whisper, cuda, windows, ct2, faster-whisper]
+---
+
 # Whisper-Local Debug Journey
 
 > v1.0.0 + post-v1 修复落地之后，本轮在 `dev` 分支把 Whisper 本地 STT 从"能跑"

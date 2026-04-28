@@ -1,3 +1,10 @@
+---
+type: guide
+status: active
+last_updated: 2026-04-24
+tags: [terminal, xterm, pty, websocket, claude-cli]
+---
+
 # 嵌入式终端完整实现指南
 
 > 从"在浏览器里塞一个真的 Windows PowerShell + Claude CLI"这个需求出发，一步步拆到 PTY、WebSocket、xterm.js 三层的技术细节。目标读者：之前没做过浏览器内终端、想理解每个技术抉择为什么这么选的开发者。

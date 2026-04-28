@@ -32,6 +32,10 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      '/api/diary': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       // WebSocket proxy for the embedded terminal. `ws: true` tells
       // Vite to forward the HTTP Upgrade handshake to the backend
       // instead of handling it itself (otherwise WS requests to

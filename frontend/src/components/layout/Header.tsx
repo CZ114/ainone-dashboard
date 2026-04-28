@@ -2,6 +2,7 @@
 
 import { startTransition } from 'react';
 import { useStore } from '../../store';
+import { useDiaryStore } from '../../store/diaryStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../ThemeToggle';
 
@@ -11,6 +12,7 @@ export function Header() {
   const audio = useStore((state) => state.audio);
   const channelCount = useStore((state) => state.channelCount);
   const isRecording = useStore((state) => state.recording.active);
+  const diaryUnread = useDiaryStore((s) => s.unread);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -66,6 +68,37 @@ export function Header() {
             }`}
           >
             Claude Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => goTo('/diary')}
+            className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              location.pathname === '/diary'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
+            }`}
+          >
+            Diary
+            {diaryUnread > 0 && (
+              <span
+                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-status-disconnected text-white text-[10px] font-bold flex items-center justify-center"
+                aria-label={`${diaryUnread} unread diary entries`}
+              >
+                {diaryUnread > 99 ? '99+' : diaryUnread}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => goTo('/settings')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              location.pathname.startsWith('/settings')
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
+            }`}
+            aria-label="Open settings"
+          >
+            Settings
           </button>
         </nav>
 

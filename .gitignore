@@ -32,6 +32,14 @@ recordings/
 backend/data/audio/
 backend/data/csv/
 backend/data/serial_logs/
+# Diary entries, config, agents.json (contains plaintext API keys —
+# never commit). See DIARY_SPEC.md.
+backend/data/diary/
+# "Project" directory for diary-reply chat sessions. Just acts as a cwd
+# anchor so all diary follow-ups group under one label in the chat
+# sidebar. Empty marker file is fine to keep, otherwise nothing here is
+# committable.
+diary-replies/
 extensions_state.json
 
 # Whisper model weights — downloaded to project-local cache instead

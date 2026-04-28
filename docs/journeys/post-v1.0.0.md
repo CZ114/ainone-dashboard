@@ -1,3 +1,10 @@
+---
+type: journey
+status: archived
+last_updated: 2026-04-26
+tags: [bugs, websocket, recording, ble, v1.0.0, windows]
+---
+
 # Post-v1.0.0 Debug Journey
 
 > v1.0.0 推到 GitHub 之后，用户做实测发现一连串 bug，从连接面板到录制状态机到性能再到一个 number input 的微妙 0。这篇按时间顺序记录每一轮"症状 → 假设 → 证据 → 修复"，dev 分支提交一一对应。

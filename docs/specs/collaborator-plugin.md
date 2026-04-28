@@ -1,3 +1,10 @@
+---
+type: spec
+status: active
+last_updated: 2026-04-26
+tags: [extensions, integration, plugin, collaborator]
+---
+
 # Collaborator Plugin Spec — 让你的仓直接插进 ainone-dashboard
 
 **Audience**: Jewelina95（以及任何要把模块挂进 dashboard 的协作者）

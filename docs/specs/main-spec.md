@@ -1,3 +1,10 @@
+---
+type: spec
+status: active
+last_updated: 2026-04-28
+tags: [main, dashboard, full-stack, hardware-io, recordings, voice, extensions]
+---
+
 # ESP32 Sensor Dashboard — Project Specification
 
 ## 1. Overview

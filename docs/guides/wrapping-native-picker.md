@@ -1,3 +1,10 @@
+---
+type: guide
+status: active
+last_updated: 2026-04-26
+tags: [picker, ask-user-question, claude-sdk, can-use-tool]
+---
+
 # 把原生 Claude Code 选择器搬进 Web Chat — 一步步实现指南
 
 > 你已经有了一个 Web Chat（聊天气泡 + 流式输出 + 工具调用展示），用户想要 IDE 里那种"Claude 问问题，用户从选项里挑一个"的原生体验，但现在每次 `AskUserQuestion` 工具被调用时只能看到一坨 JSON。这篇文章从"为什么 SDK 默认不给你这个 UI"讲起，一路拆到键盘绑定的边角。

@@ -1,3 +1,10 @@
+---
+type: journey
+status: archived
+last_updated: 2026-04-23
+tags: [sessions, claude-sdk, windows, encoding, resume]
+---
+
 # Claude Session 一致性 Debug 全记录
 
 > 一个 "点击老聊天记录继续聊天" 的 bug，牵出 SDK 行为、CLI 打包方式、Windows 非 ASCII 路径编码三层互相独立的问题。过程中多次被假设误导、被实证纠正，最后靠一次"手动测对照组"彻底厘清。这篇复盘不是讲最终方案，而是讲**每一步为什么那样走**——假设、证据、被否证、换方向。

@@ -1,3 +1,10 @@
+---
+type: guide
+status: active
+last_updated: 2026-04-24
+tags: [slash-commands, testing, api, claude-cli]
+---
+
 # Chat UI CLI 指令 & 后端命令测试指南
 
 本文档覆盖两件事：
