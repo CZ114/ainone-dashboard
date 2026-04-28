@@ -88,7 +88,7 @@ export function ExtensionCachePanel({
             <span className="text-xs font-mono text-text-primary flex-1 min-w-0 truncate">
               {entry.name}
               {entry.is_active && (
-                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-status-success/20 text-status-success border border-status-success/30">
                   active
                 </span>
               )}
@@ -104,7 +104,7 @@ export function ExtensionCachePanel({
                   ? 'Switch to another model first, then delete this one'
                   : `Delete cached '${entry.name}' (${entry.size_human})`
               }
-              className="px-2 py-0.5 text-[11px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-2 py-0.5 text-[11px] rounded border border-status-danger/30 text-status-danger hover:bg-status-danger/10 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {pending.has(entry.name) ? '…' : 'Delete'}
             </button>
@@ -113,12 +113,12 @@ export function ExtensionCachePanel({
       </div>
 
       {lastFreed && !error && (
-        <p className="text-[11px] text-green-400">
+        <p className="text-[11px] text-status-success">
           ✓ Freed {lastFreed}
         </p>
       )}
       {error && (
-        <p className="text-[11px] text-red-400">
+        <p className="text-[11px] text-status-danger">
           Delete failed — <code className="break-all">{error}</code>
         </p>
       )}

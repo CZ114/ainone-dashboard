@@ -183,7 +183,7 @@ export function ChannelCard({ channel, index, onToggle, onZoom }: ChannelCardPro
         {!yAutoScale && (
           <button
             onClick={handleResetClick}
-            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors font-mono"
+            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent-soft hover:bg-accent/30 transition-colors font-mono"
             title="Reset Y-axis zoom (or double-click the chart)"
           >
             ↺ auto

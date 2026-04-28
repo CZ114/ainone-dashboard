@@ -26,7 +26,33 @@ export default {
         'text-secondary': 'rgb(var(--color-text-secondary) / <alpha-value>)',
         'text-muted':     'rgb(var(--color-text-muted) / <alpha-value>)',
 
-        // Brand-stable channel colors
+        // Accent — project's primary action color. Brand navy
+        // (#1A2F65 at -soft, lifted #4F6DC9 at default for dark-bg
+        // visibility). Use bg-accent for solid CTAs, bg-accent/20
+        // for soft tints, text-accent for highlighted text,
+        // border-accent for focus rings. -hover for solid button
+        // hover, -soft is the unmodified brand value (good for
+        // active-row backgrounds via /20 alpha).
+        'accent':       'rgb(var(--color-accent) / <alpha-value>)',
+        'accent-hover': 'rgb(var(--color-accent-hover) / <alpha-value>)',
+        'accent-soft':  'rgb(var(--color-accent-soft) / <alpha-value>)',
+        'accent-deep':  'rgb(var(--color-accent-deep) / <alpha-value>)',
+
+        // Warm secondary accent — copper/tan (#B27A4E from brand).
+        // Use sparingly for character moments — recording indicator,
+        // timeline marker, key transitions. Avoid solid CTAs (low
+        // contrast on text); great as bg-accent-warm/15 fills or
+        // text-accent-warm icons.
+        'accent-warm':  'rgb(var(--color-accent-warm) / <alpha-value>)',
+
+        // Status colors — semantic and slightly desaturated so they
+        // read as alerts without fighting the cool body palette.
+        'status-success': 'rgb(var(--color-status-success) / <alpha-value>)',
+        'status-warning': 'rgb(var(--color-status-warning) / <alpha-value>)',
+        'status-danger':  'rgb(var(--color-status-danger) / <alpha-value>)',
+
+        // Brand-stable channel colors — kept constant across light/dark
+        // so chart legends stay recognizable. Not theme-able by design.
         'ch-ppg': '#FF4757',
         'ch-imu': '#3B82F6',
         'ch-env': '#22C55E',
@@ -34,9 +60,11 @@ export default {
         'ch-audio': '#F97316',
         'ch-ble': '#06B6D4',
 
-        'status-connected': '#22C55E',
-        'status-disconnected': '#EF4444',
-        'status-warning': '#F59E0B',
+        // Legacy aliases for the old status names — point at the new
+        // CSS-var-driven tokens so any unmigrated component still
+        // renders correctly (the channel colors above stay hard-coded).
+        'status-connected':    'rgb(var(--color-status-success) / <alpha-value>)',
+        'status-disconnected': 'rgb(var(--color-status-danger)  / <alpha-value>)',
       },
       fontFamily: {
         'sans': ['Inter', 'system-ui', 'sans-serif'],

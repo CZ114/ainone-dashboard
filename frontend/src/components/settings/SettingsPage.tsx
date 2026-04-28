@@ -108,7 +108,7 @@ function TabButton({
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
         active
-          ? 'text-text-primary border-blue-500'
+          ? 'text-text-primary border-accent'
           : 'text-text-muted hover:text-text-primary border-transparent'
       }`}
     >
@@ -150,7 +150,7 @@ function ExtensionsTabBody({
       </div>
 
       {error && (
-        <div className="mb-4 p-3 text-xs bg-red-500/10 border border-red-500/30 rounded text-red-400">
+        <div className="mb-4 p-3 text-xs bg-status-danger/10 border border-status-danger/30 rounded text-status-danger">
           <div className="font-semibold mb-1">Failed to load extensions</div>
           <div className="break-all">{error}</div>
           <div className="mt-2 text-text-muted">

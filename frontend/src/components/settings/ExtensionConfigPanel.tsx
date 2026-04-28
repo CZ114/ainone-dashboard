@@ -222,26 +222,26 @@ export function ExtensionConfigPanel({
           <div className="flex items-center gap-2">
             <span
               title="Saving applies the value to disk, but loading a different model in-process can crash CUDA. Restart the backend to actually swap."
-              className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30"
+              className="text-[10px] px-1.5 py-0.5 rounded bg-status-warning/20 text-status-warning border border-status-warning/30"
             >
               Restart required
             </span>
             <button
               onClick={handleRestart}
               disabled={saving}
-              className="px-2 py-0.5 text-[11px] rounded bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50"
+              className="px-2 py-0.5 text-[11px] rounded bg-status-warning hover:opacity-90 text-white font-medium disabled:opacity-50"
             >
               Restart now
             </button>
           </div>
         )}
         {restartPhase === 'requesting' && (
-          <span className="text-[11px] text-amber-400">
+          <span className="text-[11px] text-status-warning">
             Sending restart signal…
           </span>
         )}
         {restartPhase === 'polling' && (
-          <span className="text-[11px] text-amber-400 animate-pulse">
+          <span className="text-[11px] text-status-warning animate-pulse">
             ⏳ Backend restarting — waiting for it to come back…
           </span>
         )}
@@ -262,7 +262,7 @@ export function ExtensionConfigPanel({
         <button
           onClick={handleApply}
           disabled={dirtyKeys.length === 0 || saving}
-          className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 disabled:bg-card-border disabled:text-text-muted disabled:cursor-not-allowed text-white font-medium"
+          className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent-hover disabled:bg-card-border disabled:text-text-muted disabled:cursor-not-allowed text-white font-medium"
         >
           {saving
             ? 'Applying…'
@@ -278,14 +278,14 @@ export function ExtensionConfigPanel({
           Reset to defaults
         </button>
         {lastApplied && !saving && dirtyKeys.length === 0 && !error && (
-          <span className="text-[11px] text-green-400">
+          <span className="text-[11px] text-status-success">
             ✓ Applied
           </span>
         )}
       </div>
 
       {error && (
-        <p className="text-xs text-red-400">
+        <p className="text-xs text-status-danger">
           Apply failed: <code className="break-all">{error}</code>
         </p>
       )}
@@ -321,7 +321,7 @@ function ConfigField({ field, value, onChange }: ConfigFieldProps) {
         <select
           value={String(value ?? '')}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs rounded bg-black/30 border border-card-border text-text-primary focus:outline-none focus:border-blue-500"
+          className="w-full px-2 py-1.5 text-xs rounded bg-black/30 border border-card-border text-text-primary focus:outline-none focus:border-accent"
         >
           {/* Prefer option_groups for the visual divider; fall back to
               flat options for older backends or simple fields. */}
@@ -351,7 +351,7 @@ function ConfigField({ field, value, onChange }: ConfigFieldProps) {
           step={field.step}
           value={Number(value)}
           onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="w-full accent-blue-500"
+          className="w-full accent-accent"
         />
       )}
 

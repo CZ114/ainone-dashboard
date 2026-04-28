@@ -701,8 +701,8 @@ export function ChatInput({
           />
         )}
         {isDragOver && (
-          <div className="absolute inset-2 pointer-events-none border-2 border-dashed border-blue-500/70 rounded-lg bg-blue-500/10 z-10 flex items-center justify-center">
-            <span className="text-sm text-blue-400 font-medium">
+          <div className="absolute inset-2 pointer-events-none border-2 border-dashed border-accent/70 rounded-lg bg-accent/10 z-10 flex items-center justify-center">
+            <span className="text-sm text-accent-soft font-medium">
               🎙️ Drop recording to attach
             </span>
           </div>
@@ -719,8 +719,8 @@ export function ChatInput({
               placeholder="Type your message to Claude... (`/` for commands, drag a recording to attach)"
               disabled={isLoading}
               rows={1}
-              className={`w-full bg-window-bg border rounded-lg px-4 py-3 text-text-primary placeholder-text-muted resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${
-                isFocused ? 'border-blue-500/50' : 'border-card-border'
+              className={`w-full bg-window-bg border rounded-lg px-4 py-3 text-text-primary placeholder-text-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all ${
+                isFocused ? 'border-accent/50' : 'border-card-border'
               } ${isLoading ? 'opacity-50' : ''}`}
               style={{ minHeight: '48px', maxHeight: '120px' }}
             />
@@ -740,7 +740,7 @@ export function ChatInput({
               <button
                 type="submit"
                 disabled={!hasSendable || isLoading}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-card-border disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="px-6 py-3 bg-accent hover:bg-accent-hover disabled:bg-card-border disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <span className="text-lg">➤</span>
                 Send

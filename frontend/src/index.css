@@ -7,36 +7,106 @@
  * alpha modifiers (bg-card-bg/50 etc.) via the `rgb(var(...) / <alpha>)`
  * syntax declared in tailwind.config.js.
  *
- * Strategy:
- *   - .dark on <html> → dark palette (the project's original look)
- *   - .light on <html> → light palette
- *   - no class on <html> → fall back to dark (safety net if ThemeProvider
- *     hasn't mounted yet)
+ * Palette intent: tech/industrial. Cool greys, deep navy, steel-blue
+ * accent. White & blue on the chrome, with semantic warning/danger
+ * colors kept slightly desaturated so they read as alerts without
+ * fighting the cool body palette.
  *
- * ThemeContext sets the class on initial mount based on stored preference
- * or system `prefers-color-scheme`.
+ * Strategy:
+ *   - .dark on <html> → dark palette
+ *   - .light on <html> → light palette
+ *   - no class on <html> → fall back to dark
+ *
+ * ThemeContext sets the class on initial mount based on stored
+ * preference or system `prefers-color-scheme`.
+ */
+/* ---------------------------------------------------------------------
+ * Brand palette (provided by design — neutral greyscale + olive accents):
+ *
+ *   Greys (surface ladder):
+ *     #D0D2D3  light  (208 210 211) — light surface / text on dark
+ *     #67696B  mid    (103 105 107) — secondary text / muted UI
+ *     #242527  near-black (36 37 39) — card surface in dark mode
+ *
+ *   Olives (accent family):
+ *     #1E1E04  deep   (30 30 4)    — accent-soft, /20 tints
+ *     #8D7513  mid    (141 117 19) — primary accent / CTA buttons
+ *     #919E85  sage   (145 158 133)— accent-warm, secondary highlight
+ *
+ * Intent: archival / industrial / craft. NO blue anywhere in the
+ * chrome — pure neutral greys with warm olive-yellow as the brand
+ * accent. Sage green (#919E85) is the secondary character colour,
+ * used sparingly for recording indicators and key transitions.
+ * ---------------------------------------------------------------------
  */
 :root,
 html.dark {
-  --color-window-bg:    15 20 25;    /* #0F1419 */
-  --color-card-bg:      26 35 50;    /* #1A2332 */
-  --color-card-border:  42 52 65;    /* #2A3441 */
-  --color-card-hover:   36 45 61;    /* #242D3D */
+  /* Surfaces — warm charcoal but with the warmth dialled BACK so
+     it reads as suggestion rather than statement. R-B delta sits
+     around 4 (was 8), keeping a definite handcraft warmth without
+     looking actively brown. Think "white plaster wall lit by tungsten
+     bulb" rather than "tobacco-stained ceiling".  */
+  --color-window-bg:    24 22 20;        /* #181614 — soft warm near-black */
+  --color-card-bg:      33 30 27;        /* #211E1B — workspace surface */
+  --color-card-border:  56 51 46;        /* #38332E — softer umber edge */
+  --color-card-hover:   41 37 33;        /* #292521 — subtle lift */
 
-  --color-text-primary:    248 250 252; /* #F8FAFC */
-  --color-text-secondary:  148 163 184; /* #94A3B8 */
-  --color-text-muted:      100 116 139; /* #64748B */
+  /* Text — warm off-white but desaturated so the palette doesn't
+     feel "dyed". secondary / muted readjusted toward neutral. */
+  --color-text-primary:   232 228 222;   /* #E8E4DE — soft warm white */
+  --color-text-secondary: 154 148 138;   /* #9A948A — gentle tan */
+  --color-text-muted:     110 105  96;   /* #6E6960 — kraft-paper grey */
+
+  /* Accent — burnt sienna / tan, pulled away from coral red toward
+     a softer ceramic-tan. R lowered relative to G/B so the hue
+     reads as "warm clay" rather than "orange paint". -hover deepens
+     into rust brown. -soft is sage (kept) for lighter highlights. */
+  --color-accent:          188 123  92;  /* #BC7B5C — soft sienna */
+  --color-accent-hover:    158 102  72;  /* #9E6648 — rust brown */
+  --color-accent-soft:     145 158 133;  /* #919E85 — sage (kept) */
+
+  /* Deep accent — used for surface tints where we want a darker
+     olive shadow (rare; most tints use bg-accent/20). */
+  --color-accent-deep:      30  30  4;   /* #1E1E04 — deep olive */
+
+  /* Warm secondary accent — alias of -soft for now; reserved for
+     future colour expansion if a third hue is needed. */
+  --color-accent-warm:     145 158 133;  /* #919E85 — sage */
+
+  /* Status — semantic; lightly desaturated. Success leans olive-ward
+     to harmonise with the accent (instead of pure Tailwind green). */
+  --color-status-success:   34 197  94;  /* #22C55E (kept for clarity) */
+  --color-status-warning:  217 168  80;  /* #D9A850 desat amber */
+  --color-status-danger:   225  92  92;  /* #E15C5C desat red */
 }
 
 html.light {
-  --color-window-bg:    248 250 252;  /* #F8FAFC */
-  --color-card-bg:      255 255 255;  /* #FFFFFF */
-  --color-card-border:  226 232 240;  /* #E2E8F0 */
-  --color-card-hover:   241 245 249;  /* #F1F5F9 */
+  /* Cream / parchment surfaces — warmth dialled back from the prior
+     pass so it reads as "white wall in warm light" rather than
+     "yellowed paper". R-B delta around 8 (was 17). */
+  --color-window-bg:    246 243 237;     /* #F6F3ED — soft warm white */
+  --color-card-bg:      252 250 246;     /* #FCFAF6 — page surface */
+  --color-card-border:  222 215 204;     /* #DED7CC — soft beige edge */
+  --color-card-hover:   240 236 228;     /* #F0ECE4 — page hover */
 
-  --color-text-primary:    15 23 42;    /* #0F172A */
-  --color-text-secondary:  71 85 105;   /* #475569 */
-  --color-text-muted:      148 163 184; /* #94A3B8 */
+  /* Text — warm dark browns, desaturated. primary still high
+     contrast; secondary / muted descend in luminance, not in hue. */
+  --color-text-primary:    40  34  28;   /* #28221C — sepia near-black */
+  --color-text-secondary: 102  92  80;   /* #665C50 — soft coffee */
+  --color-text-muted:     152 142 124;   /* #988E7C — soft driftwood */
+
+  /* Light mode — pulled toward muted clay-tan so the button doesn't
+     burn against cream. -hover further darkens into umber. */
+  --color-accent:          165 111  80;  /* #A56F50 — clay tan */
+  --color-accent-hover:    132  87  61;  /* #84573D — umber */
+  --color-accent-soft:     113 122 100;  /* #717A64 — darker sage */
+
+  --color-accent-deep:      30  30   4;  /* #1E1E04 */
+  --color-accent-warm:     113 122 100;  /* same as -soft */
+
+  --color-status-success:   22 163  74;
+  --color-status-warning:  202 138   4;
+  --color-status-danger:   220  38  38;
 }
 
 :root {
@@ -55,4 +125,54 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------------
+ * Custom scrollbars
+ *
+ * Without this, browsers fall back to the OS default — which is a
+ * light-grey track on Windows / a translucent grey on Mac — both of
+ * which read as "white stripe" against our warm-charcoal dark theme.
+ * The project's whole "leather notebook" mood gets broken every time
+ * the message list overflows.
+ *
+ * Strategy: thumb = card-border (warm beige edge in light, burnt
+ * umber in dark), track = window-bg (the page surface). The pair
+ * dissolves into the chrome — visible enough to grab, invisible
+ * enough not to fight the design.
+ *
+ * WebKit (Chrome / Edge / Safari) gets the explicit pseudo-element
+ * styles; Firefox follows the standardised scrollbar-* properties.
+ * Both are themed via the same CSS variables so light / dark swap
+ * automatically.
+ * ---------------------------------------------------------------------
+ */
+
+/* WebKit */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--color-window-bg));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-card-border));
+  border-radius: 5px;
+  /* Inner border keeps a sliver of track visible around the thumb,
+     which makes the thumb feel "set into" the rail rather than
+     painted on top — the same trick native macOS / VSCode use. */
+  border: 2px solid rgb(var(--color-window-bg));
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-text-muted));
+}
+::-webkit-scrollbar-corner {
+  background: rgb(var(--color-window-bg));
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-card-border)) rgb(var(--color-window-bg));
 }

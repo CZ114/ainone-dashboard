@@ -1798,4 +1798,385 @@ seconds after backend boot.
 
 ---
 
-*Last updated: 2026-04-27 (Whisper streaming quality, GPU acceleration, config framework)*
+## 16. Cross-Session Search, Markdown Chat & Theme Overhaul (2026-04-28)
+
+This section documents the v1.1.1 release. It adds a cross-session
+full-text search surface inside the chat sidebar, ships markdown
+rendering for chat message bodies, replaces the old paired drawers
+with a single resizable two-pane layout, embeds an inline audio
+preview on every recording row, fixes the session-summary extractor
+that was silently dropping Claude's substantive replies, centres the
+empty / loading states properly, and runs a top-to-bottom theme
+overhaul (warm-charcoal chrome + clay-tan accent + sage; CSS-var
+ladder; custom scrollbars; xterm palette themed; mass blue→accent
+migration). Channel-trace colors are deliberately kept hard-coded so
+chart legends stay readable across themes.
+
+### 16.1 Shipped Features
+
+| ID  | Feature                                                                          | Lives in                                       |
+| --- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| R1  | `GET /api/sessions/search` — substring search across every `.jsonl` message      | Backend (`sessions.ts`)                        |
+| R2  | Sidebar-embedded search input with debounce + keyboard nav                       | Frontend (`ChatSidebar.tsx`)                   |
+| R3  | `firstAssistantMessage` second line in the session list                          | Backend + Frontend                             |
+| R4  | `extractText` rewrite — concatenates all text blocks, surfaces `[tool: <name>]`  | Backend (`sessions.ts`)                        |
+| R5  | Two-pane resizable layout (`react-resizable-panels` v4) replaces drawer toggles  | Frontend (`ChatPage.tsx`)                      |
+| R6  | Inline `<audio>` preview on every recording row                                  | Frontend (`RecordingsPanel.tsx`)               |
+| R7  | Markdown rendering for chat bodies via `react-markdown` + `remark-gfm`           | Frontend (`MessageMarkdown.tsx`)               |
+| R8  | Empty + loading states centred to a `min-h-[60vh]` wrapper                       | Frontend (`ChatMessages.tsx`, `ChatPage.tsx`)  |
+| R9  | Warm-charcoal + clay-tan + sage theme; CSS-var token ladder                      | Frontend (`index.css`, `tailwind.config.js`)   |
+| R10 | Custom scrollbars matched to the warm palette (WebKit + Firefox)                 | Frontend (`index.css`)                         |
+| R11 | xterm.js terminal palette themed to the warm-charcoal chrome                     | Frontend (`EmbeddedTerminal.tsx`)              |
+| R12 | Connect / Scan / Start* → `bg-accent`; stop / disconnect → `bg-status-danger`    | Frontend (multiple components)                 |
+
+### 16.2 New / Modified Files
+
+**Backend**
+
+| File                                                                                                  | Change                                                                                       |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`backend/claude/handlers/sessions.ts`](backend/claude/handlers/sessions.ts)                          | New `handleSessionSearch`; rewritten `extractText`; `firstAssistantMessage` on summaries     |
+| [`backend/claude/app.ts`](backend/claude/app.ts)                                                      | Registers `GET /api/sessions/search`                                                         |
+
+**Frontend**
+
+| File                                                                                                                         | Change                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`frontend/src/components/chat/MessageMarkdown.tsx`](frontend/src/components/chat/MessageMarkdown.tsx)                       | **New file** — themed markdown renderer for chat bodies                                      |
+| [`frontend/src/components/chat/ChatMessages.tsx`](frontend/src/components/chat/ChatMessages.tsx)                             | Mounts `<MessageMarkdown>`; centres empty state to `min-h-[60vh]`                            |
+| [`frontend/src/components/chat/ChatPage.tsx`](frontend/src/components/chat/ChatPage.tsx)                                     | Two-pane `PanelGroup`; right panel collapsible; loading state centred                        |
+| [`frontend/src/components/chat/ChatSidebar.tsx`](frontend/src/components/chat/ChatSidebar.tsx)                               | Inline search input + `SearchResultsView`; debounce + arrow-key nav                          |
+| [`frontend/src/components/chat/RecordingsPanel.tsx`](frontend/src/components/chat/RecordingsPanel.tsx)                       | Inline `<audio controls preload="none">` per row                                             |
+| [`frontend/src/api/claudeApi.ts`](frontend/src/api/claudeApi.ts)                                                             | `searchSessions()`; `SearchHit` type; `firstAssistantMessage` field on `SessionSummary`      |
+| [`frontend/src/store/chatStore.ts`](frontend/src/store/chatStore.ts)                                                         | `firstAssistantMessage` field on `SessionSummary`                                            |
+| [`frontend/src/components/shell/EmbeddedTerminal.tsx`](frontend/src/components/shell/EmbeddedTerminal.tsx)                   | xterm `DARK_THEME` / `LIGHT_THEME` palettes, sage green / muted ANSI, theme-reactive         |
+| [`frontend/src/index.css`](frontend/src/index.css)                                                                           | Warm-charcoal + light-cream CSS-var ladder; custom scrollbars                                |
+| [`frontend/tailwind.config.js`](frontend/tailwind.config.js)                                                                 | Token names — `accent` / `accent-hover` / `accent-soft` / `accent-warm`; channel colors stay |
+| [`frontend/src/components/layout/ConnectionPanel.tsx`](frontend/src/components/layout/ConnectionPanel.tsx)                   | Connect / Scan / Start → `bg-accent`; disconnect / Stop → `bg-status-danger`                 |
+| [`frontend/src/components/recording/RecordingControls.tsx`](frontend/src/components/recording/RecordingControls.tsx)         | Start Recording → `bg-accent`; Stop Recording → `bg-status-danger`                           |
+| [`frontend/package.json`](frontend/package.json)                                                                             | Added `react-markdown`, `remark-gfm`, `react-resizable-panels` v4                            |
+
+Other touched components (`Toast.tsx`, `ChannelCard.tsx`, `ChannelGrid.tsx`,
+`ChatAudioStatus.tsx`, `ChatInput.tsx`, `ChatInputTools.tsx`,
+`NewProjectDialog.tsx`, `SlashCommandMenu.tsx`, `Header.tsx`,
+`DisplaySettings.tsx`, `ExtensionCachePanel.tsx`, `ExtensionCard.tsx`,
+`ExtensionConfigPanel.tsx`, `SettingsPage.tsx`) are blue→accent migrations.
+
+### 16.3 Cross-Session Full-Text Search
+
+**Backend route** —
+[`sessions.ts:374-475`](backend/claude/handlers/sessions.ts#L374-L475).
+`handleSessionSearch` walks every `.jsonl` under `~/.claude/projects`,
+running a case-insensitive substring scan (`text.toLowerCase().indexOf(lowerQ)`)
+against every `user` / `assistant` message. Each match becomes a hit:
+
+```ts
+{ sessionId, cwd, messageRole, snippet, matchStart, matchEnd, timestamp }
+```
+
+Hits carry a ±150-char snippet with leading / trailing `…` markers when
+truncated, and `matchStart` / `matchEnd` indexed **into the snippet**
+(not the source message) so the frontend can highlight without
+recomputing offsets. Default `limit=50`, hard cap 200; minimum query
+length 2 chars (queries shorter than that short-circuit to an empty
+result set instead of returning everything). Hits are sorted
+newest-first by `timestamp`, and `took_ms` is reported in the
+response. Brute-force is fine up to ~10k messages — see the file
+docstring's note on switching to SQLite FTS5 if/when this gets slow.
+
+Registered in [`app.ts:88`](backend/claude/app.ts#L88).
+
+**Frontend client** —
+[`claudeApi.ts:445-475`](frontend/src/api/claudeApi.ts#L445-L475).
+`searchSessions(q, limit=50)` returns `{ hits, total, took_ms, error }`.
+Errors are folded into the same shape so the caller doesn't need a
+try/catch — the UI just inspects `error`. The shared `SearchHit` type
+lives at [`claudeApi.ts:113-121`](frontend/src/api/claudeApi.ts#L113-L121).
+
+**Sidebar UI** —
+[`ChatSidebar.tsx:184-228`](frontend/src/components/chat/ChatSidebar.tsx#L184-L228)
+holds the state machine; the input lives at
+[`ChatSidebar.tsx:339-394`](frontend/src/components/chat/ChatSidebar.tsx#L339-L394).
+Tunings:
+
+| Constant                  | Value | Why                                                            |
+| ------------------------- | ----- | -------------------------------------------------------------- |
+| `SEARCH_DEBOUNCE_MS`      | 220   | One request per natural typing pause, not per keystroke         |
+| `SEARCH_MIN_QUERY_LEN`    | 2     | "a" / "i" would match almost everything; not useful            |
+| `SEARCH_RESULT_LIMIT`     | 50    | More wouldn't fit on screen anyway and starts feeling sluggish |
+
+The search input is the same component as the project list — they
+share the scroll container so the user's eye stays in one place when
+the active query toggles between modes
+([`ChatSidebar.tsx:401-411`](frontend/src/components/chat/ChatSidebar.tsx#L401-L411)).
+Stale-response protection uses a monotonic `searchSeqRef`
+([`ChatSidebar.tsx:198-228`](frontend/src/components/chat/ChatSidebar.tsx#L198-L228))
+so a slow request that arrives after the user has already typed
+something newer is dropped. Keyboard nav: ↑↓ moves through hits, Enter
+opens the selected session, Escape clears the query.
+
+### 16.4 Session Summary Improvements
+
+**`extractText` rewrite** —
+[`sessions.ts:78-98`](backend/claude/handlers/sessions.ts#L78-L98).
+The old extractor only returned `blocks[0].text`. Claude's typical
+turn is `[text, tool_use, text]` — so the actual answer (the second
+text block, after the tool call) was being silently dropped. The
+session list looked like Claude only ever said one short sentence.
+
+The rewrite:
+
+- Concatenates all `text` blocks with newline separators.
+- Surfaces `tool_use` as `[tool: <name>]` so the reader knows there
+  was a tool step, without dumping JSON params into the summary.
+- Recurses into `tool_result.content` (which is itself a block list).
+
+The same function powers the search snippet extractor
+([`sessions.ts:434`](backend/claude/handlers/sessions.ts#L434)), so
+search now sees Claude's full reply text instead of just the first
+fragment.
+
+**`firstAssistantMessage` on summaries** —
+[`sessions.ts:202-209`](backend/claude/handlers/sessions.ts#L202-L209)
+captures Claude's first **substantive** reply (text-bearing, not
+tool-only) for each session and adds it to the summary alongside
+`firstMessage` and `lastMessage`. Truncated to 140 chars at
+[`sessions.ts:229`](backend/claude/handlers/sessions.ts#L229). The
+sidebar uses this as a 2nd preview line so the user sees both their
+question and Claude's take without having to open the session. The
+substantive-reply guard is what prevents a tool-only first turn from
+locking in `[tool: Read]` as the summary.
+
+Plumbed through:
+[`claudeApi.ts:113-121`](frontend/src/api/claudeApi.ts#L113-L121),
+[`chatStore.ts:157`](frontend/src/store/chatStore.ts#L157).
+
+### 16.5 Two-Pane Resizable Layout
+
+[`ChatPage.tsx:854-980`](frontend/src/components/chat/ChatPage.tsx#L854-L980).
+The old design had two independent drawer toggles ("Recordings"
+button + "History" button), each opening its own slide-out panel.
+v1.1.1 replaces both with a single horizontally-resizable
+`PanelGroup` from `react-resizable-panels` v4:
+
+```
++------------------------+ + +------------------+
+|                        | | |  History (top)   |
+|  Chat / Terminal       | | +------------------+
+|  (left, ≥40%, 70% def) | | |  Recordings      |
+|                        | | |  (bottom)        |
++------------------------+ + +------------------+
+```
+
+Both vertical panes inside the right column are independently
+resizable too
+([`ChatPage.tsx:960-978`](frontend/src/components/chat/ChatPage.tsx#L960-L978)),
+so the user can grow whichever half is busier. The right panel is
+**collapsible** — the `Focus mode` button in the header
+([`ChatPage.tsx:823-843`](frontend/src/components/chat/ChatPage.tsx#L823-L843))
+calls `rightPanelRef.current?.collapse()`, and the collapsed state is
+persisted to `localStorage` under `chat-right-panel-collapsed`. On
+first mount, if the stored value is `1`, the panel is collapsed via a
+`queueMicrotask` so the imperative ref has registered by the time we
+call it
+([`ChatPage.tsx:121-128`](frontend/src/components/chat/ChatPage.tsx#L121-L128)).
+
+API note: this uses v4 names — `Group` / `Panel` / `Separator` (not
+the v3 `PanelGroup` / `PanelResizeHandle`). The aliases at the import
+site keep the JSX readable
+([`ChatPage.tsx:14-19`](frontend/src/components/chat/ChatPage.tsx#L14-L19)).
+
+The drag handle is a 4 px line that turns accent-coloured on hover so
+the user gets affordance feedback before clicking
+([`ChatPage.tsx:945`](frontend/src/components/chat/ChatPage.tsx#L945)).
+The inner cap (`max-w-4xl`) on the messages region was deliberately
+removed because the panel layout already constrains width via the
+user-resizable boundary; an inner cap would just re-introduce the
+empty whitespace
+([`ChatPage.tsx:874-878`](frontend/src/components/chat/ChatPage.tsx#L874-L878)).
+
+### 16.6 Inline Audio Preview
+
+[`RecordingsPanel.tsx:407-419`](frontend/src/components/chat/RecordingsPanel.tsx#L407-L419).
+Every recording row now embeds a native `<audio controls>` element
+streaming from `/api/recordings/audio/<filename>`:
+
+```tsx
+<audio controls preload="none" src={recordingsApi.audioUrl(audioFilename)} ... />
+```
+
+`preload="none"` is critical — without it the browser would `HEAD` /
+prefetch metadata for every WAV in the list as soon as the panel
+mounts. With it, metadata + buffering only kick in when the user
+actually hits play. The user can listen to a recording before
+deciding whether to attach it to chat or run Whisper transcription on
+it, which used to require dragging into chat first or running
+transcription blind.
+
+### 16.7 Markdown Rendering for Chat Messages
+
+[`MessageMarkdown.tsx`](frontend/src/components/chat/MessageMarkdown.tsx).
+Replaces the old `<pre>` plaintext fallback. Claude's responses are
+heavily markdown-formatted (headings, code fences, lists, tables,
+**bold**, links) and were rendering as one long monospace blob.
+
+Stack: `react-markdown` + `remark-gfm`. Choices:
+
+- `react-markdown` is the de-facto standard renderer, explicitly
+  designed against XSS (no `innerHTML`, no raw HTML pass-through
+  unless opted in).
+- `remark-gfm` adds GitHub-Flavored extensions — tables, task lists,
+  strikethrough, autolinks — that Claude uses constantly.
+- **No syntax highlighting** (e.g. `react-syntax-highlighter`). It's
+  200 KB+ and the readability win from monospace + background already
+  covers ~90% of the value
+  ([`MessageMarkdown.tsx:17-20`](frontend/src/components/chat/MessageMarkdown.tsx#L17-L20)).
+- **No `@tailwindcss/typography`**. The host app already has a dark-
+  theme palette (`text-text-primary` etc.) the prose plugin doesn't
+  know about; matching colours via the plugin would mean ejecting its
+  config or fighting `!important` defaults
+  ([`MessageMarkdown.tsx:22-26`](frontend/src/components/chat/MessageMarkdown.tsx#L22-L26)).
+
+A `variant: 'user' | 'assistant'` prop tunes colours so links / code
+/ tables render correctly on user-blue vs assistant-neutral bubbles.
+The `code` component splits inline (`x`) from fenced (` ```x``` `) by
+checking `\n` in `children` plus `language-` in `className` —
+react-markdown v9 dropped the `inline` prop, so a content heuristic
+is required
+([`MessageMarkdown.tsx:113-146`](frontend/src/components/chat/MessageMarkdown.tsx#L113-L146)).
+
+Mounted at
+[`ChatMessages.tsx:89-92`](frontend/src/components/chat/ChatMessages.tsx#L89-L92).
+
+### 16.8 Empty / Loading State Centring
+
+[`ChatMessages.tsx:1003-1019`](frontend/src/components/chat/ChatMessages.tsx#L1003-L1019).
+The empty state now lives inside a `min-h-[60vh] flex flex-col
+items-center justify-center` wrapper. The previous version relied on
+`h-full` cascading down from the parent, but the actual `ChatPage`
+parent is a block-level wrapper without `h-full`, so the centring
+silently broke and the placeholder hugged the top of the panel.
+`min-h-[60vh]` gives the empty state a definite height regardless of
+parent layout.
+
+The history-loading spinner uses the same `min-h-[60vh]` wrapper
+([`ChatPage.tsx:884-887`](frontend/src/components/chat/ChatPage.tsx#L884-L887))
+so loading and empty states feel like the same kind of UI rather
+than a tiny spinner adrift at the top.
+
+### 16.9 Theme Overhaul
+
+**Palette intent.** Warm-charcoal chrome (no blue anywhere except the
+hard-coded brand channel colours); clay-tan / sienna primary accent
+pulled away from coral toward a softer ceramic-tan; sage green as the
+secondary character colour for recording indicators and key
+transitions. Light mode is cream / parchment with the same accent
+family pulled toward muted clay-tan so buttons don't burn against the
+warm white.
+
+**CSS-var token ladder** —
+[`index.css:42-110`](frontend/src/index.css#L42-L110). Each colour is
+declared as an RGB triplet so Tailwind's `rgb(var(...) / <alpha>)`
+syntax keeps alpha modifiers (`bg-card-bg/50` etc.) working against
+var-backed colours. Two palettes: `:root, html.dark` and `html.light`.
+The strategy is documented at
+[`index.css:14-22`](frontend/src/index.css#L14-L22):
+
+- `.dark` on `<html>` → dark palette
+- `.light` on `<html>` → light palette
+- no class on `<html>` → fall back to dark
+
+Token families:
+
+| Family       | Tokens                                                              |
+| ------------ | ------------------------------------------------------------------- |
+| Surfaces     | `window-bg`, `card-bg`, `card-border`, `card-hover`                 |
+| Text         | `text-primary`, `text-secondary`, `text-muted`                      |
+| Accent       | `accent`, `accent-hover`, `accent-soft`, `accent-deep`, `accent-warm` |
+| Status       | `status-success`, `status-warning`, `status-danger`                 |
+| Channels     | `ch-ppg`, `ch-imu`, `ch-env`, `ch-gsr`, `ch-audio`, `ch-ble`        |
+
+**Channel colours stay hard-coded** —
+[`tailwind.config.js:55-62`](frontend/tailwind.config.js#L55-L62).
+PPG = red, IMU = blue, ENV = green, etc. They're semantic brand
+identities for chart legends; theming them would break data-viz
+continuity across light/dark.
+
+**Legacy aliases** —
+[`tailwind.config.js:64-67`](frontend/tailwind.config.js#L64-L67).
+`status-connected` / `status-disconnected` point at the new
+CSS-var-driven tokens so any unmigrated component still renders
+correctly during the transition.
+
+**Custom scrollbars** —
+[`index.css:130-178`](frontend/src/index.css#L130-L178). Without
+this, browsers fall back to the OS default — light-grey track on
+Windows, translucent grey on Mac — both of which read as "white
+stripe" against the warm-charcoal dark theme and broke the design
+mood every time a list overflowed. Strategy: thumb = `card-border`,
+track = `window-bg`. WebKit gets pseudo-element styles; Firefox uses
+the standardised `scrollbar-color` / `scrollbar-width` properties.
+Both are themed via the same CSS variables so light / dark swap
+automatically. The 2 px `border` between thumb and track makes the
+thumb feel "set into" the rail rather than painted on top — same
+trick native macOS / VSCode use.
+
+**Terminal palette themed** —
+[`EmbeddedTerminal.tsx:42-94`](frontend/src/components/shell/EmbeddedTerminal.tsx#L42-L94).
+xterm.js wants concrete hex values (it doesn't read CSS vars), so
+each value is duplicated per resolved theme. Background / foreground
+/ cursor / selection match the chrome (`#181614` window-bg, `#E8E4DE`
+text-primary in dark; `#FCFAF6` card-bg, `#28221C` text-primary in
+light). ANSI colours stay close to VSCode defaults **except**:
+
+- `green` pulled toward sage (`#7E9A6B` dark / `#5A7E48` light) so
+  `ls --color` highlighting and "OK" build output don't spike out of
+  the warm palette every line.
+- `yellow` desaturated to mustard-amber.
+- `blue` pulled to muted slate so `info:` lines fit the chrome.
+- `magenta` / `cyan` softened.
+
+The theme reapplies on `useTheme().resolvedTheme` change at
+[`EmbeddedTerminal.tsx:108-114`](frontend/src/components/shell/EmbeddedTerminal.tsx#L108-L114) —
+xterm.js re-renders on the next write.
+
+**Mass blue→accent migration.** Every `bg-blue-*` / `text-blue-*` /
+`border-blue-*` reference in chrome components was replaced with the
+themed `accent` family. Channel-trace colours (`ch-imu` is still blue
+by brand) and the lone ThemeToggle icon are the only intentional
+blue references remaining.
+
+### 16.10 Unified Button Colour Rules
+
+The connection / scanning / recording buttons follow a single rule
+throughout the app:
+
+| Action                                          | Class                 |
+| ----------------------------------------------- | --------------------- |
+| Primary CTA in idle state (Connect / Scan /     | `bg-accent`           |
+| Start / Start Recording)                        | `hover:opacity-90`    |
+| Destructive / undo (Disconnect / Stop / Stop    | `bg-status-danger`    |
+| Recording)                                      | `hover:opacity-90`    |
+
+Implementations:
+
+- Serial Connect / Disconnect —
+  [`ConnectionPanel.tsx:251-256`](frontend/src/components/layout/ConnectionPanel.tsx#L251-L256).
+- BLE Scan / Disconnect —
+  [`ConnectionPanel.tsx:294-299`](frontend/src/components/layout/ConnectionPanel.tsx#L294-L299).
+- Audio Start / Stop —
+  [`ConnectionPanel.tsx:344-348`](frontend/src/components/layout/ConnectionPanel.tsx#L344-L348).
+- Start Recording —
+  [`RecordingControls.tsx:208`](frontend/src/components/recording/RecordingControls.tsx#L208).
+- Stop Recording —
+  [`RecordingControls.tsx:239`](frontend/src/components/recording/RecordingControls.tsx#L239).
+
+`hover:opacity-90` instead of a hand-tuned hover colour token — the
+single rule covers both light and dark since `accent-hover` is darker
+than `accent` in dark mode but lighter relative to `accent` in light
+mode, while opacity-90 reads as "pressed" in both directions
+uniformly.
+
+---
+
+*Last updated: 2026-04-28 (cross-session search, markdown chat, two-pane layout, theme overhaul)*

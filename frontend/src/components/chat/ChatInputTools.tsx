@@ -103,7 +103,7 @@ const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
     detail:
       'Plan — Claude drafts a plan with read-only tools and stops to ask ' +
       'for approval before executing anything. Best for review-first workflows.',
-    dot: 'bg-blue-400',
+    dot: 'bg-accent-soft',
   },
   acceptEdits: {
     value: 'Edit auto',
@@ -124,7 +124,7 @@ const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
     detail:
       'Auto — a model classifier decides per-tool whether to run it ' +
       'automatically or escalate to you. Good middle ground.',
-    dot: 'bg-purple-400',
+    dot: 'bg-accent-soft',
   },
 };
 
@@ -141,7 +141,7 @@ const THINKING_META: Record<ThinkingModeValue, ModeMeta> = {
     detail:
       'On — forces extended thinking with a 10 000-token budget. Slower but ' +
       'more deliberate on hard problems.',
-    dot: 'bg-purple-400',
+    dot: 'bg-accent-soft',
   },
   disabled: {
     value: 'Off',
@@ -164,12 +164,12 @@ const EFFORT_META: Record<EffortModeValue, ModeMeta> = {
   medium: {
     value: 'Med',
     detail: 'Medium — balanced default for most tasks.',
-    dot: 'bg-blue-400',
+    dot: 'bg-accent-soft',
   },
   high: {
     value: 'High',
     detail: 'High — more passes / deeper reasoning; slower, more expensive.',
-    dot: 'bg-purple-400',
+    dot: 'bg-accent-soft',
   },
   xhigh: {
     value: 'xHigh',

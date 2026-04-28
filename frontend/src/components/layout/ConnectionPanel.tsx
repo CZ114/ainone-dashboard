@@ -250,8 +250,8 @@ export function ConnectionPanel() {
             disabled={serialAction !== null || !selectedPort}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               serial.connected
-                ? 'bg-status-disconnected hover:bg-red-600 text-white'
-                : 'bg-status-connected hover:bg-green-600 text-white'
+                ? 'bg-status-danger hover:opacity-90 text-white'
+                : 'bg-accent hover:opacity-90 text-white'
             } disabled:opacity-50`}
           >
             {labelFor(
@@ -294,8 +294,8 @@ export function ConnectionPanel() {
             disabled={bleAction !== null || !bleDeviceName.trim()}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               ble.connected
-                ? 'bg-status-disconnected hover:bg-red-600 text-white'
-                : 'bg-ch-ble hover:opacity-80 text-white'
+                ? 'bg-status-danger hover:opacity-90 text-white'
+                : 'bg-accent hover:opacity-90 text-white'
             } disabled:opacity-50`}
           >
             {labelFor(
@@ -343,8 +343,8 @@ export function ConnectionPanel() {
             disabled={audioAction !== null || !audioPort.trim()}
             className={`px-4 py-1.5 rounded font-medium text-sm transition-colors ${
               audio.connected
-                ? 'bg-status-disconnected hover:bg-red-600 text-white'
-                : 'bg-ch-audio hover:opacity-80 text-white'
+                ? 'bg-status-danger hover:opacity-90 text-white'
+                : 'bg-accent hover:opacity-90 text-white'
             } disabled:opacity-50`}
           >
             {labelFor(

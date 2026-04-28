@@ -39,53 +39,57 @@ function buildWsUrl(): string {
   return `${protocol}//${window.location.host}/ws/shell`;
 }
 
-// Theme palettes — kept close to our CSS var tokens so the terminal
-// doesn't look grafted on. xterm.js wants concrete hex values, not CSS
-// vars, so we have to pick a palette per resolved theme.
+// Theme palettes — chrome (background / foreground / cursor / selection)
+// matches our CSS var tokens so the terminal blends with the rest of
+// the warm-charcoal chrome. ANSI colors stay close to VSCode defaults
+// EXCEPT green, which we pull toward sage so it doesn't spike out of
+// the warm palette every time `ls --color` highlights a directory or
+// a build prints "OK". xterm.js wants concrete hex values, not CSS
+// vars, so each value is duplicated here per resolved theme.
 const DARK_THEME = {
-  background: '#0F1419',
-  foreground: '#F8FAFC',
-  cursor: '#F8FAFC',
-  cursorAccent: '#0F1419',
-  selectionBackground: '#264F78',
+  background: '#181614',          // matches --color-window-bg (warm charcoal)
+  foreground: '#E8E4DE',          // matches --color-text-primary (soft warm white)
+  cursor: '#E8E4DE',
+  cursorAccent: '#181614',
+  selectionBackground: '#38332E', // warm umber, matches card-border family
   black: '#000000',
-  red: '#CD3131',
-  green: '#0DBC79',
-  yellow: '#E5E510',
-  blue: '#2472C8',
-  magenta: '#BC3FBC',
-  cyan: '#11A8CD',
+  red: '#CD3131',                 // semantic — left vivid for errors
+  green: '#7E9A6B',                // sage olive (muted to fit handcraft palette)
+  yellow: '#C9B05A',                // mustard-amber (was #E5E510 neon)
+  blue: '#5C7FA8',                 // muted slate blue (was electric #2472C8)
+  magenta: '#A86BA8',               // dusty mauve (was #BC3FBC)
+  cyan: '#5A95A2',                  // muted teal (was electric #11A8CD)
   white: '#E5E5E5',
   brightBlack: '#666666',
   brightRed: '#F14C4C',
-  brightGreen: '#23D18B',
-  brightYellow: '#F5F543',
-  brightBlue: '#3B8EEA',
-  brightMagenta: '#D670D6',
-  brightCyan: '#29B8DB',
+  brightGreen: '#9DBC85',          // lighter sage
+  brightYellow: '#D9C275',          // lifted mustard
+  brightBlue: '#7A95B8',            // soft slate blue
+  brightMagenta: '#C089C0',         // soft mauve
+  brightCyan: '#7AAEB8',            // soft teal
   brightWhite: '#F8FAFC',
 } as const;
 const LIGHT_THEME = {
-  background: '#FFFFFF',
-  foreground: '#0F172A',
-  cursor: '#0F172A',
-  cursorAccent: '#FFFFFF',
-  selectionBackground: '#ADD6FF',
+  background: '#FCFAF6',          // matches card-bg (cream)
+  foreground: '#28221C',          // matches text-primary (sepia near-black)
+  cursor: '#28221C',
+  cursorAccent: '#FCFAF6',
+  selectionBackground: '#E0D4BA', // warm beige, fits parchment palette
   black: '#000000',
   red: '#CD3131',
-  green: '#00BC00',
-  yellow: '#949800',
-  blue: '#0451A5',
-  magenta: '#BC05BC',
-  cyan: '#0598BC',
+  green: '#5A7E48',                // darker sage for light bg
+  yellow: '#94780E',                // ochre (was lemon #949800)
+  blue: '#3D5A7A',                  // slate blue (was electric #0451A5)
+  magenta: '#8E2A8E',               // deeper mauve
+  cyan: '#3D6E7A',                  // muted teal
   white: '#555555',
   brightBlack: '#666666',
   brightRed: '#CD3131',
-  brightGreen: '#14CE14',
-  brightYellow: '#B5BA00',
-  brightBlue: '#0451A5',
-  brightMagenta: '#BC05BC',
-  brightCyan: '#0598BC',
+  brightGreen: '#6B8E5A',          // medium sage
+  brightYellow: '#9E8418',
+  brightBlue: '#5A7A9E',            // soft slate
+  brightMagenta: '#8E2A8E',
+  brightCyan: '#5A8E9E',
   brightWhite: '#A5A5A5',
 } as const;
 
@@ -285,12 +289,12 @@ export function EmbeddedTerminal({ cwd, onExit }: EmbeddedTerminalProps) {
         <span
           className={`w-2 h-2 rounded-full ${
             status === 'ready'
-              ? 'bg-green-400'
+              ? 'bg-accent-soft'              // sage (themed)
               : status === 'connecting'
-              ? 'bg-amber-400 animate-pulse'
+              ? 'bg-status-warning animate-pulse'
               : status === 'error'
-              ? 'bg-red-400'
-              : 'bg-gray-500'
+              ? 'bg-status-danger'
+              : 'bg-text-muted'
           }`}
         />
         <span className="text-text-secondary font-mono">

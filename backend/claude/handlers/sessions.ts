@@ -10,6 +10,12 @@ interface SessionSummary {
   cwd: string;
   firstMessage: string;
   lastMessage: string;
+  // Claude's first substantive reply in the conversation. Used as a
+  // second line in the sidebar so the user can see "topic + Claude's
+  // take" at a glance rather than just their own opening line. Empty
+  // string when the conversation only has user turns (rare, but
+  // defensive: don't render undefined into the DOM).
+  firstAssistantMessage: string;
   messageCount: number;
   updatedAt: string;
   isGrouped?: boolean;
@@ -44,20 +50,51 @@ function getClaudeProjectsDir(): string {
 }
 
 /**
- * Extract text content from a message
+ * Extract human-readable text from a Claude message's content field.
+ *
+ * Claude content is a discriminated union:
+ *   - string: plain user-typed text
+ *   - array of blocks: each block is {type: "text"|"tool_use"|"tool_result", ...}
+ *
+ * Naively returning the first block-with-a-text-field loses everything
+ * after a tool call. A typical Claude turn looks like:
+ *
+ *   [
+ *     {type: "text", text: "Let me check the file…"},
+ *     {type: "tool_use", name: "Read", input: {...}},
+ *     {type: "text", text: "Found it. Here's the answer: …"}
+ *   ]
+ *
+ * If we only return blocks[0].text, the actual answer is dropped and
+ * the chat history looks like Claude only said one short sentence.
+ *
+ * This implementation:
+ *   - Concatenates ALL `text` blocks (joined with newlines)
+ *   - Surfaces tool_use as a `[tool: <name>]` marker so the reader
+ *     knows there was a tool step (without dumping JSON params)
+ *   - Recurses into tool_result.content (which is itself a list of
+ *     blocks for the tool's output)
  */
 function extractText(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
-  if (Array.isArray(content)) {
-    for (const item of content) {
-      if (typeof item === "object" && item !== null && "text" in item) {
-        return String((item as { text: unknown }).text);
-      }
+  if (!Array.isArray(content)) return "";
+
+  const parts: string[] = [];
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.text === "string") {
+      parts.push(obj.text);
+    } else if (obj.type === "tool_use" && typeof obj.name === "string") {
+      parts.push(`[tool: ${obj.name}]`);
+    } else if (obj.type === "tool_result") {
+      const inner = extractText(obj.content);
+      if (inner) parts.push(inner);
     }
   }
-  return "";
+  return parts.join("\n").trim();
 }
 
 /**
@@ -106,6 +143,7 @@ async function parseSessionFile(
   firstUserMsgId: string | null;
   firstMessage: string;
   lastMessage: string;
+  firstAssistantMessage: string;
   messageCount: number;
   updatedAt: string;
   entries: RawHistoryLine[];
@@ -123,6 +161,7 @@ async function parseSessionFile(
     let firstUserMsgId: string | null = null;
     let firstMessage = "";
     let lastMessage = "";
+    let firstAssistantMessage = "";
     let lastTime = "";
     let messageCount = 0;
 
@@ -155,6 +194,19 @@ async function parseSessionFile(
           lastTime = parsed.timestamp || lastTime;
           messageCount++;
         }
+        // Track Claude's first SUBSTANTIVE reply — used as a 2nd line
+        // in the sidebar so the user sees both their question and
+        // Claude's take without opening the session. We require the
+        // extracted text to be non-empty so a tool-only first turn
+        // doesn't lock in `[tool: Read]` as the summary.
+        if (
+          !firstAssistantMessage &&
+          parsed.type === "assistant" &&
+          parsed.message?.content
+        ) {
+          const text = extractText(parsed.message.content);
+          if (text) firstAssistantMessage = text;
+        }
       } catch {
         // Skip malformed lines
       }
@@ -174,6 +226,7 @@ async function parseSessionFile(
       firstUserMsgId,
       firstMessage: firstMessage.substring(0, 100),
       lastMessage: lastMessage.substring(0, 100),
+      firstAssistantMessage: firstAssistantMessage.substring(0, 140),
       messageCount,
       updatedAt: lastTime,
       entries,
@@ -195,6 +248,7 @@ function groupSessions(
     firstUserMsgId: string | null;
     firstMessage: string;
     lastMessage: string;
+    firstAssistantMessage: string;
     messageCount: number;
     updatedAt: string;
   }>,
@@ -247,6 +301,7 @@ function groupSessions(
       cwd: latest.cwd,
       firstMessage: latest.firstMessage,
       lastMessage: latest.lastMessage,
+      firstAssistantMessage: latest.firstAssistantMessage,
       messageCount: totalMessageCount,
       updatedAt: latest.updatedAt,
       ...(isGrouped
@@ -279,6 +334,7 @@ export async function handleSessionList(c: Context) {
       firstUserMsgId: string | null;
       firstMessage: string;
       lastMessage: string;
+      firstAssistantMessage: string;
       messageCount: number;
       updatedAt: string;
     }> = [];
@@ -296,6 +352,7 @@ export async function handleSessionList(c: Context) {
             firstUserMsgId: parsed.firstUserMsgId,
             firstMessage: parsed.firstMessage,
             lastMessage: parsed.lastMessage,
+            firstAssistantMessage: parsed.firstAssistantMessage,
             messageCount: parsed.messageCount,
             updatedAt: parsed.updatedAt,
           });
@@ -312,6 +369,109 @@ export async function handleSessionList(c: Context) {
     console.error(`[sessions] Error:`, error);
     return c.json({ sessions: [] });
   }
+}
+
+/**
+ * GET /api/sessions/search?q=<query>&limit=<number>
+ *
+ * Brute-force substring search across every message in every .jsonl
+ * under ~/.claude/projects. Adequate up to ~10k messages; switch to
+ * SQLite FTS5 when this gets slow.
+ *
+ * Response shape mirrors what the frontend's claudeApi.searchSessions
+ * + ChatHistorySearchPanel expect — don't reshape without updating
+ * those.
+ */
+
+export async function handleSessionSearch(c: Context) {
+  const q = (c.req.query("q") || "").trim();
+  const limitRaw = Number(c.req.query("limit"));
+  const limit = Math.min(
+    Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw :50,
+    200,
+  );
+
+  if (q.length < 2) {
+    return c.json({ hits: [], total: 0, took_ms: 0 });
+  }
+
+  const t0 = Date.now();
+  const lowerQ = q.toLowerCase();
+  const SNIPPET_PAD = 150;
+  type Hit = {
+    sessionId: string;
+    cwd: string;
+    messageRole: "user" | "assistant";
+    snippet: string;
+    matchStart: number;
+    matchEnd: number;
+    timestamp: string;
+  };
+  const hits: Hit[] = [];
+
+  outer: for (const projectDir of await listProjectDirs()) {
+    const jsonlFiles = await listJsonlFiles(projectDir);
+    for (const filePath of jsonlFiles) {
+      const fileName = filePath.split(/[/\\]/).pop() || "";
+      const sessionId = fileName.replace(".jsonl", "");
+      let content: string;
+      try {
+        content = await readTextFile(filePath);
+      } catch {
+        continue;
+      }
+      let cwd = "";
+      for (const line of content.split("\n")) {
+        if (!line.trim()) continue;
+        let parsed: RawHistoryLine;
+        try {
+          parsed = JSON.parse(line) as RawHistoryLine;
+        } catch {
+          continue;
+        }
+        if (!cwd && parsed.cwd) cwd = parsed.cwd;
+        if (parsed.type !== "user" && parsed.type !== "assistant") continue;
+        const text = extractText(parsed.message?.content);
+        if (!text) continue;
+        const idx = text.toLowerCase().indexOf(lowerQ);
+        if (idx === -1) continue;
+
+        const sliceStart = Math.max(0, idx - SNIPPET_PAD);
+        const sliceEnd = Math.min(text.length, idx + q.length + SNIPPET_PAD);
+        const truncL = sliceStart > 0;
+        const truncR = sliceEnd < text.length;
+        const snippet =
+          (truncL ? "…" : "") +
+          text.slice(sliceStart, sliceEnd) +
+          (truncR ? "…" : "");
+        const matchStart = idx - sliceStart + (truncL ? 1 : 0);
+        const matchEnd = matchStart + q.length;
+
+        hits.push({
+          sessionId,
+          cwd,
+          messageRole: parsed.type as "user" | "assistant",
+          snippet,
+          matchStart,
+          matchEnd,
+          timestamp: parsed.timestamp,
+        });
+        if (hits.length >= limit) break outer;
+      }
+    }
+  }
+
+  hits.sort(
+    (a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+
+  return c.json({
+    hits,
+    total: hits.length,
+    took_ms: Date.now() - t0,
+  });
+  
 }
 
 /**
