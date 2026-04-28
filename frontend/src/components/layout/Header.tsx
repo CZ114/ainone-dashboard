@@ -50,7 +50,7 @@ export function Header() {
             onClick={() => goTo('/dashboard')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               location.pathname === '/dashboard'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-accent text-white'
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
           >
@@ -61,7 +61,7 @@ export function Header() {
             onClick={() => goTo('/chat')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               location.pathname === '/chat'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-accent text-white'
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
           >

@@ -14,6 +14,7 @@ import type {
 } from '../../store/chatStore';
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
+import { MessageMarkdown } from './MessageMarkdown';
 
 interface ChatMessagesProps {
   messages: AllMessage[];
@@ -73,17 +74,23 @@ function ChatMessageComponent({ message }: { message: ChatMessage }) {
       <div
         className={`max-w-[80%] rounded-lg px-4 py-3 ${
           isUser
-            ? 'bg-blue-600 text-white'
+            ? 'bg-accent text-white'
             : 'bg-card-bg border border-card-border'
         }`}
       >
-        <div className={`text-xs font-semibold mb-1 ${isUser ? 'text-blue-200' : 'text-text-muted'}`}>
+        <div className={`text-xs font-semibold mb-1 ${isUser ? 'text-white' : 'text-text-muted'}`}>
           {isUser ? 'You' : 'Claude'}
         </div>
-        <pre className="text-sm whitespace-pre-wrap break-words font-sans">
-          {message.content}
-        </pre>
-        <div className={`text-xs mt-1 ${isUser ? 'text-blue-200' : 'text-text-muted'}`}>
+        {/* Markdown body — renders headings / lists / tables / code
+            fences / **bold** / links the way Claude actually writes
+            them. Replaces the old plaintext <pre> that ate every
+            structural cue. variant tunes colours for the user's blue
+            bubble vs the assistant's neutral one. */}
+        <MessageMarkdown
+          content={message.content}
+          variant={isUser ? 'user' : 'assistant'}
+        />
+        <div className={`text-xs mt-1 ${isUser ? 'text-white' : 'text-text-muted'}`}>
           {formatTimestamp(message.timestamp)}
         </div>
       </div>
@@ -539,7 +546,7 @@ function AskUserQuestionPicker({
       ref={rootRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="px-4 py-3 space-y-3 outline-none focus:ring-1 focus:ring-blue-500/40 dark:focus:ring-blue-400/40"
+      className="px-4 py-3 space-y-3 outline-none focus:ring-1 focus:ring-accent/40 dark:focus:ring-accent-soft/40"
     >
       {questions.map((q, qi) => {
         const isActive = qi === activeQ;
@@ -552,7 +559,7 @@ function AskUserQuestionPicker({
             className={[
               'pl-2 border-l-2',
               isActive
-                ? 'border-blue-500 dark:border-blue-400'
+                ? 'border-accent dark:border-accent-soft'
                 : 'border-transparent',
             ].join(' ')}
           >
@@ -622,7 +629,7 @@ function AskUserQuestionPicker({
           rows={2}
           disabled={disabled}
           placeholder="Or type a custom reply… (overrides picks; Enter to submit)"
-          className="w-full text-xs font-mono bg-window-bg border border-card-border rounded p-2 text-text-primary focus:outline-none focus:border-blue-500"
+          className="w-full text-xs font-mono bg-window-bg border border-card-border rounded p-2 text-text-primary focus:outline-none focus:border-accent"
         />
       </div>
 
@@ -631,7 +638,7 @@ function AskUserQuestionPicker({
           type="button"
           disabled={disabled || (!allAnswered && !hasCustom)}
           onClick={submit}
-          className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft"
         >
           {hasCustom ? 'Send reply' : 'Submit'}
         </button>
@@ -741,7 +748,7 @@ function PermissionRequestComponent({
   // ask-user-question), not the dominant fill. Keeps these bubbles
   // visually consistent with the rest of the chat (which uses card-bg).
   const accentRule = isAsk
-    ? 'border-l-2 border-l-blue-500 dark:border-l-blue-400'
+    ? 'border-l-2 border-l-accent dark:border-l-accent-soft'
     : 'border-l-2 border-l-amber-500 dark:border-l-amber-400';
   const cardCls = `bg-card-bg border border-card-border ${accentRule}`;
   const headerBorder = 'border-card-border';
@@ -862,7 +869,7 @@ function PermissionRequestComponent({
               value={denyReason}
               onChange={(e) => setDenyReason(e.target.value)}
               rows={3}
-              className="w-full text-xs font-mono bg-window-bg border border-card-border rounded p-2 text-text-primary focus:outline-none focus:border-blue-500"
+              className="w-full text-xs font-mono bg-window-bg border border-card-border rounded p-2 text-text-primary focus:outline-none focus:border-accent"
               placeholder="e.g. Don't run rm here — clean up via git instead."
               autoFocus
             />
@@ -948,7 +955,7 @@ function TodoMessageComponent({ message }: { message: TodoMessage }) {
   const getStatusColor = (status: TodoItem['status']) => {
     switch (status) {
       case 'completed': return 'text-green-400';
-      case 'in_progress': return 'text-blue-400';
+      case 'in_progress': return 'text-accent-soft';
       case 'pending': return 'text-gray-400';
     }
   };
@@ -995,7 +1002,11 @@ export function LoadingIndicator() {
 export function ChatMessages({ messages }: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center">
+      // Self-contained vertical centering — min-h-[60vh] gives the
+      // empty state a definite height regardless of parent layout
+      // (the actual ChatPage parent is a block-level wrapper without
+      // h-full, so we can't rely on h-full cascading down).
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
         <div className="text-6xl mb-4">💬</div>
         <h2 className="text-xl font-semibold text-text-primary mb-2">
           Start a conversation

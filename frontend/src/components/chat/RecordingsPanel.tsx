@@ -14,10 +14,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { recordingsApi, type RecordingSession } from '../../api/recordingsApi';
 import { RECORDING_DRAG_MIME, formatSize } from '../../lib/attachments';
 
-interface RecordingsPanelProps {
-  open: boolean;
-  onClose: () => void;
-}
+// Embedded mode: the parent (ChatPage) owns visibility/collapse via
+// a resizable Panel. We just render fluid content that fills its
+// container; refresh fires on first mount and on demand.
+type RecordingsPanelProps = Record<string, never>;
 
 function formatTimestamp(iso: string | null, fallback: string): string {
   if (!iso) return fallback;
@@ -97,7 +97,7 @@ interface TranscriptEntry {
   error?: string;
 }
 
-export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
+export function RecordingsPanel(_: RecordingsPanelProps) {
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,10 +157,10 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
   }, []);
 
   useEffect(() => {
-    // Refresh every time the drawer opens — cheap, keeps list current
-    // without needing a WS event for new recordings.
-    if (open) void refresh();
-  }, [open, refresh]);
+    // Refresh on mount — cheap; the user can also hit ↻ to refresh
+    // manually after starting a new recording.
+    void refresh();
+  }, [refresh]);
 
   const handleDragStart = (
     e: React.DragEvent<HTMLElement>,
@@ -186,27 +186,17 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
   };
 
   return (
-    <>
-      {/* No backdrop on purpose — the chat must remain interactive
-          while the user drags a session card across the page. The
-          previous black/40 overlay greyed out the chat and stole all
-          pointer events, breaking drag-to-attach. The X button in
-          the panel header is the only dismissal affordance. */}
-
-      {/* Drawer — slides in from right */}
-      <aside
-        className={`fixed right-0 top-0 bottom-0 w-80 bg-card-bg border-l border-card-border shadow-2xl z-50 flex flex-col transition-transform duration-200 ${
-          open ? 'translate-x-0' : 'translate-x-full pointer-events-none'
-        }`}
-        aria-hidden={!open}
-      >
+    // Embedded — fills its parent container (typically a resizable
+    // Panel inside ChatPage). No fixed positioning, no slide animation,
+    // no backdrop. Outer parent handles collapse/visibility.
+    <div className="h-full flex flex-col bg-card-bg">
         {/* Header */}
-        <div className="shrink-0 px-4 py-3 border-b border-card-border flex items-center justify-between">
+        <div className="shrink-0 px-3 py-2 border-b border-card-border flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
               🎙️ Recordings
             </h2>
-            <p className="text-xs text-text-muted">
+            <p className="text-[11px] text-text-muted">
               Drag CSV, audio, or both into chat to attach
             </p>
           </div>
@@ -218,14 +208,6 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
               title="Refresh list"
             >
               {loading ? '⏳' : '↻'}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-2 py-1 text-xs rounded text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors"
-              title="Close"
-              aria-label="Close recordings panel"
-            >
-              ✕
             </button>
           </div>
         </div>
@@ -247,9 +229,9 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
               click-to-transcribe action. Sits above the list, not
               inside any individual card, so it doesn't repeat. */}
           {!error && sessions.some((s) => !!s.audio) && (
-            <div className="mx-1 my-2 p-2 rounded bg-blue-500/10 border border-blue-500/30 text-[11px] text-blue-300 leading-relaxed">
+            <div className="mx-1 my-2 p-2 rounded bg-accent/10 border border-accent/30 text-[11px] text-accent-soft leading-relaxed">
               ✨ <span className="font-semibold">New:</span> click{' '}
-              <span className="font-mono px-1 py-0.5 bg-blue-500/20 rounded">
+              <span className="font-mono px-1 py-0.5 bg-accent/20 rounded">
                 Transcribe
               </span>{' '}
               on any audio row to convert it to text via Whisper. Runs
@@ -271,7 +253,7 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
               return (
                 <div
                   key={s.id}
-                  className="mx-1 my-1 p-3 rounded-md bg-window-bg border border-card-border hover:border-blue-500/50 transition-colors"
+                  className="mx-1 my-1 p-3 rounded-md bg-window-bg border border-card-border hover:border-accent/50 transition-colors"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg shrink-0">
@@ -292,7 +274,7 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
                       <div
                         draggable
                         onDragStart={(e) => handleDragStart(e, s, 'csv')}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-accent/60 cursor-grab active:cursor-grabbing transition-colors"
                         title="Drag CSV into chat"
                       >
                         <span className="text-[11px] text-text-secondary truncate">
@@ -321,10 +303,10 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
                       <div
                         draggable
                         onDragStart={(e) => handleDragStart(e, s, 'both')}
-                        className="flex items-center justify-center gap-2 px-2 py-1.5 rounded bg-blue-500/10 border border-blue-500/40 hover:bg-blue-500/20 cursor-grab active:cursor-grabbing transition-colors"
+                        className="flex items-center justify-center gap-2 px-2 py-1.5 rounded bg-accent/10 border border-accent/40 hover:bg-accent/20 cursor-grab active:cursor-grabbing transition-colors"
                         title="Drag both files into chat as a single attachment"
                       >
-                        <span className="text-[11px] text-blue-300">
+                        <span className="text-[11px] text-accent-soft">
                           📊 + 🔊 drag both
                         </span>
                       </div>
@@ -339,8 +321,7 @@ export function RecordingsPanel({ open, onClose }: RecordingsPanelProps) {
         <div className="shrink-0 px-3 py-2 border-t border-card-border text-[11px] text-text-muted">
           Session ID = <code>YYYYMMDD_HHMMSS</code>
         </div>
-      </aside>
-    </>
+    </div>
   );
 }
 
@@ -383,7 +364,7 @@ function AudioRow({
       <div
         draggable
         onDragStart={onDragStart}
-        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-blue-500/60 cursor-grab active:cursor-grabbing transition-colors"
+        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-accent/60 cursor-grab active:cursor-grabbing transition-colors"
         title="Drag audio into chat"
       >
         <span className="text-[11px] text-text-secondary truncate flex-1 min-w-0">
@@ -406,7 +387,7 @@ function AudioRow({
             e.preventDefault();
             e.stopPropagation();
           }}
-          className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-blue-500/40 text-blue-300 hover:bg-blue-500/10 disabled:opacity-50 disabled:cursor-wait"
+          className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-accent/40 text-accent-soft hover:bg-accent/10 disabled:opacity-50 disabled:cursor-wait"
           title={
             status === 'loading'
               ? 'Whisper is decoding…'
@@ -422,6 +403,20 @@ function AudioRow({
               : 'Transcribe'}
         </button>
       </div>
+
+      {/* Inline audio preview — native <audio> element streams the
+          file from /api/recordings/audio/<filename>. preload="none"
+          so the browser doesn't fetch every WAV in the list eagerly;
+          metadata + buffering only kick in when the user hits play.
+          Embedded right inside the drag row, so the user can listen
+          before deciding whether to attach or transcribe. */}
+      <audio
+        controls
+        preload="none"
+        src={recordingsApi.audioUrl(audioFilename)}
+        className="w-full h-7"
+        title={`Preview ${audioFilename}`}
+      />
 
       {/* Animated transcript panel. Closed = grid-template-rows:0fr,
           open = 1fr. The inner div has overflow:hidden so collapsed

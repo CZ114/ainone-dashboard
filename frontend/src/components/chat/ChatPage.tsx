@@ -8,6 +8,15 @@ import { useStreamParser } from '../../hooks/useStreamParser';
 import { ChatMessages, LoadingIndicator } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 import { ChatSidebar, canonicalCwd } from './ChatSidebar';
+// v4 API names: Group / Panel / Separator (not the v3 PanelGroup /
+// PanelResizeHandle). Imperative handle for collapse/expand is the
+// nested Panel.PanelImperativeHandle type.
+import {
+  Group as PanelGroup,
+  Panel,
+  Separator as PanelResizeHandle,
+  usePanelRef,
+} from 'react-resizable-panels';
 import { NewProjectDialog } from './NewProjectDialog';
 import { RecordingsPanel } from './RecordingsPanel';
 import { EmbeddedTerminal } from '../shell/EmbeddedTerminal';
@@ -92,15 +101,31 @@ function ChatPage() {
     setToast({ id: Date.now(), text, kind });
   }, []);
 
-  // Sidebar drawer — opt-in, off by default. The old pinned-right
-  // layout ate 18rem of every screen width just to show history the
-  // user rarely references mid-chat.
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Recordings drawer (right side) — lists ESP32 recording sessions
-  // the user can drag into ChatInput as attachments. Opt-in for the
-  // same screen-real-estate reason as the sidebar.
-  const [recordingsOpen, setRecordingsOpen] = useState(false);
+  // Right panel collapse state. Replaces the old `sidebarOpen` /
+  // `recordingsOpen` drawer toggles — chat history + recordings now
+  // live together inside one resizable Panel on the right. Collapsing
+  // it gives the chat the full width ("focus mode"). Persisted to
+  // localStorage so the choice survives reloads.
+  const rightPanelRef = usePanelRef();
+  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('chat-right-panel-collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  // On first mount, if the user previously chose focus mode, collapse
+  // the right panel so it matches the persisted preference. Imperative
+  // refs aren't ready synchronously during initial render, so we run
+  // this after layout. Empty dep array — only fires once.
+  useEffect(() => {
+    if (rightCollapsed) {
+      // Microtask delay so the Panel has registered its imperative
+      // handle by the time we call it.
+      queueMicrotask(() => rightPanelRef.current?.collapse());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Whisper-local extension state — drives the ESP32 mic button
   // visibility. Polled every 5s because enabling/uninstalling happens
@@ -200,9 +225,6 @@ function ChatPage() {
     setSessionId(newSessionId);
     setDisplaySessionId(newSessionId);
     setIsLoadingHistory(true);
-    // Close drawer on select — long history scroll works best with
-    // the sidebar out of the way.
-    setSidebarOpen(false);
 
     try {
       // Fetch messages for this session
@@ -248,9 +270,6 @@ function ChatPage() {
       setDisplaySessionId(null);
       setTemporarySessionId(null);
       clearMessages();
-      // Close the drawer so the user can see the empty chat + input
-      // they're meant to type into.
-      setSidebarOpen(false);
 
       // Visible confirmation: especially important when the previous
       // state was already an empty chat — without the toast, clicking +
@@ -341,7 +360,6 @@ function ChatPage() {
     (cwd: string) => {
       setTerminalCwd(cwd);
       setViewMode('terminal');
-      setSidebarOpen(false);
     },
     [],
   );
@@ -648,7 +666,13 @@ function ChatPage() {
         setTemporarySessionId,
         clearPendingAttachments,
         pushToast,
-        openSidebar: () => setSidebarOpen(true),
+        openSidebar: () => {
+          // History/recordings now live in the embedded right panel.
+          // If the user collapsed it, the slash command expands it
+          // back so they can see what they asked for.
+          rightPanelRef.current?.expand();
+          setRightCollapsed(false);
+        },
         openNewProjectDialog: () => setShowNewProjectDialog(true),
         // /compact and server commands both reroute through handleSend
         // so the prompt goes through the normal stream + session
@@ -709,8 +733,8 @@ function ChatPage() {
               <h1 className="text-lg font-bold text-text-primary flex items-center gap-2">
                 Claude Code Chat
                 {isThinking && (
-                  <span className="flex items-center gap-1 text-xs text-purple-400">
-                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+                  <span className="flex items-center gap-1 text-xs text-accent-soft">
+                    <span className="w-2 h-2 bg-accent-soft rounded-full animate-pulse" />
                     working...
                   </span>
                 )}
@@ -744,7 +768,7 @@ function ChatPage() {
                   onClick={() => setViewMode('chat')}
                   className={`px-3 py-1 text-xs rounded transition-colors ${
                     viewMode === 'chat'
-                      ? 'bg-purple-600 text-white'
+                      ? 'bg-accent text-white'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                   title="Switch to chat view"
@@ -755,7 +779,12 @@ function ChatPage() {
                   onClick={() => setViewMode('terminal')}
                   className={`px-3 py-1 text-xs rounded transition-colors ${
                     viewMode === 'terminal'
-                      ? 'bg-emerald-600 text-white'
+                      // Sage (accent-soft) for the terminal tab so it
+                      // visually pairs with the Chat tab's mustard
+                      // (accent) — same olive family, different role
+                      // — without dropping in a Tailwind emerald that
+                      // breaks out of the warm palette.
+                      ? 'bg-accent-soft text-text-primary'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                   title="Switch to terminal view"
@@ -786,28 +815,31 @@ function ChatPage() {
               </svg>
               <span className="hidden sm:inline">Settings</span>
             </button>
-            {/* Recordings toggle — opens the right-side drawer that
-                lists ESP32 sessions; user drags one into chat input. */}
+            {/* Single panel toggle — collapses or expands the right
+                panel (which holds history + recordings + previews).
+                Replaces the old separate Recordings / History drawer
+                buttons. Persists collapsed state to localStorage so the
+                preference survives reloads. */}
             <button
-              onClick={() => setRecordingsOpen(true)}
+              onClick={() => {
+                if (rightCollapsed) {
+                  rightPanelRef.current?.expand();
+                  setRightCollapsed(false);
+                  try { localStorage.setItem('chat-right-panel-collapsed', '0'); } catch {}
+                } else {
+                  rightPanelRef.current?.collapse();
+                  setRightCollapsed(true);
+                  try { localStorage.setItem('chat-right-panel-collapsed', '1'); } catch {}
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
-              title="Browse ESP32 recordings"
-              aria-label="Open recordings panel"
+              title={rightCollapsed ? 'Show history / recordings panel' : 'Hide right panel (focus mode)'}
+              aria-label={rightCollapsed ? 'Show right panel' : 'Hide right panel'}
             >
-              <span>🎙️</span>
-              <span className="hidden sm:inline">Recordings</span>
-            </button>
-            {/* Sidebar toggle — hamburger opens the history drawer */}
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
-              title="Open chat history & project panel"
-              aria-label="Open sidebar"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-              <span className="hidden sm:inline">History</span>
+              <span>{rightCollapsed ? '◀' : '▶'}</span>
+              <span className="hidden sm:inline">
+                {rightCollapsed ? 'Show panel' : 'Focus mode'}
+              </span>
             </button>
           </div>
         </div>
@@ -819,129 +851,144 @@ function ChatPage() {
           xterm scroll-back / live PTY) survives tab switches.
           Important: the hidden panel's DOM still reports 0×0 — the
           EmbeddedTerminal has a 0×0 resize-guard to handle that. */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Chat panel */}
-        <div
-          className={`flex-1 flex flex-col overflow-hidden ${
-            viewMode === 'chat' ? '' : 'hidden'
-          }`}
-          aria-hidden={viewMode !== 'chat'}
-        >
-          {/* Error display */}
-          {error && (
-            <div className="mx-auto mt-4 max-w-4xl w-full px-6">
-              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Scrollable messages area */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl mx-auto w-full px-6 py-6">
-              {isLoadingHistory ? (
-                <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-                  <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin mb-3" />
-                  <div className="text-sm">Loading conversation…</div>
-                </div>
-              ) : (
-                <>
-                  <ChatMessages messages={messages} />
-                  {isLoading && messages.length > 0 && <LoadingIndicator />}
-                </>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          {/* Input bar */}
-          <div className="shrink-0">
-            <ChatInput
-              onSend={handleSend}
-              onAbort={handleAbort}
-              isLoading={isLoading}
-              cwd={currentCwd}
-              commands={mergedCommands}
-              esp32MicAvailable={whisperEnabled}
-              onSlashDispatch={handleSlashDispatch}
-              onModeChangeAnnounce={(text) => pushToast(text, 'info')}
-            />
-          </div>
-        </div>
-
-        {/* Terminal panel — mounted once per `terminalCwd` value.
-            Changing cwd remounts and therefore starts a fresh PTY;
-            staying on the same cwd while switching tabs keeps the
-            existing PTY intact. */}
-        {terminalCwd && (
+      <PanelGroup orientation="horizontal" className="flex-1 flex">
+        {/* LEFT panel — chat + terminal. Two views toggle via
+            viewMode; the inactive one is kept mounted via display:none
+            so its state (chat scroll / typed input / xterm scroll-back
+            / live PTY) survives tab switches. */}
+        <Panel id="chat-main" defaultSize={70} minSize={40} className="flex flex-col">
           <div
             className={`flex-1 flex flex-col overflow-hidden ${
-              viewMode === 'terminal' ? '' : 'hidden'
+              viewMode === 'chat' ? '' : 'hidden'
             }`}
-            aria-hidden={viewMode !== 'terminal'}
+            aria-hidden={viewMode !== 'chat'}
           >
-            {/* Per-session action bar — only shown in terminal view.
-                "End session" kills the PTY and drops back to chat;
-                plain tab switching preserves the session. */}
-            <div className="shrink-0 px-4 py-1.5 border-b border-card-border flex items-center justify-between bg-card-bg">
-              <span className="text-xs text-text-muted">
-                Live PTY session — switch to Chat tab to check messages while this keeps running.
-              </span>
-              <button
-                onClick={handleEndTerminalSession}
-                className="text-xs px-2 py-1 rounded text-text-secondary hover:text-red-400 hover:bg-red-500/20 transition-colors"
-                title="Kill the PTY and close this terminal"
-              >
-                End session ✕
-              </button>
+            {error && (
+              <div className="mx-auto mt-4 w-full px-4">
+                <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable messages area. Note: max-w-4xl removed
+                because the panel layout already constrains width via
+                the user-resizable boundary; an inner cap would just
+                re-introduce the empty whitespace we set out to fix. */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="w-full px-4 py-4">
+                {isLoadingHistory ? (
+                  // Match the empty-chat centring so loading and
+                  // empty states feel like the same kind of UI rather
+                  // than a tiny spinner adrift at the top.
+                  <div className="min-h-[60vh] flex flex-col items-center justify-center text-text-muted">
+                    <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin mb-3" />
+                    <div className="text-sm">Loading conversation…</div>
+                  </div>
+                ) : (
+                  <>
+                    <ChatMessages messages={messages} />
+                    {isLoading && messages.length > 0 && <LoadingIndicator />}
+                  </>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
-            <div className="flex-1 min-h-0">
-              <EmbeddedTerminal
-                key={terminalCwd}
-                cwd={terminalCwd}
-                onExit={() => {
-                  // PTY itself exited (user ran `exit` or was killed).
-                  // Leave the view mounted showing "exited" status so
-                  // the user can scroll back through the final output;
-                  // they dismiss explicitly via the End Session button.
-                }}
+
+            <div className="shrink-0">
+              <ChatInput
+                onSend={handleSend}
+                onAbort={handleAbort}
+                isLoading={isLoading}
+                cwd={currentCwd}
+                commands={mergedCommands}
+                esp32MicAvailable={whisperEnabled}
+                onSlashDispatch={handleSlashDispatch}
+                onModeChangeAnnounce={(text) => pushToast(text, 'info')}
               />
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Floating sidebar drawer — positioned fixed, slides in/out */}
-      <ChatSidebar
-        sessions={sessions}
-        extraProjects={extraProjects}
-        onSelectSession={handleSelectSession}
-        onNewChatInProject={handleNewChatInProject}
-        onDeleteProject={handleDeleteProject}
-        onLaunchTerminal={handleLaunchTerminal}
-        onSessionDeleted={handleSessionDeleted}
-        currentSessionId={sessionId}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onOpenNewProjectDialog={() => setShowNewProjectDialog(true)}
-      />
+          {terminalCwd && (
+            <div
+              className={`flex-1 flex flex-col overflow-hidden ${
+                viewMode === 'terminal' ? '' : 'hidden'
+              }`}
+              aria-hidden={viewMode !== 'terminal'}
+            >
+              <div className="shrink-0 px-4 py-1.5 border-b border-card-border flex items-center justify-between bg-card-bg">
+                <span className="text-xs text-text-muted">
+                  Live PTY session — switch to Chat tab to check messages while this keeps running.
+                </span>
+                <button
+                  onClick={handleEndTerminalSession}
+                  className="text-xs px-2 py-1 rounded text-text-secondary hover:text-red-400 hover:bg-red-500/20 transition-colors"
+                  title="Kill the PTY and close this terminal"
+                >
+                  End session ✕
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <EmbeddedTerminal
+                  key={terminalCwd}
+                  cwd={terminalCwd}
+                  onExit={() => {}}
+                />
+              </div>
+            </div>
+          )}
+        </Panel>
 
-      {/* New project dialog — lifted from ChatSidebar so `/new` can
-          open it while the drawer is closed. */}
+        {/* Drag handle between chat and right panel — subtle 4px
+            line that turns blue on hover so the user gets affordance
+            feedback before clicking. */}
+        <PanelResizeHandle className="w-1 bg-card-border hover:bg-accent/60 active:bg-accent transition-colors cursor-col-resize" />
+
+        {/* RIGHT panel — chat history (with embedded search) on top,
+            recordings + audio previews on bottom, internal vertical
+            resize handle between them. Collapsible via the header
+            "Focus mode" button: rightPanelRef.collapse() / .expand(). */}
+        <Panel
+          id="chat-right"
+          panelRef={rightPanelRef}
+          defaultSize={30}
+          minSize={18}
+          collapsible
+          collapsedSize={0}
+          className="flex flex-col"
+        >
+          <PanelGroup orientation="vertical" className="flex-1 flex flex-col">
+            <Panel id="right-history" defaultSize={55} minSize={20} className="flex flex-col">
+              <ChatSidebar
+                sessions={sessions}
+                extraProjects={extraProjects}
+                onSelectSession={handleSelectSession}
+                onNewChatInProject={handleNewChatInProject}
+                onDeleteProject={handleDeleteProject}
+                onLaunchTerminal={handleLaunchTerminal}
+                onSessionDeleted={handleSessionDeleted}
+                currentSessionId={sessionId}
+                onOpenNewProjectDialog={() => setShowNewProjectDialog(true)}
+              />
+            </Panel>
+            <PanelResizeHandle className="h-1 bg-card-border hover:bg-accent/60 active:bg-accent transition-colors cursor-row-resize" />
+            <Panel id="right-recordings" defaultSize={45} minSize={20} className="flex flex-col">
+              <RecordingsPanel />
+            </Panel>
+          </PanelGroup>
+        </Panel>
+      </PanelGroup>
+
+      {/* New project dialog — top-level modal, unaffected by the
+          panel layout. */}
       <NewProjectDialog
         open={showNewProjectDialog}
         onClose={() => setShowNewProjectDialog(false)}
         onSubmit={(abs) => handleNewProject(abs)}
       />
 
-      {/* Recordings drawer — right-side floating panel. Listing lives
-          inside the component; ChatPage only controls open/close. */}
-      <RecordingsPanel
-        open={recordingsOpen}
-        onClose={() => setRecordingsOpen(false)}
-      />
-
     </div>
+
   );
 }
 

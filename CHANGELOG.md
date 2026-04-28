@@ -2,6 +2,90 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.1.1 — 2026-04-28
+
+### Added
+
+- **Cross-session full-text search.** New `GET /api/sessions/search`
+  endpoint runs a case-insensitive substring scan across every
+  message in every `.jsonl` under `~/.claude/projects` and returns
+  ranked snippets with ±150 chars of context. UI is embedded right in
+  the chat sidebar — the search input replaces the project list when
+  active, with debounced requests, arrow-key navigation, and Enter
+  to open the matching session.
+- **Session summary now shows Claude's first reply.** Every session
+  in the sidebar gets a second preview line — the user's first
+  question on top, Claude's first substantive reply underneath —
+  visible without opening the conversation.
+- **Markdown rendering for chat messages.** Claude's responses now
+  render with proper headings, lists, tables, code fences, **bold**,
+  and links via `react-markdown` + `remark-gfm`. Replaces the old
+  plaintext `<pre>` fallback that was eating every structural cue.
+- **Two-pane resizable layout.** Old paired drawer toggles
+  ("Recordings" + "History") are replaced with a single
+  horizontally-resizable layout: chat / terminal on the left, history
+  + recordings stacked on the right with their own vertical resize
+  handle. The right panel collapses entirely via a "Focus mode" header
+  button; the choice persists across reloads.
+- **Inline audio preview on every recording row.** Native
+  `<audio controls preload="none">` element streams from
+  `/api/recordings/audio/<filename>` so the user can listen before
+  attaching to chat or running transcription. `preload="none"` keeps
+  the panel from prefetching every WAV on mount.
+
+### Changed
+
+- **Theme overhaul: warm-charcoal + clay-tan + sage.** Full palette
+  rework via a CSS-variable token ladder (surfaces, text, accent,
+  status). Dark mode = warm near-black chrome with soft sienna /
+  clay-tan accent and sage as the secondary character colour;
+  light mode = cream / parchment with the same accent family pulled
+  toward muted clay-tan. Sage green replaces electric blue as the
+  recording / character indicator. Channel-trace colours (PPG = red,
+  IMU = blue, etc.) stay hard-coded — they're semantic brand
+  identities for chart legends.
+- **Custom scrollbars** matched to the warm palette via WebKit pseudo-
+  elements + Firefox `scrollbar-color`. The OS-default light-grey
+  track was reading as "white stripe" against the dark chrome.
+- **xterm.js terminal palette themed** to the warm-charcoal chrome —
+  green pulled toward sage so `ls --color` doesn't spike out of the
+  palette; yellow desaturated to mustard; blue / magenta / cyan
+  softened. Reapplies live on theme toggle.
+- **Unified button colour rules** across the app: idle primary CTAs
+  (Connect / Scan / Start / Start Recording) → `bg-accent`;
+  destructive / undo (Disconnect / Stop / Stop Recording) →
+  `bg-status-danger`. Hover uses `opacity-90` so the rule reads
+  identically in light and dark.
+- Mass blue→accent migration across chrome components (Toast,
+  channels, chat, settings, layout). Channel colours and the
+  ThemeToggle icon are the only intentional blue references that
+  remain.
+- Empty / loading states for the chat region now centre to a
+  `min-h-[60vh]` wrapper so they feel like the same kind of UI
+  rather than a tiny spinner adrift at the top.
+
+### Fixed
+
+- **Session-summary extractor was silently dropping Claude's
+  substantive replies.** A typical Claude turn looks like
+  `[text, tool_use, text]` — the old code returned only `blocks[0]`,
+  which was usually a one-line "Let me check..." preamble. The new
+  extractor concatenates all text blocks, surfaces tool calls as
+  `[tool: <name>]` markers, and recurses into `tool_result.content`.
+  The same function powers the search-snippet path, so search now
+  sees Claude's full reply text instead of just the first fragment.
+
+### Internal
+
+- New shared module `frontend/src/components/chat/MessageMarkdown.tsx`
+  hosts the markdown renderer; deliberately does **not** pull in
+  syntax highlighting (saves 200 KB+) or `@tailwindcss/typography`
+  (would fight the project's own theme tokens with `!important`
+  defaults).
+- Layout uses `react-resizable-panels` v4 — note the v4 names
+  (`Group` / `Panel` / `Separator`), not v3's `PanelGroup` /
+  `PanelResizeHandle`.
+
 ## v1.0.7 — 2026-04-26
 
 ### Added

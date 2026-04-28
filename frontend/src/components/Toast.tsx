@@ -42,7 +42,7 @@ export function Toast({ message, durationMs, onDismiss }: ToastProps) {
       ? 'bg-red-600/90 border-red-400 text-white'
       : message.kind === 'success'
       ? 'bg-emerald-600/90 border-emerald-400 text-white'
-      : 'bg-purple-600/90 border-purple-400 text-white';
+      : 'bg-accent/90 border-accent-soft text-white';
 
   return (
     <div

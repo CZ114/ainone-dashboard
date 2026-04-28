@@ -1,7 +1,7 @@
 {
   "name": "ainone-dashboard-frontend",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,8 +15,11 @@
     "clsx": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.10.0",
     "react-router-dom": "^7.14.1",
     "recharts": "^2.10.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

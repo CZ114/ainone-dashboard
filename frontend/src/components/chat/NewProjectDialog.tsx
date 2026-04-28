@@ -172,7 +172,7 @@ export function NewProjectDialog({
               onClick={() => setMode('new')}
               className={`flex-1 px-3 py-1.5 rounded transition-colors ${
                 mode === 'new'
-                  ? 'bg-purple-600 text-white'
+                  ? 'bg-accent text-white'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
@@ -182,7 +182,7 @@ export function NewProjectDialog({
               onClick={() => setMode('existing')}
               className={`flex-1 px-3 py-1.5 rounded transition-colors ${
                 mode === 'existing'
-                  ? 'bg-purple-600 text-white'
+                  ? 'bg-accent text-white'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
@@ -202,8 +202,8 @@ export function NewProjectDialog({
                     type="text"
                     value={parent}
                     onChange={(e) => setParent(e.target.value)}
-                    placeholder="C:/Projects (or /home/you/projects)"
-                    className="flex-1 px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple-500"
+                    placeholder="D:/Imperial/individual"
+                    className="flex-1 px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
                     spellCheck={false}
                   />
                   <button
@@ -230,7 +230,7 @@ export function NewProjectDialog({
                   value={folderName}
                   onChange={(e) => setFolderName(e.target.value)}
                   placeholder="my-project"
-                  className="w-full px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
                   spellCheck={false}
                 />
               </div>
@@ -252,8 +252,8 @@ export function NewProjectDialog({
                   type="text"
                   value={existingPath}
                   onChange={(e) => setExistingPath(e.target.value)}
-                  placeholder="C:/Projects/my-project (or /home/you/my-project)"
-                  className="flex-1 px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple-500"
+                  placeholder="D:/Imperial/individual/my-project"
+                  className="flex-1 px-3 py-2 bg-window-bg border border-card-border rounded text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
                   spellCheck={false}
                 />
                 <button
@@ -285,7 +285,7 @@ export function NewProjectDialog({
           <button
             onClick={handleSubmit}
             disabled={!!validationError || submitting}
-            className="px-4 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
+            className="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             {submitting
               ? 'Creating…'

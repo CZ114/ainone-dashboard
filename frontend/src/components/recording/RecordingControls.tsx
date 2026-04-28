@@ -179,7 +179,7 @@ export function RecordingControls() {
                 disabled={busy !== null}
                 className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
                   parsedDuration === s
-                    ? 'bg-blue-500/20 border-blue-500/60 text-blue-200'
+                    ? 'bg-accent/20 border-accent/60 text-text-primary'
                     : 'bg-window-bg border-card-border text-text-secondary hover:border-card-border/80'
                 }`}
               >
@@ -195,7 +195,7 @@ export function RecordingControls() {
               checked={includeAudio}
               onChange={(e) => setIncludeAudio(e.target.checked)}
               disabled={busy !== null}
-              className="w-4 h-4 accent-ch-audio"
+              className="w-4 h-4 accent-accent"
             />
             <span className="text-sm text-text-secondary">Include audio</span>
           </label>
@@ -205,13 +205,13 @@ export function RecordingControls() {
           <button
             onClick={handleStart}
             disabled={busy !== null || !isValidDuration}
-            className="w-full bg-status-disconnected hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
             {busy === 'starting' ? 'Starting…' : 'Start Recording'}
           </button>
 
           {errorMsg && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+            <div className="text-xs text-status-danger bg-status-danger/10 border border-status-danger/30 rounded px-2 py-1">
               {errorMsg}
             </div>
           )}
@@ -226,7 +226,7 @@ export function RecordingControls() {
             </div>
             <div className="h-2 bg-window-bg border border-card-border rounded overflow-hidden">
               <div
-                className="h-full bg-status-disconnected transition-all duration-100"
+                className="h-full bg-accent transition-all duration-100"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -236,13 +236,13 @@ export function RecordingControls() {
           <button
             onClick={handleStop}
             disabled={busy !== null}
-            className="w-full bg-ch-audio hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-status-danger hover:opacity-90 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
             {busy === 'stopping' ? 'Stopping…' : 'Stop Recording'}
           </button>
 
           {errorMsg && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+            <div className="text-xs text-status-danger bg-status-danger/10 border border-status-danger/30 rounded px-2 py-1">
               {errorMsg}
             </div>
           )}

@@ -16,7 +16,10 @@ export function ChannelGrid() {
 
   if (channels.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-text-muted">
+      // min-h-[70vh] guarantees a centred area even though the parent
+      // <main> is a plain block container (its flex-1 doesn't help us
+      // because <main> itself isn't flex). Self-sufficient layout.
+      <div className="min-h-[70vh] flex items-center justify-center text-text-muted">
         <div className="text-center">
           <div className="text-4xl mb-4">📊</div>
           <p className="text-lg">Waiting for sensor data...</p>

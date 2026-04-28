@@ -10,9 +10,9 @@
 // `/foo/bar/learn/skillsLearn` shows as `learn/skillsLearn` — short but
 // usually enough to disambiguate.
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { type SessionSummary } from '../../store/chatStore';
-import { claudeApi } from '../../api/claudeApi';
+import { claudeApi, type SearchHit } from '../../api/claudeApi';
 
 interface ChatSidebarProps {
   sessions: SessionSummary[];
@@ -26,8 +26,6 @@ interface ChatSidebarProps {
   onLaunchTerminal: (cwd: string) => void;
   onSessionDeleted: () => void;
   currentSessionId: string | null;
-  open: boolean;
-  onClose: () => void;
   // Parent owns the NewProjectDialog state + submit handler so slash
   // commands (e.g. `/new`) can open it without the drawer being open.
   onOpenNewProjectDialog: () => void;
@@ -41,6 +39,14 @@ interface ProjectGroup {
 }
 
 const EXPAND_STATE_KEY = 'chat-sidebar-expanded-projects';
+
+// Search state tuning — debounce avoids hammering the backend on
+// every keystroke; min length avoids returning everything for "a" or
+// "i". 50 hits is plenty for an in-drawer list (more wouldn't fit on
+// screen anyway, and the UI starts to feel unresponsive past that).
+const SEARCH_DEBOUNCE_MS = 220;
+const SEARCH_MIN_QUERY_LEN = 2;
+const SEARCH_RESULT_LIMIT = 50;
 
 export function getDisplayName(cwd: string): string {
   if (!cwd) return '(no project)';
@@ -165,8 +171,6 @@ export function ChatSidebar({
   onLaunchTerminal,
   onSessionDeleted,
   currentSessionId,
-  open,
-  onClose,
   onOpenNewProjectDialog,
 }: ChatSidebarProps) {
   const groups = useMemo(
@@ -176,6 +180,68 @@ export function ChatSidebar({
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
     loadExpandState(),
   );
+
+  // -------- In-drawer search state ---------------------------------
+  // The whole search experience is inline: the input lives in the
+  // header, results replace the project list when the query is
+  // non-empty, clearing the input restores the project list. No
+  // modal, no separate route — the drawer IS the search surface.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchActiveIdx, setSearchActiveIdx] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Race-guard: every keystroke fires a fresh request, but slow ones
+  // can land after fast ones if the user types quickly. We bump this
+  // counter and only accept the latest response.
+  const searchSeqRef = useRef(0);
+
+  // Debounced search effect. Re-runs on every keystroke; the cleanup
+  // cancels the previous timer so only the LAST debounced fire issues
+  // a network call. Sub-min-length clears results immediately.
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < SEARCH_MIN_QUERY_LEN) {
+      setSearchHits([]);
+      setSearchLoading(false);
+      setSearchError(null);
+      setSearchActiveIdx(0);
+      return;
+    }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      const seq = ++searchSeqRef.current;
+      const r = await claudeApi.searchSessions(trimmed, SEARCH_RESULT_LIMIT);
+      if (seq !== searchSeqRef.current) return; // stale response
+      setSearchLoading(false);
+      if (r.error) {
+        setSearchError(r.error);
+        setSearchHits([]);
+      } else {
+        setSearchError(null);
+        setSearchHits(r.hits);
+        setSearchActiveIdx(0);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const isSearching = searchQuery.trim().length >= SEARCH_MIN_QUERY_LEN;
+
+  const handleSelectSearchHit = useCallback(
+    (hit: SearchHit) => {
+      onSelectSession(hit.sessionId);
+      // Clear the query so the project list reappears for the user's
+      // next visit. They can scroll-to-find later if needed.
+      setSearchQuery('');
+    },
+    [onSelectSession],
+  );
+
+  // Keyboard navigation through search results. Listens at the input
+  // level (via onKeyDown on the input below) so we don't capture
+  // arrow keys when the user isn't actually focused on search.
 
   // Auto-expand the project containing the active session so the user
   // never has to hunt for where they are. Only expands, never collapses,
@@ -197,16 +263,6 @@ export function ChatSidebar({
       });
     }
   }, [currentSessionId, groups, expanded]);
-
-  // Close drawer on ESC — cheap-and-accessible dismiss
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
 
   const toggleProject = (cwd: string) => {
     setExpanded((prev) => {
@@ -256,55 +312,104 @@ export function ChatSidebar({
   };
 
   return (
-    <>
-      {/* Backdrop — click outside to close. Pointer-events off when
-          closed so the main area is fully interactive. */}
-      <div
-        onClick={onClose}
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 ${
-          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        aria-hidden={!open}
-      />
-
-      {/* Drawer itself — slides in from the right. Kept mounted even
-          when closed so expand/fold state and scroll position don't
-          reset between opens. */}
-      <aside
-        className={`fixed right-0 top-0 bottom-0 z-50 w-80 max-w-[85vw] bg-card-bg border-l border-card-border flex flex-col shadow-2xl transition-transform duration-200 ${
-          open ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        aria-hidden={!open}
-      >
+    // Embedded mode — fills its parent container. The outer
+    // ChatPage hosts this inside a resizable Panel that owns
+    // visibility/collapse semantics; we don't manage drawer state
+    // here anymore.
+    <div className="h-full flex flex-col bg-card-bg">
       {/* Header */}
-      <div className="p-4 border-b border-card-border shrink-0">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-3 border-b border-card-border shrink-0">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-text-primary">
             Chat History
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 text-text-muted hover:text-text-primary hover:bg-card-border/50 rounded transition-colors"
-            title="Close (Esc)"
-            aria-label="Close sidebar"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
         </div>
         <button
           onClick={handleNewProjectClick}
-          className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
+          className="w-full px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
           title="Register a new project folder — you'll be asked for its absolute path, then dropped into a fresh chat scoped to it."
         >
           + New Project
         </button>
+        {/* Inline cross-session search. Real input — typing here
+            replaces the project list below with matching messages
+            from every .jsonl under ~/.claude/projects. Clearing the
+            input restores the project list. No modal, no separate
+            route — the drawer IS the search surface. */}
+        <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-window-bg border border-card-border rounded-lg focus-within:border-accent/60">
+          <span className="text-sm text-text-muted shrink-0" aria-hidden="true">🔍</span>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Arrow / Enter / Escape navigation while focused. We
+              // gate on the input being the focused element so these
+              // keys don't fire when the input is blank-but-rendered
+              // and the user is interacting with the project list.
+              if (!isSearching) {
+                if (e.key === 'Escape' && searchQuery !== '') {
+                  setSearchQuery('');
+                }
+                return;
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setSearchQuery('');
+              } else if (e.key === 'ArrowDown' && searchHits.length > 0) {
+                e.preventDefault();
+                setSearchActiveIdx((i) => Math.min(i + 1, searchHits.length - 1));
+              } else if (e.key === 'ArrowUp' && searchHits.length > 0) {
+                e.preventDefault();
+                setSearchActiveIdx((i) => Math.max(i - 1, 0));
+              } else if (e.key === 'Enter' && searchHits.length > 0) {
+                e.preventDefault();
+                handleSelectSearchHit(searchHits[searchActiveIdx]);
+              }
+            }}
+            placeholder="Search history…"
+            spellCheck={false}
+            autoComplete="off"
+            className="flex-1 min-w-0 bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
+          />
+          {searchLoading && (
+            <span className="text-[10px] text-text-muted animate-pulse shrink-0">
+              …
+            </span>
+          )}
+          {searchQuery && !searchLoading && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              className="text-text-muted hover:text-text-primary text-xs shrink-0"
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Project list */}
+      {/* Project list — OR — search results (mutually exclusive
+          based on whether the input has a usable query). Same scroll
+          container so the user's eye stays in one place when toggling
+          between modes. */}
       <div className="flex-1 overflow-y-auto">
-        {groups.length === 0 ? (
+        {isSearching ? (
+          <SearchResultsView
+            hits={searchHits}
+            loading={searchLoading}
+            error={searchError}
+            query={searchQuery.trim()}
+            activeIdx={searchActiveIdx}
+            onHover={setSearchActiveIdx}
+            onSelect={handleSelectSearchHit}
+          />
+        ) : groups.length === 0 ? (
           <div className="p-4 text-sm text-text-muted">
             No chat history found
           </div>
@@ -326,7 +431,7 @@ export function ChatSidebar({
                   <div
                     className={`group/row flex items-center gap-1 px-2 py-2 rounded-md transition-colors ${
                       hasActive
-                        ? 'bg-purple-600/10'
+                        ? 'bg-accent/10'
                         : 'hover:bg-card-border/40'
                     }`}
                   >
@@ -353,7 +458,7 @@ export function ChatSidebar({
                     </button>
                     <button
                       onClick={(e) => handleProjectPlusClick(e, group.cwd)}
-                      className="shrink-0 p-1 rounded text-text-muted hover:text-text-primary hover:bg-purple-600/30 transition-colors opacity-60 group-hover/row:opacity-100"
+                      className="shrink-0 p-1 rounded text-text-muted hover:text-text-primary hover:bg-accent/30 transition-colors opacity-60 group-hover/row:opacity-100"
                       title={`New chat in ${group.displayName}`}
                       aria-label="New chat in this project"
                     >
@@ -432,7 +537,7 @@ export function ChatSidebar({
                               key={session.sessionId}
                               className={`group relative p-2 rounded-lg transition-colors cursor-pointer ${
                                 isActive
-                                  ? 'bg-purple-600/20 border border-purple-500/50'
+                                  ? 'bg-accent/20 border border-accent/50'
                                   : 'hover:bg-card-border/50 border border-transparent'
                               }`}
                               onClick={() => onSelectSession(session.sessionId)}
@@ -440,14 +545,34 @@ export function ChatSidebar({
                               <div className="text-[10px] text-text-muted mb-0.5">
                                 {formatTime(session.updatedAt)}
                               </div>
-                              <div className="text-xs text-text-primary truncate">
-                                {truncate(session.firstMessage, 40)}
+                              {/* Two-line topic summary: user's
+                                  question + Claude's first substantive
+                                  reply. Both clamp at 2 lines via
+                                  -webkit-line-clamp so a long opening
+                                  message doesn't push the metadata row
+                                  off the card.
+
+                                  Falls back to the original 1-line
+                                  layout if firstAssistantMessage is
+                                  missing (older backend, or a session
+                                  with no assistant reply yet). */}
+                              <div className="text-xs text-text-primary line-clamp-2 leading-snug">
+                                {truncate(session.firstMessage, 100)}
                               </div>
-                              <div className="text-[10px] text-text-secondary mt-0.5 truncate flex items-center gap-2">
+                              {session.firstAssistantMessage && (
+                                <div
+                                  className="mt-0.5 text-[11px] text-text-secondary line-clamp-2 leading-snug"
+                                  title={session.firstAssistantMessage}
+                                >
+                                  <span className="text-text-muted/70 mr-1">↳</span>
+                                  {truncate(session.firstAssistantMessage, 120)}
+                                </div>
+                              )}
+                              <div className="text-[10px] text-text-secondary mt-1 truncate flex items-center gap-2">
                                 <span>{session.messageCount} messages</span>
                                 {session.isGrouped && session.groupSize ? (
                                   <span
-                                    className="px-1 py-0 rounded bg-purple-500/20 text-purple-300 text-[9px]"
+                                    className="px-1 py-0 rounded bg-accent/20 text-accent-soft text-[9px]"
                                     title={`Continued across ${session.groupSize} resume forks`}
                                   >
                                     {session.groupSize} branches
@@ -488,7 +613,173 @@ export function ChatSidebar({
           </div>
         )}
       </div>
-      </aside>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search results sub-view — rendered inside the same scroll container as
+// the project list, mutually exclusive based on whether the input has a
+// usable query. Kept in this file (instead of a separate component) so
+// the data flow stays simple: ChatSidebar owns query/hits/activeIdx
+// state, this is just the presentational layer.
+
+interface SearchResultsViewProps {
+  hits: SearchHit[];
+  loading: boolean;
+  error: string | null;
+  query: string;
+  activeIdx: number;
+  onHover: (idx: number) => void;
+  onSelect: (hit: SearchHit) => void;
+}
+
+function SearchResultsView({
+  hits,
+  loading,
+  error,
+  query,
+  activeIdx,
+  onHover,
+  onSelect,
+}: SearchResultsViewProps) {
+  // Keep the active row scrolled into view when the user arrow-keys
+  // through a long results list. scrollIntoView with 'nearest' avoids
+  // jumpy recentering — the row stays put if it's already on screen.
+  useEffect(() => {
+    const row = document.querySelector<HTMLElement>(
+      `[data-search-hit-idx="${activeIdx}"]`,
+    );
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx]);
+
+  if (error) {
+    return (
+      <div className="p-3 text-xs text-red-400">
+        <div className="font-semibold mb-1">Search failed</div>
+        <div className="break-all">{error}</div>
+        <div className="mt-2 text-text-muted">
+          Is the chat backend running, and is{' '}
+          <code>/api/sessions/search</code> registered?
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && hits.length === 0) {
+    return (
+      <div className="p-4 text-center text-xs text-text-muted">
+        Searching…
+      </div>
+    );
+  }
+
+  if (!loading && hits.length === 0) {
+    return (
+      <div className="p-4 text-center text-xs text-text-muted">
+        No matches for{' '}
+        <span className="text-text-secondary">"{query}"</span>.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="py-1">
+      {hits.map((hit, i) => (
+        <li
+          key={`${hit.sessionId}-${hit.timestamp}-${i}`}
+          data-search-hit-idx={i}
+          onMouseEnter={() => onHover(i)}
+          onMouseDown={(e) => {
+            e.preventDefault(); // keep input focused
+            onSelect(hit);
+          }}
+          className={`px-3 py-2 cursor-pointer border-l-2 ${
+            i === activeIdx
+              ? 'bg-accent/10 border-accent'
+              : 'border-transparent hover:bg-card-border/30'
+          }`}
+        >
+          <div className="flex items-center gap-2 text-[10px] text-text-muted mb-0.5">
+            <SearchRoleBadge role={hit.messageRole} />
+            <span className="truncate flex-1 min-w-0">
+              {getDisplayName(hit.cwd)}
+            </span>
+            <span className="shrink-0">{formatRelative(hit.timestamp)}</span>
+          </div>
+          <div className="text-xs text-text-secondary leading-snug">
+            <SearchSnippet
+              snippet={hit.snippet}
+              matchStart={hit.matchStart}
+              matchEnd={hit.matchEnd}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SearchRoleBadge({ role }: { role: SearchHit['messageRole'] }) {
+  const styles =
+    role === 'user'
+      ? 'bg-accent/15 text-accent-soft border-accent/30'
+      : 'bg-accent/15 text-accent-soft border-accent/30';
+  return (
+    <span
+      className={`text-[9px] px-1 py-0 rounded border font-mono uppercase tracking-wider ${styles}`}
+    >
+      {role === 'user' ? 'you' : 'claude'}
+    </span>
+  );
+}
+
+// Render snippet with the matched range highlighted. Backend gives us
+// the snippet plus offsets into it, so we just slice + wrap. Doing
+// this client-side (instead of returning HTML) keeps the API JSON
+// clean and skips the sanitization headache.
+function SearchSnippet({
+  snippet,
+  matchStart,
+  matchEnd,
+}: {
+  snippet: string;
+  matchStart: number;
+  matchEnd: number;
+}) {
+  if (
+    matchStart < 0 ||
+    matchEnd > snippet.length ||
+    matchEnd <= matchStart
+  ) {
+    return <span>{snippet}</span>;
+  }
+  return (
+    <>
+      <span>{snippet.slice(0, matchStart)}</span>
+      <mark className="bg-yellow-500/30 text-yellow-100 rounded px-0.5">
+        {snippet.slice(matchStart, matchEnd)}
+      </mark>
+      <span>{snippet.slice(matchEnd)}</span>
     </>
   );
+}
+
+// "5m ago", "yesterday", "Apr 24" depending on age. Cheap, no
+// dependency on date-fns.
+function formatRelative(iso: string): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const ms = Date.now() - t;
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  const d = new Date(t);
+  return `${d.toLocaleString('en', { month: 'short' })} ${d.getDate()}`;
 }

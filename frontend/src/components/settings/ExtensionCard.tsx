@@ -140,7 +140,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
   const statusBadge = (() => {
     if (streaming || ext.installing) {
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-soft border border-accent/30">
           Installing…
         </span>
       );
@@ -154,20 +154,20 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
     }
     if (ext.last_error) {
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-status-danger/20 text-status-danger border border-status-danger/30">
           Error
         </span>
       );
     }
     if (ext.enabled) {
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-status-success/20 text-status-success border border-status-success/30">
           Enabled
         </span>
       );
     }
     return (
-      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+      <span className="text-xs px-2 py-0.5 rounded-full bg-status-warning/20 text-status-warning border border-status-warning/30">
         Disabled
       </span>
     );
@@ -199,7 +199,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
             )}
           </p>
           {ext.last_error && (
-            <p className="mt-2 text-xs text-red-400">
+            <p className="mt-2 text-xs text-status-danger">
               Last error: <code className="break-all">{ext.last_error}</code>
             </p>
           )}
@@ -211,7 +211,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
             <button
               onClick={handleInstall}
               disabled={streaming || ext.installing}
-              className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 disabled:bg-card-border disabled:cursor-not-allowed text-white font-medium"
+              className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent-hover disabled:bg-card-border disabled:cursor-not-allowed text-white font-medium"
             >
               {streaming || ext.installing ? 'Installing…' : 'Install'}
             </button>
@@ -219,7 +219,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
           {ext.installed && !ext.enabled && (
             <button
               onClick={handleEnable}
-              className="px-3 py-1.5 text-xs rounded bg-green-600 hover:bg-green-700 text-white font-medium"
+              className="px-3 py-1.5 text-xs rounded bg-accent hover:opacity-90 text-white font-medium"
             >
               Enable
             </button>
@@ -235,7 +235,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
           {ext.installed && (
             <button
               onClick={handleUninstall}
-              className="px-3 py-1.5 text-xs rounded text-red-400 hover:bg-red-500/10 border border-red-500/30"
+              className="px-3 py-1.5 text-xs rounded text-status-danger hover:bg-status-danger/10 border border-status-danger/30"
             >
               Uninstall
             </button>
@@ -254,7 +254,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               </div>
               <div className="w-full h-1.5 rounded-full bg-card-border overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 transition-all duration-200"
+                  className="h-full bg-accent transition-all duration-200"
                   style={{ width: `${Math.max(2, progress * 100)}%` }}
                 />
               </div>
@@ -275,7 +275,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
           {lastResult && !streaming && (
             <div
               className={`text-xs ${
-                lastResult.success ? 'text-green-400' : 'text-red-400'
+                lastResult.success ? 'text-status-success' : 'text-status-danger'
               }`}
             >
               {lastResult.success

@@ -106,6 +106,20 @@ export interface SessionSummary {
   groupSessions?: string[];
 }
 
+// Single hit from /api/sessions/search. Mirrors the backend response;
+// the snippet field is a slice of the original message text with
+// matchStart/matchEnd indexing INTO the snippet (not the original
+// text), so the frontend can highlight without recomputing offsets.
+export interface SearchHit {
+  sessionId: string;
+  cwd: string;
+  messageRole: 'user' | 'assistant';
+  snippet: string;
+  matchStart: number;
+  matchEnd: number;
+  timestamp: string;
+}
+
 const API_BASE = '';
 
 export const claudeApi = {
@@ -420,6 +434,43 @@ export const claudeApi = {
       return { messages: data.messages || [], cwd: data.cwd };
     } catch {
       return { messages: [] };
+    }
+  },
+
+  // Cross-session full-text search. Backend brute-force-scans every
+  // .jsonl under ~/.claude/projects for a substring match (case
+  // insensitive), returning the first `limit` hits sorted newest-first.
+  // Snippet has ±150 chars of context; matchStart/matchEnd index INTO
+  // the snippet for client-side highlighting.
+  searchSessions: async (
+    q: string,
+    limit = 50,
+  ): Promise<{
+    hits: SearchHit[];
+    total?: number;
+    took_ms?: number;
+    error?: string;
+  }> => {
+    try {
+      const url =
+        `${API_BASE}/api/sessions/search?q=${encodeURIComponent(q)}` +
+        `&limit=${limit}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        const txt = await response.text();
+        return { hits: [], error: `HTTP ${response.status}: ${txt.slice(0, 160)}` };
+      }
+      const data = await response.json();
+      return {
+        hits: Array.isArray(data.hits) ? data.hits : [],
+        total: data.total,
+        took_ms: data.took_ms,
+      };
+    } catch (err) {
+      return {
+        hits: [],
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   },
 };

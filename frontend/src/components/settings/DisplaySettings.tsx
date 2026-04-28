@@ -59,7 +59,7 @@ export function DisplaySettings() {
             onChange={(e) =>
               setSettings({ points_per_channel: Number(e.target.value) })
             }
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
         </div>
 
@@ -81,7 +81,7 @@ export function DisplaySettings() {
               setSettings({ cards_per_row: Number(e.target.value) })
             }
             list="cards-per-row-ticks"
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
           <datalist id="cards-per-row-ticks">
             {CARDS_PER_ROW_SNAPS.map((v) => (
@@ -116,7 +116,7 @@ export function DisplaySettings() {
               setSettings({ card_scale: snapped });
             }}
             list="card-scale-ticks"
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
           <datalist id="card-scale-ticks">
             {CARD_SCALE_SNAPS.map((v) => (
@@ -152,7 +152,7 @@ export function DisplaySettings() {
               setSettings({ wheel_zoom_sensitivity: snapped });
             }}
             list="wheel-sens-ticks"
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
           <datalist id="wheel-sens-ticks">
             {WHEEL_SENS_SNAPS.map((v) => (

@@ -63,7 +63,7 @@ export function SlashCommandMenu({
             onMouseEnter={() => onHoverIndex(i)}
             className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors ${
               active
-                ? 'bg-purple-600/20 text-text-primary'
+                ? 'bg-accent/20 text-text-primary'
                 : 'hover:bg-card-border/40 text-text-secondary'
             }`}
             role="option"
@@ -74,7 +74,7 @@ export function SlashCommandMenu({
             </span>
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-2">
-                <span className={`font-mono text-sm ${active ? 'text-purple-300' : 'text-text-primary'}`}>
+                <span className={`font-mono text-sm ${active ? 'text-accent-soft' : 'text-text-primary'}`}>
                   {cmd.name}
                 </span>
                 {cmd.origin === 'server' && cmd.source && (

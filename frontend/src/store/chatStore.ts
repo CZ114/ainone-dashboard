@@ -150,6 +150,11 @@ export interface SessionSummary {
   cwd: string;
   firstMessage: string;
   lastMessage: string;
+  // Claude's first substantive reply in the conversation. Sidebar
+  // renders it as a second line under the user's question so the
+  // entry feels like a topic summary rather than just the user's
+  // opener. Optional for older backends that don't yet emit it.
+  firstAssistantMessage?: string;
   messageCount: number;
   updatedAt: string;
   // Fork-group metadata: when SDK --resume forks each turn, multiple .jsonl

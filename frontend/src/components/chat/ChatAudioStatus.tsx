@@ -98,7 +98,7 @@ export function ChatAudioStatus() {
           className={`h-full transition-all duration-75 ${
             clipping
               ? 'bg-red-400'
-              : 'bg-gradient-to-r from-emerald-400 to-blue-400'
+              : 'bg-gradient-to-r from-emerald-400 to-accent-soft'
           }`}
           style={{ width: `${rmsPercent}%` }}
         />

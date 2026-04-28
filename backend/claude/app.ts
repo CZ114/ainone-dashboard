@@ -20,6 +20,7 @@ import { handlePermissionResponse } from "./handlers/permission.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
 import {
   handleSessionList,
+  handleSessionSearch,
   handleDeleteSession,
   handleSessionMessages,
   handleCreateProject,
@@ -84,6 +85,7 @@ export function createApp(
   app.post("/api/chat/permission", (c) => handlePermissionResponse(c));
 
   app.get("/api/sessions", (c) => handleSessionList(c));
+  app.get("/api/sessions/search", (c) => handleSessionSearch(c));
   app.get("/api/sessions/:sessionId/messages", (c) => handleSessionMessages(c));
   app.delete("/api/sessions/:sessionId", (c) => handleDeleteSession(c));
 
