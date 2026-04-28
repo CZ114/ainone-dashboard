@@ -70,3 +70,7 @@ WHISPER_LOCAL_DEBUG_JOURNEY.md
 WRAPPING_NATIVE_PICKER_GUIDE.md
 SPEC.md
 start.sh
+
+# Diary feature (v1.1.3) — runtime state, gitignored.
+backend/data/diary/
+diary-replies/

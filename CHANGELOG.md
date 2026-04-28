@@ -2,6 +2,100 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.1.3 — 2026-04-28
+
+### Added
+
+- **Diary: AI-generated daily observations.** New `/diary` route shows
+  short markdown observations Claude leaves about your recent
+  recordings, on a schedule or on demand. Each entry is one paragraph
+  + a few bullets, grounded in actual recording timestamps and
+  sensor stats. Reply opens a real chat session pre-loaded with the
+  entry as context, persisted under the `📓 Diary replies` project
+  group in the chat sidebar.
+- **Multi-provider model support — no router needed.** Diary agents
+  can target Anthropic, DeepSeek, MiniMax (intl + cn), Zhipu Z.ai
+  (intl + cn), Moonshot Kimi, Alibaba Qwen, or Ollama via each
+  provider's native Anthropic-protocol endpoint. Pick provider →
+  pick model → paste API key → done. Custom mode for routers /
+  any-other-endpoint. Registry lives in
+  `frontend/src/components/diary/providers.ts` — adding a new
+  provider is a single object literal.
+- **Daily schedule + browser notifications.** Set `HH:MM` in
+  Settings → Diary, optionally enable browser notifications. Cron
+  ticks every 60s; if the dashboard wasn't running when the
+  schedule fired, a delayed entry is generated on next boot
+  (tagged `delayed: true`).
+- **Live in-flight preview.** The `/diary` page shows the assistant's
+  text streaming in as the agent writes, via NDJSON broadcast over
+  `/api/diary/stream`. Sibling tabs see the same updates.
+- **Per-entry actions.** Reply (with diary context inlined into the
+  first user message), Mark read, Delete (read-gated). Header shows
+  an unread red-dot badge that survives navigation.
+- **Settings → Diary tab.** Master enable, daily schedule + agent
+  picker, quiet hours, browser notifications, agent CRUD with
+  built-in Test (1-token ping with friendly 401/404/connection-
+  refused mapping), and a collapsible Secrets manager (auto-managed
+  by simple-mode agent edits — most users never touch it).
+
+### Fixed
+
+- **Spurious 5-minute "timeout" against third-party providers.** The
+  bundled `claude` CLI retries 401s up to 10× with exponential
+  backoff (~5+ min total) and **does not honour the documented
+  `ANTHROPIC_MAX_RETRIES` env var**. Diary's runner now watches the
+  `api_retry` stream-json events and `SIGTERM`s the spawn after the
+  2nd consecutive 401, surfacing "Authentication failed (401) on the
+  provider endpoint…" in ~5s instead of ~5 min. See
+  `docs/journeys/diary-third-party-provider-debug.md` for the full
+  hunt.
+- **Auth env conflict between settings.json and per-agent env.** When
+  an agent declares its own `ANTHROPIC_BASE_URL`, the runner now
+  strips every `ANTHROPIC_*` from `process.env` and
+  `~/.claude/settings.json` before merging the agent's env, then
+  sets BOTH `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` to the
+  same value so any provider's preferred header style works.
+- **EventEmitter `'error'` could crash the whole backend.** Diary's
+  in-process bus emits `{ type: 'error' }` on run failure; without a
+  direct `error` listener Node's EventEmitter throws
+  `ERR_UNHANDLED_ERROR` and kills the Hono process. A no-op `error`
+  listener is now parked at module init.
+- **`${SECRET}` placeholder leaking into HTTP headers.** When a
+  user-saved agent referenced a secret that no longer existed,
+  `resolveSecrets` returned the literal string and the CLI would
+  send `Authorization: Bearer ${MINIMAX_KEY}` to the provider — a
+  401 indistinguishable from a wrong key. Runner now refuses to
+  spawn when any env value matches `^${...}$` and surfaces a clear
+  "Re-paste your API key" error.
+
+### Internal
+
+- **Single-flight guard across all diary spawns.** Module-level
+  `MAX_CONCURRENT_RUNS = 1` covers both the manual `Generate now`
+  trigger and the per-agent `Test` button — they go through
+  different HTTP routes but share the same `runAgent` entry point.
+  Throws `ConcurrentRunError` on the second concurrent attempt,
+  preventing zombie `claude` processes when the user rapid-clicks.
+- **Cancel button on `/diary`.** New `POST /api/diary/abort` kills
+  the spawned process when the user wants to stop mid-generation.
+- **Force-delete agents.** `DELETE /api/diary/agents/:id?force=1`
+  clears any schedule/event references and disables the daily cron
+  before deleting (so it doesn't fire into nothing). Frontend offers
+  this via a second confirm dialog when it sees a 409.
+- **Built-in Anthropic Haiku always in dropdowns.** `listAgents`
+  prepends the built-in `diary_observer` (Haiku) unless the user
+  has explicitly overridden that slot, so a misconfigured custom
+  agent can never brick the diary.
+- New module map: `backend/claude/diary/` (store / agentStore /
+  runner / orchestrator / scheduler / contextBuilder / eventBus /
+  prompts) + `backend/claude/handlers/diary.ts` (~17 endpoints).
+  Frontend mirror under `frontend/src/components/diary/` +
+  `frontend/src/api/diaryApi.ts` + `frontend/src/store/diaryStore.ts`.
+- **Documentation**: full spec at `docs/specs/diary.md`, hunt
+  post-mortem at `docs/journeys/diary-third-party-provider-debug.md`,
+  practical reference + "how to add a provider" guide at
+  `docs/guides/diary-internals.md`.
+
 ## v1.1.2 — 2026-04-28
 
 ### Fixed

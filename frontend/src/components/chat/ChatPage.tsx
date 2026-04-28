@@ -1,7 +1,7 @@
 // Chat Page component - Claude Code chat interface with proper session handling
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
 import { useStreamParser } from '../../hooks/useStreamParser';
@@ -20,7 +20,7 @@ import {
 import { NewProjectDialog } from './NewProjectDialog';
 import { RecordingsPanel } from './RecordingsPanel';
 import { EmbeddedTerminal } from '../shell/EmbeddedTerminal';
-import { ThemeToggle } from '../ThemeToggle';
+import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
 import {
   buildPromptWithAttachments,
@@ -41,8 +41,26 @@ import type {
   EffortLevelWire,
 } from '../../api/claudeApi';
 
+// Storage key shape: `diary-handoff:<entry-id>`. Set by DiaryPage's
+// Reply button right before navigating here. We pull it out on mount
+// to render the pinned context card and to know which entry should
+// be injected as `additionalSystemPrompt` on the FIRST chat send.
+const DIARY_HANDOFF_PREFIX = 'diary-handoff:';
+
+interface DiaryHandoff {
+  entry_id: string;
+  cwd: string;
+  // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+  additional_system_prompt: string;
+  entry_title: string;
+  entry_body: string;
+  entry_created_at: string;
+  entry_agent_id: string;
+  entry_model: string;
+}
+
 function ChatPage() {
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { processStreamLine } = useStreamParser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +117,81 @@ function ChatPage() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const pushToast = useCallback((text: string, kind?: ToastMessage['kind']) => {
     setToast({ id: Date.now(), text, kind });
+  }, []);
+
+  // Diary -> chat handoff. When the diary "Reply" button navigates here
+  // with ?from=diary&entryId=<id>, we pull the handoff blob stashed in
+  // sessionStorage by DiaryPage. We:
+  //   1. Render a pinned, read-only context card above the messages so
+  //      the user understands what's loaded (cleaner than dumping the
+  //      entry body into the input box).
+  //   2. Override workingDirectory and additionalSystemPrompt for the
+  //      FIRST send so the new chat session is created under the
+  //      diary-replies cwd (groups it under one project label in the
+  //      sidebar) and Claude receives the entry as background.
+  // Subsequent turns inherit the conversation from --resume — no need
+  // to keep re-injecting the system prompt.
+  const [diaryHandoff, setDiaryHandoff] = useState<DiaryHandoff | null>(null);
+  const [diaryHandoffConsumed, setDiaryHandoffConsumed] = useState(false);
+  // Mirror state into refs so handleSend (a stable useCallback whose dep
+  // array intentionally excludes most React state to keep its identity
+  // stable across renders) sees the LATEST handoff at send time. Without
+  // this, the closure captured at component-mount sees handoff=null and
+  // the first send goes out without additionalSystemPrompt — Claude
+  // ends up grounded in the cwd's git context instead of the diary entry.
+  const diaryHandoffRef = useRef<DiaryHandoff | null>(null);
+  const diaryHandoffConsumedRef = useRef<boolean>(false);
+  useEffect(() => {
+    diaryHandoffRef.current = diaryHandoff;
+  }, [diaryHandoff]);
+  useEffect(() => {
+    diaryHandoffConsumedRef.current = diaryHandoffConsumed;
+  }, [diaryHandoffConsumed]);
+  useEffect(() => {
+    const fromDiary = searchParams.get('from') === 'diary';
+    const entryId = searchParams.get('entryId');
+    if (!fromDiary || !entryId) return;
+    const key = DIARY_HANDOFF_PREFIX + entryId;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(key);
+    } catch {
+      raw = null;
+    }
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as DiaryHandoff;
+        // CRITICAL: wipe any chat state left over from the previous
+        // /chat visit. Otherwise the diary reply tries to send into
+        // the stale sessionId — which the chat handler treats as
+        // `--resume <real-uuid>` and the SDK errors out
+        // ("No conversation found"). Also clears the messages list so
+        // the pinned diary card isn't sandwiched against an unrelated
+        // earlier conversation.
+        const chatState = useChatStore.getState();
+        chatState.clearMessages();
+        chatState.setSessionId(null);
+        chatState.setDisplaySessionId(null);
+        chatState.setTemporarySessionId(null);
+        chatState.setError(null);
+        setDiaryHandoff(parsed);
+        pushToast('Diary entry loaded — type your question to start', 'info');
+      } catch {
+        /* malformed — ignore */
+      }
+      try {
+        sessionStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+    // Clean the URL so a refresh doesn't try to re-load the handoff
+    // (which we just consumed).
+    const next = new URLSearchParams(searchParams);
+    next.delete('from');
+    next.delete('entryId');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Right panel collapse state. Replaces the old `sidebarOpen` /
@@ -473,19 +566,60 @@ function ChatPage() {
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Read the diary handoff from refs (NOT from useState closures) so
+    // we always see the latest values. handleSend's dep array is
+    // intentionally minimal for identity stability, which means a
+    // closure read of the useState would be stale.
+    const currentHandoff = diaryHandoffRef.current;
+    const currentConsumed = diaryHandoffConsumedRef.current;
+    const inDiaryFirstSend = !!currentHandoff && !currentConsumed;
+
+    // First send of a diary-reply chat: PREPEND the entry body inline
+    // to the user's message. We tried `appendSystemPrompt` first (would
+    // be invisible in chat history), but the SDK's `claude_code`
+    // preset apparently doesn't surface it to the model — Claude ended
+    // up using Bash/Read tools to find the diary on disk instead.
+    // Inlining the entry into the first user message guarantees Claude
+    // sees it and persists it in the session JSONL so subsequent
+    // --resume turns also have the context.
+    let effectiveMessage = message;
+    if (inDiaryFirstSend) {
+      const dateStr = (() => {
+        try {
+          return new Date(currentHandoff!.entry_created_at).toLocaleString();
+        } catch {
+          return currentHandoff!.entry_created_at;
+        }
+      })();
+      const quotedBody = currentHandoff!.entry_body
+        .split('\n')
+        .map((l) => '> ' + l)
+        .join('\n');
+      const preface =
+        `📓 _Loaded from diary entry written ${dateStr} (agent: ` +
+        `${currentHandoff!.entry_agent_id}, model: ` +
+        `${currentHandoff!.entry_model})._\n\n` +
+        `${quotedBody}\n\n---\n\n`;
+      effectiveMessage = preface + message;
+    }
+
     // Synthesize the final prompt: fenced text bodies + image/other
     // path references + the user's typed message. Shows the user
     // exactly-what-they-typed in the message bubble (not the synthesized
     // prompt), since that's closer to the mental model.
-    const wirePrompt = buildPromptWithAttachments(message, attachments);
+    const wirePrompt = buildPromptWithAttachments(effectiveMessage, attachments);
 
     // Display message is the user's typed text, plus a discreet summary
     // of what was attached. Prevents a jarring "my message now has
-    // 50 lines of code in it" bubble.
+    // 50 lines of code in it" bubble. For a first-send diary reply we
+    // show the prepended preface in the bubble too — that way the
+    // conversation history stays consistent across page reloads (the
+    // JSONL has the full text, so a refreshed view would otherwise
+    // contradict the live view).
     const displayText =
       attachments.length === 0
-        ? message
-        : `${message}${message ? '\n\n' : ''}` +
+        ? effectiveMessage
+        : `${effectiveMessage}${effectiveMessage ? '\n\n' : ''}` +
           `📎 ${attachments.length} attachment${attachments.length > 1 ? 's' : ''}: ` +
           attachments.map((a) => a.filename).join(', ');
 
@@ -511,13 +645,25 @@ function ChatPage() {
       }
     }
 
-    // Determine working directory - use project's cwd
+    // Determine working directory - use project's cwd, unless this is
+    // a diary-reply session that's never been sent in (use the
+    // diary-replies cwd so the new chat lands in that project group).
     const workingDir = (() => {
+      if (inDiaryFirstSend) {
+        return currentHandoff!.cwd;
+      }
       if (projects.length > 0 && projects[0].path) {
         return projects[0].path;
       }
       return undefined;
     })();
+
+    if (inDiaryFirstSend) {
+      console.log('[diary] first-turn inline preface', {
+        cwd: currentHandoff!.cwd,
+        bodyChars: currentHandoff!.entry_body.length,
+      });
+    }
 
     // Translate toolbar state to wire types.
     // - permissionMode: always send (even 'default' — keeps backend
@@ -546,6 +692,8 @@ function ChatPage() {
       permissionMode,
       thinking: thinkingWire,
       effort: effortWire,
+      diaryFirstSend: inDiaryFirstSend,
+      promptCharsAfterPreface: wirePrompt.length,
       storeSnapshotModes: {
         permission: storeSnapshot.permissionMode,
         thinking: storeSnapshot.thinkingMode,
@@ -568,6 +716,14 @@ function ChatPage() {
         ...(thinkingWire ? { thinking: thinkingWire } : {}),
         ...(effortWire ? { effort: effortWire } : {}),
       });
+
+      // Mark the diary handoff as spent so subsequent sends in this
+      // session don't re-prepend the diary preface (Claude has the
+      // entry inline in the conversation history now and --resume
+      // rehydrates it on every later turn).
+      if (inDiaryFirstSend) {
+        setDiaryHandoffConsumed(true);
+      }
 
       for await (const _ of processStreamLine(streamGenerator, requestId)) {
         // Each iteration updates the store
@@ -717,51 +873,41 @@ function ChatPage() {
     <div className="h-screen bg-window-bg flex flex-col overflow-hidden">
       <Toast message={toast} onDismiss={() => setToast(null)} />
 
-      {/* Header — always visible regardless of message volume */}
-      <div className="bg-card-bg border-b border-card-border px-6 py-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 min-w-0">
-            {/* Back to Dashboard button */}
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors shrink-0"
-            >
-              <span>←</span>
-              <span>Dashboard</span>
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-lg font-bold text-text-primary flex items-center gap-2">
-                Claude Code Chat
-                {isThinking && (
-                  <span className="flex items-center gap-1 text-xs text-accent-soft">
-                    <span className="w-2 h-2 bg-accent-soft rounded-full animate-pulse" />
-                    working...
-                  </span>
-                )}
-              </h1>
-              <p className="text-xs text-text-muted truncate flex items-center gap-2">
-                {currentProjectName && (
-                  <span className="text-text-secondary">
-                    📁 {currentProjectName}
-                  </span>
-                )}
-                <span>
-                  {displaySessionId
-                    ? `Session: ${displaySessionId.slice(0, 8)}…`
-                    : sessionId
-                    ? `Session: ${sessionId.slice(0, 8)}…`
-                    : 'New conversation'}
+      {/* Top nav — same Header used by Dashboard / Diary / Settings so
+          the user always has Dashboard / Chat / Diary tabs visible. */}
+      <Header />
+
+      {/* Chat-specific subheader — project / session info + chat-only
+          actions (terminal toggle, clear chat, focus mode). Sits below
+          the unified <Header> nav. */}
+      <div className="bg-card-bg/60 border-b border-card-border px-6 py-2 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2 shrink-0">
+              💬 Claude Code Chat
+              {isThinking && (
+                <span className="flex items-center gap-1 text-xs text-accent-soft font-normal">
+                  <span className="w-2 h-2 bg-accent-soft rounded-full animate-pulse" />
+                  working...
                 </span>
-              </p>
-            </div>
+              )}
+            </h2>
+            <p className="text-xs text-text-muted truncate flex items-center gap-2 min-w-0">
+              {currentProjectName && (
+                <span className="text-text-secondary truncate">
+                  📁 {currentProjectName}
+                </span>
+              )}
+              <span className="shrink-0">
+                {displaySessionId
+                  ? `Session: ${displaySessionId.slice(0, 8)}…`
+                  : sessionId
+                  ? `Session: ${sessionId.slice(0, 8)}…`
+                  : 'New conversation'}
+              </span>
+            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {/* Chat / Terminal view toggle. The Terminal tab only
-                exists when there's an active PTY session — opening
-                a terminal happens from the sidebar's project row.
-                Clicking between tabs preserves BOTH views' state
-                (chat scroll, typed input, attachments AND terminal
-                scroll-back, cursor, live shell). */}
             {terminalCwd && (
               <div className="flex items-center gap-0.5 p-0.5 bg-card-border/30 rounded-md">
                 <button
@@ -779,11 +925,6 @@ function ChatPage() {
                   onClick={() => setViewMode('terminal')}
                   className={`px-3 py-1 text-xs rounded transition-colors ${
                     viewMode === 'terminal'
-                      // Sage (accent-soft) for the terminal tab so it
-                      // visually pairs with the Chat tab's mustard
-                      // (accent) — same olive family, different role
-                      // — without dropping in a Tailwind emerald that
-                      // breaks out of the warm palette.
                       ? 'bg-accent-soft text-text-primary'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -796,30 +937,11 @@ function ChatPage() {
             {viewMode === 'chat' && (
               <button
                 onClick={handleClear}
-                className="px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded transition-colors"
               >
                 Clear Chat
               </button>
             )}
-            <ThemeToggle />
-            {/* Settings — gear icon → /settings route where the user
-                manages backend extensions (Whisper, future plugins). */}
-            <button
-              onClick={() => navigate('/settings')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
-              title="Open settings (extensions, preferences)"
-              aria-label="Open settings"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-              </svg>
-              <span className="hidden sm:inline">Settings</span>
-            </button>
-            {/* Single panel toggle — collapses or expands the right
-                panel (which holds history + recordings + previews).
-                Replaces the old separate Recordings / History drawer
-                buttons. Persists collapsed state to localStorage so the
-                preference survives reloads. */}
             <button
               onClick={() => {
                 if (rightCollapsed) {
@@ -832,7 +954,7 @@ function ChatPage() {
                   try { localStorage.setItem('chat-right-panel-collapsed', '1'); } catch {}
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded transition-colors"
               title={rightCollapsed ? 'Show history / recordings panel' : 'Hide right panel (focus mode)'}
               aria-label={rightCollapsed ? 'Show right panel' : 'Hide right panel'}
             >
@@ -877,6 +999,19 @@ function ChatPage() {
                 re-introduce the empty whitespace we set out to fix. */}
             <div className="flex-1 overflow-y-auto">
               <div className="w-full px-4 py-4">
+                {/* Pinned diary-context card — visible BEFORE the
+                    first send only. After the user types and sends,
+                    the diary entry is inlined as a quoted preface in
+                    the first user-message bubble (and persisted in
+                    the JSONL), so a separate card would be redundant. */}
+                {diaryHandoff && !diaryHandoffConsumed && (
+                  <DiaryContextCard
+                    handoff={diaryHandoff}
+                    consumed={diaryHandoffConsumed}
+                    onDismiss={() => setDiaryHandoff(null)}
+                  />
+                )}
+
                 {isLoadingHistory ? (
                   // Match the empty-chat centring so loading and
                   // empty states feel like the same kind of UI rather
@@ -989,6 +1124,72 @@ function ChatPage() {
 
     </div>
 
+  );
+}
+
+// Pinned read-only context card shown at the top of the message area
+// when this chat was opened from a diary entry's Reply button. While
+// the handoff is unconsumed (i.e. the user hasn't sent yet), the card
+// signals that the next send will be tagged with the diary entry as
+// `additionalSystemPrompt`. Once consumed it stays visible so the user
+// remembers what the chat is grounded in, but the badge changes.
+function DiaryContextCard({
+  handoff,
+  consumed,
+  onDismiss,
+}: {
+  handoff: DiaryHandoff;
+  consumed: boolean;
+  onDismiss: () => void;
+}) {
+  let formattedDate = handoff.entry_created_at;
+  try {
+    formattedDate = new Date(handoff.entry_created_at).toLocaleString(
+      undefined,
+      { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' },
+    );
+  } catch {
+    /* keep ISO fallback */
+  }
+  return (
+    <div className="mb-3 rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 text-text-muted">
+          <span aria-hidden>📓</span>
+          <span className="font-medium text-text-secondary">Diary context</span>
+          <span aria-hidden>·</span>
+          <span>{formattedDate}</span>
+          <span aria-hidden>·</span>
+          <span className="font-mono">{handoff.entry_agent_id}</span>
+          <span
+            className={`ml-1 rounded px-1.5 py-0.5 ${
+              consumed
+                ? 'bg-card-border/40 text-text-muted'
+                : 'bg-accent/20 text-accent'
+            }`}
+          >
+            {consumed ? 'in conversation' : 'will be loaded on send'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-text-muted hover:text-text-primary"
+          title="Hide this card (Claude still has the context)"
+          aria-label="Dismiss diary context card"
+        >
+          ✕
+        </button>
+      </div>
+      {handoff.entry_title && (
+        <div className="mb-1 font-semibold text-text-primary">
+          {handoff.entry_title}
+        </div>
+      )}
+      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap text-text-secondary">
+        {handoff.entry_body}
+      </div>
+    </div>
   );
 }
 

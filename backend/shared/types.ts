@@ -88,6 +88,16 @@ export interface ChatRequest {
   // Optional SDK knobs exposed from the frontend toolbar.
   effort?: EffortLevelWire;
   thinking?: ThinkingConfigWire;
+  /**
+   * DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+   *
+   * Per-turn override forwarded to the SDK's `appendSystemPrompt`
+   * option. Originally used by the diary "Reply" flow but the SDK's
+   * `claude_code` preset doesn't surface this to the model, so the
+   * field is no longer set by any frontend caller. Plumbing kept for
+   * Phase 3 scenarios that may want a working invisible-context knob.
+   */
+  additionalSystemPrompt?: string;
 }
 
 export interface AbortRequest {
@@ -127,4 +137,97 @@ export interface ConversationHistory {
     endTime: string;
     messageCount: number;
   };
+}
+
+// =============================================================================
+// Diary feature (see DIARY_SPEC.md)
+// =============================================================================
+
+export type DiaryTrigger = "manual" | "cron" | "event";
+export type DiaryEntryType = "observation" | "question" | "reminder";
+
+export interface DiaryEntry {
+  id: string;
+  type: DiaryEntryType;
+  title: string;
+  body: string;                       // markdown
+  created_at: string;                 // ISO 8601
+  trigger: DiaryTrigger;
+
+  agent_id: string;
+  model: string;
+
+  context_refs: {
+    recordings: string[];             // recording timestamps consulted
+  };
+
+  read: boolean;
+  reply_session_id?: string;
+
+  // Best-effort telemetry from claude CLI's `result` event.
+  duration_ms?: number;
+  cost_usd?: number;             // captured but not displayed in UI
+  tokens?: { input: number; output: number };
+
+  // Tagged when scheduler ran a delayed entry on boot because the host was
+  // off when the schedule fired. Phase 2 only.
+  delayed?: boolean;
+}
+
+export interface DiaryEntriesFile {
+  version: 1;
+  entries: DiaryEntry[];              // newest first
+}
+
+export interface DiaryDailySchedule {
+  time: string;                       // "HH:MM" 24h, local
+  agent_id: string;
+}
+
+export interface DiaryWeeklySchedule {
+  weekday: number;                    // 0 (Sun) - 6
+  time: string;
+  agent_id: string;
+}
+
+export interface DiaryConfig {
+  enabled: boolean;
+  schedule: {
+    daily?: DiaryDailySchedule;
+    weekly?: DiaryWeeklySchedule;
+  };
+  triggers: {
+    on_recording_complete: { enabled: boolean; agent_id?: string };
+  };
+  notification: {
+    browser: boolean;
+    quiet_hours?: [string, string];   // ["22:00", "08:00"]
+  };
+  daily_quota: number;
+  // Persisted next to the config so the scheduler can detect "already ran today"
+  // without keeping a sidecar file.
+  last_run?: {
+    daily?: { date: string; entry_id: string };
+    weekly?: { date: string; entry_id: string };
+  };
+}
+
+export interface AgentSampling {
+  temperature?: number;
+  max_tokens?: number;
+}
+
+export interface AgentConfig {
+  name: string;
+  description?: string;
+  model: string;                      // passed as --model
+  env: Record<string, string>;        // values may use ${SECRET_NAME}
+  system_prompt: string;
+  sampling?: AgentSampling;
+}
+
+export interface AgentsFile {
+  version: 1;
+  secrets: Record<string, string>;    // unmasked on disk; UI never returns these raw
+  agents: Record<string, AgentConfig>;
 }

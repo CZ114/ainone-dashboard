@@ -30,6 +30,27 @@ import {
   handleListSlashCommands,
   handleExpandSlashCommand,
 } from "./handlers/sessions.ts";
+import {
+  ensureConfigOnBoot,
+  handleAbort as handleDiaryAbort,
+  handleDeleteAgent,
+  handleDeleteEntry,
+  handleDeleteSecret,
+  handleGetConfig,
+  handleGetEntry,
+  handleListAgents,
+  handleListEntries,
+  handleListSecrets,
+  handleMarkRead,
+  handlePatchConfig,
+  handlePutSecret,
+  handleReply,
+  handleStream,
+  handleTestAgent,
+  handleTrigger,
+  handleUpsertAgent,
+} from "./handlers/diary.ts";
+import { init as initDiaryScheduler } from "./diary/scheduler.ts";
 
 export interface AppConfig {
   debugMode: boolean;
@@ -51,7 +72,7 @@ export function createApp(
     "*",
     cors({
       origin: "*",
-      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type"],
     }),
   );
@@ -99,6 +120,31 @@ export function createApp(
 
   app.get("/api/slash-commands", (c) => handleListSlashCommands(c));
   app.post("/api/slash-commands/expand", (c) => handleExpandSlashCommand(c));
+
+  // Diary feature — see DIARY_SPEC.md.
+  app.get("/api/diary/entries", (c) => handleListEntries(c));
+  app.get("/api/diary/entries/:id", (c) => handleGetEntry(c));
+  app.post("/api/diary/entries/:id/read", (c) => handleMarkRead(c));
+  app.post("/api/diary/entries/:id/reply", (c) => handleReply(c));
+  app.delete("/api/diary/entries/:id", (c) => handleDeleteEntry(c));
+  app.post("/api/diary/trigger", (c) =>
+    handleTrigger(c, requestAbortControllers),
+  );
+  app.post("/api/diary/abort", (c) => handleDiaryAbort(c));
+  app.get("/api/diary/stream", (c) => handleStream(c));
+  app.get("/api/diary/config", (c) => handleGetConfig(c));
+  app.patch("/api/diary/config", (c) => handlePatchConfig(c));
+  app.get("/api/diary/agents", (c) => handleListAgents(c));
+  app.post("/api/diary/agents/:id", (c) => handleUpsertAgent(c));
+  app.delete("/api/diary/agents/:id", (c) => handleDeleteAgent(c));
+  app.post("/api/diary/agents/:id/test", (c) => handleTestAgent(c));
+  app.get("/api/diary/secrets", (c) => handleListSecrets(c));
+  app.put("/api/diary/secrets/:name", (c) => handlePutSecret(c));
+  app.delete("/api/diary/secrets/:name", (c) => handleDeleteSecret(c));
+
+  // Persist defaults + start the daily tick. Idempotent.
+  void ensureConfigOnBoot();
+  initDiaryScheduler();
 
   // Static file serving with SPA fallback (only if staticPath is provided)
   // Note: We don't check if path exists since createApp is sync

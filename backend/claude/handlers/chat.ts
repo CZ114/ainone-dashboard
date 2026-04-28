@@ -70,7 +70,7 @@ interface UserSettings {
 // from ~/.claude/settings.json's `env` block so the backend adapts whenever
 // the user retargets their CLI (different model, base URL, extra vars, etc.)
 // instead of forcing a fixed set of keys.
-async function getUserEnvFromSettings(): Promise<Record<string, string>> {
+export async function getUserEnvFromSettings(): Promise<Record<string, string>> {
   const homeDir = getHomeDir();
   if (!homeDir) return {};
 
@@ -336,6 +336,8 @@ async function* executeClaudeCommand(
   permissionMode?: PermissionMode,
   effort?: EffortLevel,
   thinking?: ThinkingConfig,
+  // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+  additionalSystemPrompt?: string,
 ): AsyncGenerator<StreamResponse> {
   // Acquire lock - reject if another command is running
   const lock = acquireLock();
@@ -487,6 +489,12 @@ async function* executeClaudeCommand(
         // thinking on Opus 4.6+, sensible effort per model).
         ...(effort ? { effort } : {}),
         ...(thinking ? { thinking } : {}),
+        // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+        // The SDK's `claude_code` preset apparently doesn't surface
+        // appendSystemPrompt to the model, so no live caller sets
+        // additionalSystemPrompt. Kept so Phase 3 can probe a working
+        // path (e.g. via a different preset) without rebuilding wire.
+        ...(additionalSystemPrompt ? { appendSystemPrompt: additionalSystemPrompt } : {}),
       },
     };
 
@@ -663,6 +671,8 @@ export async function handleChatRequest(
     effort: chatRequest.effort,
     thinking: chatRequest.thinking,
     allowedTools: chatRequest.allowedTools?.length ?? 0,
+    // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+    hasAdditionalSystemPrompt: typeof chatRequest.additionalSystemPrompt === "string",
   });
 
   const stream = new ReadableStream({
@@ -679,6 +689,7 @@ export async function handleChatRequest(
           chatRequest.permissionMode,
           chatRequest.effort,
           chatRequest.thinking,
+          chatRequest.additionalSystemPrompt,
         )) {
           const data = JSON.stringify(chunk) + "\n";
           controller.enqueue(new TextEncoder().encode(data));

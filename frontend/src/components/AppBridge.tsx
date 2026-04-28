@@ -26,6 +26,7 @@
 import { useEffect, useRef } from 'react';
 import { wsClient } from '../api/websocket';
 import { useStore } from '../store';
+import { useDiaryStore } from '../store/diaryStore';
 import type {
   WSMessage,
   SensorDataMessage,
@@ -147,6 +148,20 @@ export function AppBridge() {
     const id = window.setInterval(recordingTick, 100);
     return () => window.clearInterval(id);
   }, [recordingActive, recordingTick]);
+
+  // ---- Diary stream + initial loads (app-lifetime) -----------------
+  // Diary entries can fire from cron while the user is on /dashboard
+  // or /chat, so the stream connection lives at the App root rather
+  // than inside DiaryPage. Same reasoning as the WS subscription
+  // above — keep route changes from severing the data plane.
+  useEffect(() => {
+    void useDiaryStore.getState().loadEntries();
+    void useDiaryStore.getState().loadConfig();
+    const disconnect = useDiaryStore.getState().connectStream();
+    return () => {
+      disconnect();
+    };
+  }, []);
 
   return null;
 }

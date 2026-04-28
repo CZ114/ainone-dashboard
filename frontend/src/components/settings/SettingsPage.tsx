@@ -3,19 +3,26 @@
 // can slot in without restructuring.
 
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   extensionsApi,
   type ExtensionStatus,
 } from '../../api/extensionsApi';
 import { ThemeToggle } from '../ThemeToggle';
 import { ExtensionCard } from './ExtensionCard';
+import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 
-type Tab = 'extensions' | 'about';
+type Tab = 'extensions' | 'diary' | 'about';
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>('extensions');
+  const [searchParams] = useSearchParams();
+  const initialTab: Tab = (() => {
+    const t = searchParams.get('tab');
+    if (t === 'diary' || t === 'extensions' || t === 'about') return t;
+    return 'extensions';
+  })();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [extensions, setExtensions] = useState<ExtensionStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +78,9 @@ export function SettingsPage() {
         <TabButton active={activeTab === 'extensions'} onClick={() => setActiveTab('extensions')}>
           🔌 Extensions
         </TabButton>
+        <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
+          📓 Diary
+        </TabButton>
         <TabButton active={activeTab === 'about'} onClick={() => setActiveTab('about')}>
           About
         </TabButton>
@@ -87,6 +97,7 @@ export function SettingsPage() {
               onRefresh={refresh}
             />
           )}
+          {activeTab === 'diary' && <DiarySettingsPanel />}
           {activeTab === 'about' && <AboutTabBody />}
         </div>
       </main>

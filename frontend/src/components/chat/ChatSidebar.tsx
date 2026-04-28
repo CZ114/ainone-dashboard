@@ -36,6 +36,22 @@ interface ProjectGroup {
   displayName: string;
   sessions: SessionSummary[];
   latestUpdatedAt: string;
+  // 'diary' means this project is the "diary-replies" auto-managed
+  // folder where /diary's Reply button sends new chats. We pin it to
+  // the top of the list and color it differently so the user can
+  // always find their diary follow-ups quickly.
+  kind: 'diary' | 'normal';
+}
+
+// Folder name we treat as the diary-replies project. Backend ensures
+// the directory exists on first reply, frontend just needs to recognise
+// the suffix on the path.
+const DIARY_REPLIES_BASENAME = 'diary-replies';
+
+function isDiaryRepliesCwd(cwd: string): boolean {
+  if (!cwd) return false;
+  const segs = cwd.replace(/\\/g, '/').split('/').filter(Boolean);
+  return segs[segs.length - 1] === DIARY_REPLIES_BASENAME;
 }
 
 const EXPAND_STATE_KEY = 'chat-sidebar-expanded-projects';
@@ -93,11 +109,14 @@ function groupByProject(
     const key = canonicalCwd(cwd);
     let group = map.get(key);
     if (!group) {
+      const kind: 'diary' | 'normal' = isDiaryRepliesCwd(cwd) ? 'diary' : 'normal';
       group = {
         cwd,
-        displayName: getDisplayName(cwd),
+        displayName:
+          kind === 'diary' ? '📓 Diary replies' : getDisplayName(cwd),
         sessions: [],
         latestUpdatedAt: session.updatedAt,
+        kind,
       };
       map.set(key, group);
     }
@@ -118,12 +137,14 @@ function groupByProject(
     if (!path) continue;
     const key = canonicalCwd(path);
     if (!map.has(key)) {
+      const kind: 'diary' | 'normal' = isDiaryRepliesCwd(path) ? 'diary' : 'normal';
       map.set(key, {
         cwd: path,
-        displayName: getDisplayName(path),
+        displayName: kind === 'diary' ? '📓 Diary replies' : getDisplayName(path),
         sessions: [],
         // Use now() so fresh-added projects float to the top
         latestUpdatedAt: new Date().toISOString(),
+        kind,
       });
     }
   }
@@ -136,11 +157,17 @@ function groupByProject(
     );
   }
 
-  return Array.from(map.values()).sort(
-    (a, b) =>
+  return Array.from(map.values()).sort((a, b) => {
+    // Diary group is pinned to the very top regardless of activity. Two
+    // diary groups would never realistically coexist (only one folder),
+    // but if they did, fall through to the normal updatedAt sort.
+    if (a.kind === 'diary' && b.kind !== 'diary') return -1;
+    if (b.kind === 'diary' && a.kind !== 'diary') return 1;
+    return (
       new Date(b.latestUpdatedAt || 0).getTime() -
-      new Date(a.latestUpdatedAt || 0).getTime(),
-  );
+      new Date(a.latestUpdatedAt || 0).getTime()
+    );
+  });
 }
 
 function loadExpandState(): Record<string, boolean> {
@@ -427,10 +454,15 @@ export function ChatSidebar({
               return (
                 <div key={group.cwd}>
                   {/* Project header row: click the name/arrow to fold,
-                      click the + to start a new chat here. */}
+                      click the + to start a new chat here. The diary
+                      group gets a sage-tinted background + left bar so
+                      it visually anchors to its pinned position at the
+                      top of the list. */}
                   <div
                     className={`group/row flex items-center gap-1 px-2 py-2 rounded-md transition-colors ${
-                      hasActive
+                      group.kind === 'diary'
+                        ? 'bg-accent-soft/15 border-l-2 border-accent-soft hover:bg-accent-soft/25'
+                        : hasActive
                         ? 'bg-accent/10'
                         : 'hover:bg-card-border/40'
                     }`}
