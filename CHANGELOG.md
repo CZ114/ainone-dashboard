@@ -2,6 +2,29 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.1.2 — 2026-04-28
+
+### Fixed
+
+- **Disabling the Whisper extension no longer crashes the backend.**
+  Toggling Whisper off was running `on_stop`, dropping the
+  `WhisperModel` reference, and letting GC run CT2's CUDA destructor —
+  which segfaults on Windows + GPU (`STATUS_STACK_BUFFER_OVERRUN`,
+  exit code `0xC0000409`). The supervisor only respawns on exit
+  code 42, so the whole backend went down. Same root cause as the
+  in-process model swap that's already disabled (§15.7).
+
+### Internal
+
+- New `Extension.release_on_stop: bool = True` opt-out flag.
+  Extensions whose native resources are unsafe to free mid-process
+  set this to `False`; `WhisperLocalExtension` does.
+- `ExtensionManager` keeps a `_retained_instances` dict for those
+  opt-outs. `disable()` parks the instance there after `on_stop`;
+  `enable()` pops it back, so the already-loaded model survives the
+  toggle. Re-enable is essentially instant — `on_start` short-circuits
+  the load because `self._model` is still set.
+
 ## v1.1.1 — 2026-04-28
 
 ### Added

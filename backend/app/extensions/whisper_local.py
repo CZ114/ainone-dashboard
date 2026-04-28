@@ -45,6 +45,13 @@ class WhisperLocalExtension(Extension):
     )
     version = "0.1.0"
 
+    # Refuse manager-side GC after `disable`. Dropping the WhisperModel
+    # mid-process triggers CT2's CUDA destructor, which segfaults on
+    # Windows + GPU (exit code 0xC0000409) and takes the supervisor down
+    # with it. The model stays in VRAM until the user actually restarts
+    # the backend; on_stop just unsubscribes from audio.
+    release_on_stop = False
+
     # Model size/quality/speed tradeoff:
     #   tiny           ~75 MB   fastest, hallucinates on noise
     #   base           ~150 MB  CPU-friendly, weak on accents
@@ -679,9 +686,16 @@ class WhisperLocalExtension(Extension):
                 pass
         self._ws_clients.clear()
         self._buffer.clear()
-        self._model = None
         self._loop = None
         self._conn_manager = None
+        # Deliberately NOT clearing self._model. Dropping the WhisperModel
+        # ref triggers CT2's CUDA destructor on the next GC pass, which
+        # segfaults on Windows + GPU (exit code 0xC0000409) — same root
+        # cause as the in-process model swap we already disabled. The
+        # manager retains this instance (release_on_stop = False) so the
+        # ref keeps the model alive in VRAM until process exit. Re-enable
+        # reuses this instance and on_start short-circuits the load
+        # because self._model is already set.
 
     # -------- Cache enumeration / deletion ---------------------------------
 

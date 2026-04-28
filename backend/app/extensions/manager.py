@@ -54,6 +54,13 @@ class InstallJob:
 class ExtensionManager:
     def __init__(self):
         self._instances: Dict[str, Extension] = {}
+        # Disabled instances whose `release_on_stop` is False — kept
+        # alive so their destructors don't run while the backend is up.
+        # Without this, faster-whisper's CUDA model destructor segfaults
+        # on Windows the moment the local `inst` goes out of scope at
+        # the end of `disable()`. Re-enable reuses the entry, so the
+        # already-loaded model survives the toggle.
+        self._retained_instances: Dict[str, Extension] = {}
         self._install_jobs: Dict[str, InstallJob] = {}
         self._app: Optional[FastAPI] = None
 
@@ -200,7 +207,10 @@ class ExtensionManager:
             update_extension_state(ext_id, {"enabled": True})
             return
         update_extension_state(ext_id, {"enabled": True})
-        inst = cls()
+        # Reuse a retained instance if one survived a previous disable.
+        # Its native resources (e.g. a loaded CUDA Whisper model) are
+        # still live, so re-enable is essentially instant.
+        inst = self._retained_instances.pop(ext_id, None) or cls()
         # Same ordering rationale as init_from_state: config first, so
         # on_start sees the user's preferred values.
         config = info.get("config", {})
@@ -218,6 +228,12 @@ class ExtensionManager:
                 await inst.on_stop()
             except Exception as e:
                 print(f"[Extensions] Stop during disable failed: {e}")
+            # Hold the instance if it opted out of GC-on-stop. Without
+            # this the local `inst` ref dies at function exit, GC runs
+            # the WhisperModel destructor, and CT2 segfaults the whole
+            # backend (Windows + CUDA). Re-enable will pop it back.
+            if not getattr(inst, "release_on_stop", True):
+                self._retained_instances[ext_id] = inst
 
     async def uninstall(self, ext_id: str) -> None:
         """Mark as not installed. We deliberately do NOT `pip uninstall`
