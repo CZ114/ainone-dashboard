@@ -42,6 +42,13 @@ class Extension:
     description: str = ""
     version: str = ""
 
+    # If False, the manager retains the instance after `disable` instead
+    # of letting it fall out of scope. Use this when an extension owns
+    # a native resource whose destructor is unsafe to run mid-process
+    # (e.g. faster-whisper / CT2 segfaults on CUDA model GC on Windows).
+    # Default True keeps existing extensions GC'd promptly.
+    release_on_stop: bool = True
+
     async def on_install(self, ctx: InstallContext) -> None:
         """Heavy work: pip install deps, download model weights, etc.
         Raise on failure; the manager will record `error` into state."""

@@ -1551,6 +1551,30 @@ The `requires_reload: true` schema flag on `model_name` surfaces this
 in the UI as an amber "Restart required" badge plus a "Restart now"
 button (see § 15.10).
 
+**Disable also can't drop the model (v1.1.2).** Same destructor, same
+crash class. Before the fix, toggling Whisper's enable switch off ran
+`on_stop`, which set `self._model = None`; the local `inst` ref then
+fell out of scope at the end of `manager.disable()`, GC ran the CT2
+CUDA destructor, and the backend exited with `0xC0000409`
+(`STATUS_STACK_BUFFER_OVERRUN`). The supervisor only respawns on exit
+code 42, so it shut down too — leaving the user with HTTP 500 from
+the frontend.
+
+Fix is two-sided:
+
+- `Extension` gains a `release_on_stop: bool = True` class attribute;
+  `WhisperLocalExtension` overrides it to `False`.
+- `ExtensionManager` keeps a parallel `_retained_instances` dict.
+  `disable()` parks any `release_on_stop = False` instance there
+  *after* `on_stop`; `enable()` pops it back, so the already-loaded
+  model survives the toggle. `on_stop` itself no longer touches
+  `self._model`.
+
+Re-enable is essentially free: `on_start` already short-circuits the
+load when `self._model is not None`, so the audio bridge resubscribes
+and the existing CUDA model takes the next chunk. True VRAM release
+still requires a backend restart — same rule as the swap path.
+
 ### 15.8 Configuration Framework
 
 **Schema declaration on the class** —
