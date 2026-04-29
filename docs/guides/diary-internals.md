@@ -96,6 +96,28 @@ Diary can talk to Anthropic, DeepSeek, MiniMax, Z.ai (GLM), Moonshot
 That's it. There's no "provider" CLI flag. Routing is 100%
 env-driven.
 
+### Where the secret values come from
+
+Agent env blocks reference values via `${SECRET_NAME}`. At spawn
+time, `resolveSecrets` looks up the name in this order:
+
+1. **`agents.json` `secrets` block** — populated by the AgentEditor
+   simple-mode "API key" paste, or by the explicit Secrets manager.
+   Highest precedence so a UI paste always wins over anything else.
+2. **`process.env`** — populated by `cli/node.ts:loadEnvFiles` which
+   reads `<repo>/.env` (or `<repo>/backend/.env`, or
+   `<repo>/backend/claude/.env`, first match wins) at boot via Node's
+   native `process.loadEnvFile`. Lets users keep keys out of the
+   diary JSON entirely. See `<repo>/.env.example` for the canonical
+   variable names.
+3. **Literal `${NAME}` kept** — runner pre-flight rejects this case
+   with a clear "re-paste your API key, or put `NAME=…` in
+   `<repo>/.env`" error before the spawn happens.
+
+To keep keys out of `agents.json` completely: don't paste in the
+editor; just put `MINIMAX_KEY=sk-...` (etc.) in `.env` and restart
+the backend.
+
 ### Per-agent env isolation (this prevents bugs)
 
 When `agent.env.ANTHROPIC_BASE_URL` is set, runner:

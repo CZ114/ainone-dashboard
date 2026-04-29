@@ -235,7 +235,7 @@ export function AgentEditor({
 
   // Shows one line under the API key input letting the user know what
   // we'll do with it (auto-secret-create) or that they can leave it
-  // alone (existing secret reused).
+  // alone (existing secret reused / .env fallback).
   const apiKeyHint = (() => {
     if (provider.id === 'custom') return 'Stored as ANTHROPIC_AUTH_TOKEN env in this agent.';
     const sname = suggestSecretName(provider);
@@ -243,8 +243,11 @@ export function AgentEditor({
     if (apiKeyTouched && apiKey.length > 0) {
       return `Will be saved as secret ${sname}${exists ? ' (overwrites existing).' : '.'}`;
     }
-    if (exists) return `Reusing existing secret ${sname}. Leave blank to keep it; type a new key to overwrite.`;
-    return `Will be saved as secret ${sname}.`;
+    if (exists) {
+      return `Reusing existing secret ${sname}. Leave blank to keep it; type a new key to overwrite.`;
+    }
+    // No secret saved AND user hasn't pasted — surface the .env path.
+    return `Will be saved as secret ${sname}. Or leave blank and put \`${sname}=your_key\` in <repo>/.env (then restart backend).`;
   })();
 
   return (

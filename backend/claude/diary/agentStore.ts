@@ -51,9 +51,19 @@ async function fallbackAgent(): Promise<AgentConfig> {
 }
 
 /**
- * Resolve `${SECRET_NAME}` placeholders inside an env block. Unknown
- * placeholders are left as-is so misconfiguration shows up loudly in the
- * resulting claude-cli error rather than silently emptying a value.
+ * Resolve `${SECRET_NAME}` placeholders inside an env block.
+ *
+ * Lookup order:
+ *   1. agents.json `secrets` block (UI-managed, persisted in
+ *      backend/data/diary/agents.json) — highest precedence so a key
+ *      pasted in the AgentEditor always wins.
+ *   2. process.env (populated from `.env` at boot via
+ *      `cli/node.ts:loadEnvFiles`) — fallback so users who prefer to
+ *      keep keys out of the diary JSON can put `MINIMAX_KEY=sk-...`
+ *      in `<repo>/.env` and never paste anything via the UI.
+ *   3. Literal placeholder kept on miss — runner pre-flight rejects
+ *      this case with a clear error rather than letting `${X}` reach
+ *      an HTTP header.
  */
 export function resolveSecrets(
   env: Record<string, string>,
@@ -62,8 +72,15 @@ export function resolveSecrets(
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     out[k] = v.replace(/\$\{([A-Z0-9_]+)\}/gi, (match, name) => {
-      const replacement = secrets[name];
-      return typeof replacement === "string" ? replacement : match;
+      const fromJson = secrets[name];
+      if (typeof fromJson === "string" && fromJson.length > 0) {
+        return fromJson;
+      }
+      const fromEnv = process.env[name];
+      if (typeof fromEnv === "string" && fromEnv.length > 0) {
+        return fromEnv;
+      }
+      return match;
     });
   }
   return out;
