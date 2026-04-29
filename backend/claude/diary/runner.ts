@@ -79,6 +79,29 @@ export class ConcurrentRunError extends Error {
  * `type` values so a future Claude release adding new event kinds doesn't
  * break parsing.
  */
+/**
+ * Defence-in-depth: strip anything that looks like an API key from
+ * captured CLI output before logging it or returning it to the
+ * frontend. Empirically the bundled claude CLI doesn't print
+ * Authorization headers to stderr today, but the runner has no
+ * control over future CLI versions, and `stderr_excerpt` rides on
+ * the diary error event back to every connected /diary tab. Belt
+ * and suspenders — keep the auth values from ever reaching a log
+ * or the wire.
+ */
+function redactSecrets(text: string): string {
+  if (!text) return text;
+  return text
+    // sk-... style (Anthropic, OpenAI, DeepSeek, MiniMax, Kimi, ...)
+    .replace(/\b(sk-[A-Za-z0-9_-]{8,})/g, "sk-•••REDACTED•••")
+    // Bearer <token>
+    .replace(/Bearer\s+[A-Za-z0-9._-]{8,}/g, "Bearer •••REDACTED•••")
+    // x-api-key: <token>
+    .replace(/(x-api-key:\s*)[A-Za-z0-9._-]{8,}/gi, "$1•••REDACTED•••")
+    // Authorization: ... (catch any other auth header style)
+    .replace(/(Authorization:\s*)[^\s,]+/gi, "$1•••REDACTED•••");
+}
+
 async function* readJsonLines(
   child: DiaryChild,
 ): AsyncGenerator<Record<string, unknown>> {
@@ -204,7 +227,10 @@ async function runAgentImpl(
       const missingSecretName = v.slice(2, -1);
       throw new AgentError(
         `Env var ${k} references secret \${${missingSecretName}} but no such secret is saved. ` +
-          `Open the agent in the editor and re-paste your API key, or add the secret manually under Settings → Diary → Secrets.`,
+          `Three ways to fix: ` +
+          `(1) re-paste the API key in the agent editor, ` +
+          `(2) add it under Settings → Diary → Secrets, or ` +
+          `(3) put \`${missingSecretName}=your_key\` in <repo>/.env and restart the backend.`,
       );
     }
   }
@@ -304,14 +330,16 @@ async function runAgentImpl(
       const line = stderrLineBuf.slice(0, nl).replace(/\r$/, "");
       stderrLineBuf = stderrLineBuf.slice(nl + 1);
       if (line.trim().length > 0) {
-        logger.chat.info(`[diary cli stderr] ${line}`);
+        logger.chat.info(`[diary cli stderr] ${redactSecrets(line)}`);
       }
       nl = stderrLineBuf.indexOf("\n");
     }
   });
   child.on("exit", (code, signal) => {
     if (stderrLineBuf.trim().length > 0) {
-      logger.chat.info(`[diary cli stderr] ${stderrLineBuf.trim()}`);
+      logger.chat.info(
+        `[diary cli stderr] ${redactSecrets(stderrLineBuf.trim())}`,
+      );
       stderrLineBuf = "";
     }
     logger.chat.info(
@@ -437,28 +465,28 @@ async function runAgentImpl(
     // exit-code path below.
     throw new AgentError(
       errorMessage ?? "Authentication failed",
-      stderrBuf.slice(-500),
+      redactSecrets(stderrBuf.slice(-500)),
     );
   }
   if (aborted) {
-    throw new AgentError("Run aborted", stderrBuf.slice(-500));
+    throw new AgentError("Run aborted", redactSecrets(stderrBuf.slice(-500)));
   }
   if (timedOut) {
     throw new AgentError(
       `Timed out after ${timeoutMs} ms`,
-      stderrBuf.slice(-500),
+      redactSecrets(stderrBuf.slice(-500)),
     );
   }
   if (exitCode !== 0) {
     throw new AgentError(
-      `claude exited ${exitCode}: ${stderrBuf.slice(-500) || "(no stderr)"}`,
-      stderrBuf.slice(-500),
+      `claude exited ${exitCode}: ${redactSecrets(stderrBuf.slice(-500)) || "(no stderr)"}`,
+      redactSecrets(stderrBuf.slice(-500)),
     );
   }
   if (isError) {
     throw new AgentError(
       errorMessage || "claude reported an error",
-      stderrBuf.slice(-500),
+      redactSecrets(stderrBuf.slice(-500)),
     );
   }
 
@@ -467,7 +495,7 @@ async function runAgentImpl(
   // events came through.
   const finalBody = (body || resultText || "").trim();
   if (!finalBody) {
-    throw new AgentError("Empty response from claude", stderrBuf.slice(-500));
+    throw new AgentError("Empty response from claude", redactSecrets(stderrBuf.slice(-500)));
   }
 
   return {
@@ -479,6 +507,11 @@ async function runAgentImpl(
       inputTokens > 0 || outputTokens > 0
         ? { input: inputTokens, output: outputTokens }
         : undefined,
-    stderr_excerpt: stderrBuf.length > 0 ? stderrBuf.slice(-500) : undefined,
+    stderr_excerpt:
+      stderrBuf.length > 0 ? redactSecrets(stderrBuf.slice(-500)) : undefined,
   };
 }
+
+// Exported for use in tests / handlers that build their own error
+// payloads from runner-adjacent strings.
+export { redactSecrets };

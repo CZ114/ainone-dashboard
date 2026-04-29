@@ -1109,7 +1109,31 @@ read first" both client-side (button disabled) and server-side
 seen. Backend emits a `deleted` event to the NDJSON stream so multi-
 tab views stay in sync.
 
-### 17.17 EventBus crash hardening
+### 17.17 `.env` fallback for secrets
+
+`resolveSecrets` looks up `${NAME}` in this order: `agents.json`
+secrets block first (UI-managed), `process.env` second (loaded from
+`<repo>/.env` at boot via Node's native `process.loadEnvFile` —
+no `dotenv` dep), then the literal placeholder is kept (which the
+runner pre-flight rejects with a clear error).
+
+UI paste always wins over `.env` so swapping a key in the editor is
+predictable. Users who want zero plaintext in
+`backend/data/diary/agents.json` can skip the API-key paste step and
+populate `<repo>/.env` instead — see `.env.example` for the canonical
+variable names.
+
+### 17.18 Stderr / error redaction
+
+Defence-in-depth: `runner.redactSecrets` strips anything matching
+`sk-...`, `Bearer ...`, `x-api-key: ...`, or `Authorization: ...`
+from CLI stderr **before** logging it or attaching it to
+`AgentError.stderr_excerpt`. Empirically the bundled CLI doesn't
+print Authorization headers today, but the runner has no control
+over future versions, and `stderr_excerpt` rides on the diary error
+event back to every connected `/diary` tab.
+
+### 17.19 EventBus crash hardening
 
 `backend/claude/diary/eventBus.ts` parks a no-op `'error'` listener at
 module load. Without this, emitting `{ type: 'error' }` when no
