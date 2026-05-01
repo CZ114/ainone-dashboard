@@ -925,6 +925,9 @@ function selectPatient(id) {
       </div>
     </div>
   `;
+
+  // 主面板渲染完后启动该患者对应的 sensor 流
+  startSensorBoard(p.sensorProfile);
 }
 
 // ===== Sensor Board 动画 =====
@@ -1023,16 +1026,9 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-// 选择患者后启动对应 sensor profile
-function selectPatientWithSensors(id) {
-  selectPatient(id);
-  startSensorBoard(PATIENTS[id].sensorProfile);
-}
-window.selectPatient = selectPatientWithSensors;
-
 // 初始化
 renderPatientList();
-selectPatientWithSensors("P001");
+selectPatient("P001");
 </script>
 
 </body>
