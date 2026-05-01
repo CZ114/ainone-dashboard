@@ -509,7 +509,7 @@ body {
 
   <!-- ===== 左侧：患者列表 ===== -->
   <aside class="sidebar">
-    <h3>患者列表 (3)</h3>
+    <h3>患者列表 (4 案例)</h3>
     <input class="search" placeholder="🔍 搜索 ID / 姓名" />
 
     <div id="patientList"></div>
@@ -810,23 +810,33 @@ const STAGE_NAMES = ["SCD", "MCI", "Mild", "Moderate", "Severe"];
 // ===== MIND 真实数据源 =====
 const MIND_BASE = "https://raw.githubusercontent.com/Jewelina95/ad-mind-pipeline/main/data_v2";
 const MIND_PATIENTS_META = {
-  "P01": { age: 68, sex: "M", edu: 12, pattern: "linear",      bpsd: 2 },
-  "P02": { age: 73, sex: "M", edu: 6,  pattern: "stepwise",    bpsd: 1 },
-  "P03": { age: 70, sex: "M", edu: 16, pattern: "plateau",     bpsd: 0 },
-  "P04": { age: 75, sex: "F", edu: 9,  pattern: "fluctuation", bpsd: 1 },
-  "P05": { age: 72, sex: "M", edu: 12, pattern: "acute_event", bpsd: 0 }
+  "P01": { age: 68, sex: "M", edu: 12, pattern: "linear",      bpsd: 2, label: "线性退化 · 中等储备" },
+  "P02": { age: 73, sex: "M", edu: 6,  pattern: "stepwise",    bpsd: 1, label: "阶梯式 · 低教育" },
+  "P03": { age: 70, sex: "M", edu: 16, pattern: "plateau",     bpsd: 0, label: "平台期 · 高储备" },
+  "P04": { age: 75, sex: "F", edu: 9,  pattern: "fluctuation", bpsd: 1, label: "波动型 · 女性" }
 };
 const mindCache = {};
+async function fetchJsonl(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const txt = await r.text();
+    return txt.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  } catch (e) { return []; }
+}
 async function fetchMindPatient(id) {
   if (mindCache[id]) return mindCache[id];
-  const [persona, dashboard, clinical, physio, behavior] = await Promise.all([
+  const [persona, dashboard, clinical, physio, behavior, bpsd, ema, notes] = await Promise.all([
     fetch(`${MIND_BASE}/${id}/persona.json`).then(r => r.json()),
     fetch(`${MIND_BASE}/${id}/dashboard.json`).then(r => r.json()),
     fetch(`${MIND_BASE}/${id}/insights_clinical.json`).then(r => r.json()),
     fetch(`${MIND_BASE}/${id}/insights_physio.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/insights_behavior.json`).then(r => r.json())
+    fetch(`${MIND_BASE}/${id}/insights_behavior.json`).then(r => r.json()),
+    fetchJsonl(`${MIND_BASE}/${id}/bpsd_events.jsonl`),
+    fetchJsonl(`${MIND_BASE}/${id}/ema.jsonl`),
+    fetchJsonl(`${MIND_BASE}/${id}/notes.jsonl`)
   ]);
-  mindCache[id] = { persona, dashboard, clinical, physio, behavior };
+  mindCache[id] = { persona, dashboard, clinical, physio, behavior, bpsd, ema, notes };
   return mindCache[id];
 }
 
@@ -858,43 +868,21 @@ function kbToWiki(code) {
 }
 
 // ===== 当前视图状态 =====
-let currentMindView = 'mind';   // 'mind' | 'wiki'
+let currentMindView = 'wiki';   // 'mind' | 'wiki' — 默认 WIKI
 let currentMindId = null;
 let customPatient = null;
 
 // ===== 渲染患者列表 =====
 function renderPatientList() {
   const list = document.getElementById('patientList');
-  const mockHtml = Object.values(PATIENTS).map(p => {
-    const stageClass =
-      p.stageIdx === -1 ? 'stage-scd' :
-      p.stageIdx === 1  ? 'stage-mci' :
-      p.stageIdx === 2  ? 'stage-mild' :
-      p.stageIdx === 3  ? 'stage-mod' :
-      p.stageIdx === 4  ? 'stage-sev' : 'stage-scd';
-    return `
-      <div class="patient-card" data-id="${p.id}" onclick="selectPatient('${p.id}')">
-        <div class="name">${p.name}${p.alert ? '<span class="alert-dot"></span>' : ''}</div>
-        <div class="meta">${p.id} · ${p.age}岁 ${p.sex} · MMSE ${p.lastMMSE}</div>
-        <span class="stage ${stageClass}">${p.stage}</span>
-      </div>
-    `;
-  }).join('');
-
-  const mindHtml = Object.entries(MIND_PATIENTS_META).map(([id, m]) => `
+  const html = Object.entries(MIND_PATIENTS_META).map(([id, m]) => `
     <div class="patient-card" data-id="${id}" onclick="selectMindPatient('${id}')">
-      <div class="name">${id} <span style="font-size:9px;color:#7c3aed;background:#f5f3ff;padding:1px 5px;border-radius:3px;font-weight:600">MIND</span></div>
-      <div class="meta">${m.age}岁 ${m.sex} · 教育${m.edu}年 · ${m.pattern}</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px">BPSD ${m.bpsd}次 · 30天纵向</div>
+      <div class="name">${id}</div>
+      <div class="meta">${m.age}岁 ${m.sex} · 教育${m.edu}年</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">${m.label} · BPSD ${m.bpsd}次 · 30天</div>
     </div>
   `).join('');
-
-  list.innerHTML = `
-    <div style="font-size:11px;color:#7c3aed;margin:6px 0 6px;font-weight:600">🧠 MIND Pipeline · 真实合成数据 (5)</div>
-    ${mindHtml}
-    <div style="font-size:11px;color:var(--teal);margin:14px 0 6px;font-weight:600">📚 WIKI KB Demo · Mock (3)</div>
-    ${mockHtml}
-  `;
+  list.innerHTML = html;
 }
 
 // ===== 选 MIND 真实患者 =====
@@ -926,6 +914,273 @@ function renderCurrentView(id, data) {
   } else {
     renderMindView(id, data);
   }
+  // 渲染完后启动 sensor 流（按 alert 等级选 profile）
+  const alert = data.dashboard.alert_level;
+  const profile = alert === 'red' ? 'alert' : alert === 'yellow' ? 'mci' : 'healthy';
+  startSensorBoard(profile);
+}
+
+// ===== 3 cadence 报告 (1h / 7d / 30d) - 两个视角共用入口、不同内容 =====
+function renderCadenceRow(id, data) {
+  const c = data.clinical;
+  const bpsd = data.bpsd || [];
+  const ema = data.ema || [];
+  const lastEma = ema.length ? ema[ema.length - 1] : null;
+  const day30Alert = data.dashboard.alert_level;
+
+  // 每个 cadence 的预览文字
+  const cads = [
+    {
+      k: '1h', ic: '⏱', label: '小时报告 · Hourly',
+      summary: lastEma ? `mood ${lastEma.mood ?? '-'} · anxiety ${lastEma.anxiety ?? '-'} · sleep ${lastEma.sleep ?? '-'}` : '待采集 EMA',
+      level: lastEma && (lastEma.mood < 4 || lastEma.anxiety > 6) ? 'warn' : 'ok'
+    },
+    {
+      k: '7d', ic: '📊', label: '周报 · Weekly',
+      summary: bpsd.length > 0 ? `本周末 ${bpsd.slice(-1)[0].type || 'BPSD'} · ${c.intervention_priority?.length || 0} 项干预` : '稳定',
+      level: bpsd.length > 1 ? 'warn' : 'ok'
+    },
+    {
+      k: '30d', ic: '📈', label: '月报 · Monthly',
+      summary: `${c.stage_inclination} · 置信 ${(c.stage_confidence*100).toFixed(0)}%`,
+      level: day30Alert === 'red' ? 'alert' : day30Alert === 'yellow' ? 'warn' : 'ok'
+    }
+  ];
+
+  const frameworkLabel = currentMindView === 'wiki' ? '📚 WIKI 风' : '🧠 MIND 风';
+  const frameworkColor = currentMindView === 'wiki' ? 'var(--teal)' : '#7c3aed';
+
+  return `
+    <div class="section">
+      <h2>📋 ${frameworkLabel} 三层报告 <span class="desc">同一份数据 · 3 个时间尺度的不同结构化汇报 · 点击展开完整内容</span></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        ${cads.map(cd => `
+          <div class="cad ${cd.level}" onclick="openMindCadenceReport('${id}','${cd.k}')" style="text-align:left;padding:14px;border-width:2px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:700;color:${frameworkColor}">${cd.ic} ${cd.label}</span>
+              <span style="font-size:10px;background:${cd.level==='alert'?'#fee2e2':cd.level==='warn'?'#fef3c7':'#dcfce7'};color:${cd.level==='alert'?'#7f1d1d':cd.level==='warn'?'#713f12':'#14532d'};padding:1px 6px;border-radius:3px">${cd.level==='alert'?'急':cd.level==='warn'?'关注':'OK'}</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5">${cd.summary}</div>
+            <div style="font-size:10px;color:${frameworkColor};margin-top:8px;font-weight:600">→ 查看完整报告</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// 实时传感器板（DEMO）— 永远显示
+function renderRealtimeBoard(id) {
+  return `
+    <div class="section" style="padding:14px 16px">
+      <h2>📡 实时传感器板 <span class="desc">8 通道 · 滚动波形 · ${id ? `Patient ${id}` : ''}</span>
+        <span class="badge" style="background:#fef3c7;color:#854d0e;margin-left:auto;border:1px solid #f59e0b">⚠ DEMO</span>
+      </h2>
+      <div class="sensor-board-head">
+        <span style="color:#fbbf24"><span class="sb-dot" style="background:#fbbf24"></span>SIMULATED</span>
+        <span class="sep">|</span>
+        <span class="sr">50 Hz</span>
+        <span class="sep">|</span>
+        <span>Patient: <span class="pid">${id || '-'}</span></span>
+        <span class="sep">|</span>
+        <span id="sbClock">${new Date().toTimeString().slice(0,8)}</span>
+        <span class="sep">|</span>
+        <span style="color:#94a3b8;font-size:11px">真实数据需本机 backend + ESP32 (<a href="index.html" style="color:#fbbf24">查看说明</a>)</span>
+      </div>
+      <div class="channel-grid" id="channelGrid">
+        ${CHANNELS.map(c => `
+          <div class="ch-card" data-ch="${c.id}">
+            <div class="ch-name">
+              <span>${c.id}</span>
+              <span class="ch-tag">${c.short}</span>
+            </div>
+            <div class="ch-val" id="val-${c.id}">— <small>${c.unit}</small></div>
+            <svg class="ch-wave" viewBox="0 0 240 36" preserveAspectRatio="none">
+              <path id="wave-${c.id}" d="" />
+            </svg>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ===== 5 cadence 报告生成器（双视角差异化） =====
+function openMindCadenceReport(id, cadence) {
+  const data = mindCache[id];
+  if (!data) return;
+  const meta = MIND_PATIENTS_META[id];
+  const c = data.clinical;
+  const ph = data.physio;
+  const bh = data.behavior;
+  const d = data.dashboard;
+  const bpsd = data.bpsd || [];
+  const ema = data.ema || [];
+  const notes = data.notes || [];
+
+  const titleMap = { '5min':'⚡ 5 分钟实时报告', '1h':'⏱ 1 小时报告', '1d':'📅 日报', '7d':'📊 周报', '30d':'📈 月报' };
+  let title = titleMap[cadence] + ` · ${id}` + (currentMindView==='wiki' ? ' · 📚 WIKI 风' : ' · 🧠 MIND 风');
+  let html = '';
+
+  // 通用辅助
+  const lastEma = ema.length ? ema[ema.length-1] : null;
+  const lastDayBpsd = bpsd.filter(e => e.day >= meta.bpsd === 0 ? 28 : (bpsd.length ? bpsd[bpsd.length-1].day - 1 : 28));
+
+  if (currentMindView === 'wiki') {
+    // ============ WIKI 风 ============
+    if (cadence === '5min') {
+      html = `
+        <h3>当前窗口</h3>
+        <p>过去 5 分钟内 EDA / HR / IMU 实时检查。</p>
+        <h3>触发规则（来自 wiki KB）</h3>
+        <ul>
+          <li>EDA + HR 同时上升 → 可能 BPSD 激越前兆 (<a href="${WIKI_BASE_URL}/bpsd_agitation.md" target="_blank">bpsd_agitation ↗</a>)</li>
+          <li>HR > 基线 +30% 持续 60s → 警报</li>
+          <li>IMU 高加速度 → <a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">跌倒检测</a></li>
+        </ul>
+        <h3>本患者状态</h3>
+        <p>${bpsd.length > 0 ? `本月共 ${bpsd.length} 次 BPSD 事件 · 最近一次：Day ${bpsd[bpsd.length-1].day} ${bpsd[bpsd.length-1].type || ''} (${bpsd[bpsd.length-1].duration_min || '?'} 分钟)` : '过去 30 天无急性 BPSD 事件'}</p>
+        <div class="cite-row">📚 KB 来源：<a href="${WIKI_BASE_URL}/bpsd.md" target="_blank">wiki/concepts/bpsd.md</a></div>
+      `;
+    } else if (cadence === '1h') {
+      html = `
+        <h3>本小时关注指标（wiki 框架）</h3>
+        <table>
+          <tr><th>指标</th><th>当前</th><th>解读</th></tr>
+          <tr><td>EMA mood</td><td><code>${lastEma?.mood ?? '-'}/10</code></td><td>${lastEma?.mood < 4 ? '低 → 抑郁风险' : '正常'}</td></tr>
+          <tr><td>EMA anxiety</td><td><code>${lastEma?.anxiety ?? '-'}/10</code></td><td>${lastEma?.anxiety > 5 ? '高 → BPSD 焦虑' : '正常'}</td></tr>
+          <tr><td>EMA sleep</td><td><code>${lastEma?.sleep ?? '-'}/10</code></td><td>${lastEma?.sleep < 5 ? '差 → 睡眠紊乱' : '正常'}</td></tr>
+        </table>
+        <h3>wiki KB 短时窗规则</h3>
+        <ul>
+          <li>HRV 持续 < 自身基线 -1SD → <a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">自主神经激活</a></li>
+          <li>持续静坐 > 90 分钟 → 久坐提醒</li>
+        </ul>
+      `;
+    } else if (cadence === '1d') {
+      html = `
+        <h3>今日（最近一天）观察</h3>
+        <ul>
+          <li>EMA 提交：${ema.length > 0 ? `${ema.length} 次` : '无'}</li>
+          <li>BPSD 事件：${bpsd.length > 0 ? bpsd.map(e => `Day ${e.day} ${e.type || '事件'}`).slice(-3).join('、') : '无'}</li>
+          <li>临床 notes：${notes.length}</li>
+        </ul>
+        <h3>wiki 日窗规则</h3>
+        <ul>
+          <li>睡眠 < 5h 或睡眠效率 < 80% → 标记 (<a href="${WIKI_BASE_URL}/bpsd_sleep_disorder.md" target="_blank">bpsd_sleep ↗</a>)</li>
+          <li>日落时段 EDA 异常模式 → 标记 (<a href="${WIKI_BASE_URL}/bpsd_sundowning.md" target="_blank">bpsd_sundowning ↗</a>)</li>
+        </ul>
+      `;
+    } else if (cadence === '7d') {
+      html = `
+        <h3>本周关键变化（来自 PhysioAgent + BehaviorAgent insights）</h3>
+        <ul>
+          ${ph.insights.slice(0,3).map(i => {
+            const klinks = (i.supporting_knowledge||[]).map(k => kbToWiki(k)).filter(w=>w.url).map(w => `<a href="${w.url}" target="_blank">${w.label}</a>`).join(' ');
+            return `<li>${i.observation}${klinks ? ' · ' + klinks : ''}</li>`;
+          }).join('')}
+        </ul>
+        <h3>wiki 周窗规则</h3>
+        <ul>
+          <li>步速周降 > 5% → 标记 (<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">imu_gait ↗</a>)</li>
+          <li>BPSD 事件 > 3/周 → 升级关注</li>
+        </ul>
+        <h3>给家属的话（本周一句话）</h3>
+        <p style="background:var(--bg);padding:10px;border-radius:6px">${d.summary_today}</p>
+      `;
+    } else if (cadence === '30d') {
+      html = `
+        <h3>📈 月报 · 阶段判断</h3>
+        <div class="kv">
+          <span class="k">综合分期</span><span><code>${c.stage_inclination}</code></span>
+          <span class="k">置信度</span><span>${(c.stage_confidence*100).toFixed(0)}%</span>
+          <span class="k">建议金标准</span><span>${c.gold_standard_referral === 'yes' ? '✓ 是' : '观察'}</span>
+        </div>
+        <h3>wiki 月窗规则</h3>
+        <ul>
+          <li>CCI 偏离基线 > 2SD → SCD→MCI 拐点候选 (<a href="${WIKI_BASE_URL}/ad_staging.md" target="_blank">ad_staging ↗</a>)</li>
+          <li>步态 + 语言 + HRV 三指标一致下行 → 进展预警</li>
+          <li>建议 PET / 血液 p-tau217 (<a href="${WIKI_BASE_URL}/atn_framework.md" target="_blank">AT(N) 框架 ↗</a>)</li>
+        </ul>
+        <h3>本月 PhysioAgent 关键发现</h3>
+        <ul>
+          ${ph.insights.map(i => `<li>${i.observation} <span style="color:var(--muted);font-size:11px">(conf ${(i.confidence*100).toFixed(0)}%)</span></li>`).join('')}
+        </ul>
+        <h3>本月 BehaviorAgent 关键发现</h3>
+        <ul>
+          ${bh.insights.map(i => `<li>${i.observation} <span style="color:var(--muted);font-size:11px">(conf ${(i.confidence*100).toFixed(0)}%)</span></li>`).join('')}
+        </ul>
+      `;
+    }
+  } else {
+    // ============ MIND 风 ============
+    if (cadence === '5min') {
+      html = `
+        <h3>实时事件检测</h3>
+        <p>本患者过去 30 天 BPSD 事件流：</p>
+        ${bpsd.length === 0 ? '<p style="color:var(--muted)">无 BPSD 事件记录</p>' : `
+          <table>
+            <tr><th>Day</th><th>类型</th><th>时长 (min)</th><th>触发情境</th></tr>
+            ${bpsd.map(e => `<tr><td>${e.day}</td><td>${e.type || '-'}</td><td>${e.duration_min || '-'}</td><td>${e.context || e.trigger || '-'}</td></tr>`).join('')}
+          </table>
+        `}
+        <div class="cite-row">📂 来源：<a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/bpsd_events.jsonl" target="_blank">bpsd_events.jsonl ↗</a></div>
+      `;
+    } else if (cadence === '1h') {
+      html = `
+        <h3>EMA 时间序列（最近 5 条）</h3>
+        ${ema.length === 0 ? '<p>无 EMA</p>' : `
+          <table>
+            <tr><th>Day</th><th>Mood</th><th>Anxiety</th><th>Sleep</th><th>Energy</th></tr>
+            ${ema.slice(-5).map(e => `<tr><td>${e.day || '-'}</td><td>${e.mood ?? '-'}</td><td>${e.anxiety ?? '-'}</td><td>${e.sleep ?? '-'}</td><td>${e.energy ?? '-'}</td></tr>`).join('')}
+          </table>
+        `}
+        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/ema.jsonl" target="_blank">ema.jsonl ↗</a></div>
+      `;
+    } else if (cadence === '1d') {
+      const lastNote = notes[notes.length - 1];
+      html = `
+        <h3>临床 Notes（最近）</h3>
+        ${lastNote ? `<pre>${JSON.stringify(lastNote, null, 2)}</pre>` : '<p>无</p>'}
+        <h3>BPSD 当日</h3>
+        <p>${bpsd.length > 0 ? bpsd.slice(-2).map(e => `Day ${e.day} · ${e.type || '事件'} · ${e.duration_min || '?'} 分钟`).join('；') : '无'}</p>
+      `;
+    } else if (cadence === '7d') {
+      html = `
+        <h3>BehaviorAgent 本周 insights</h3>
+        ${bh.insights.map(i => `
+          <div style="padding:10px;border-left:3px solid var(--purple);background:var(--purple-bg);margin-bottom:6px;border-radius:0 6px 6px 0">
+            <strong>${i.observation}</strong>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">${i.clinical_implication}</div>
+            <div style="font-size:11px;margin-top:4px">conf <code>${(i.confidence*100).toFixed(0)}%</code> · domain <code>${i.domain}</code></div>
+          </div>
+        `).join('')}
+        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/insights_behavior.json" target="_blank">insights_behavior.json ↗</a></div>
+      `;
+    } else if (cadence === '30d') {
+      html = `
+        <h3>📈 Narrator 月度 Dashboard</h3>
+        <div class="kv">
+          <span class="k">Alert</span><span><span class="badge-inline ${d.alert_level==='red'?'b-bad':d.alert_level==='yellow'?'b-warn':'b-ok'}">${d.alert_level.toUpperCase()}</span></span>
+          <span class="k">Summary</span><span>${d.summary_today}</span>
+        </div>
+        <h3>Patient Data Insights (4 张卡)</h3>
+        ${d.patient_data_insights.map((ins, i) => `
+          <div style="padding:10px;background:var(--bg);border-radius:6px;margin-bottom:6px">
+            <strong>${i+1}. ${ins.card_title}</strong>
+            <div style="font-size:12px;margin-top:4px">${ins.card_md.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>
+          </div>
+        `).join('')}
+        <h3>Differential</h3>
+        <ul>${d.differential_concern.map(x => `<li>${x}</li>`).join('')}</ul>
+        <h3>ClinicalAgent 转诊判断</h3>
+        <p>${c.referral_rationale}</p>
+        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/dashboard.json" target="_blank">dashboard.json ↗</a></div>
+      `;
+    }
+  }
+
+  openModal(title, html);
 }
 
 // 顶部框架对比 tab
@@ -972,6 +1227,10 @@ function renderMindView(id, data) {
     <div class="${alertBgClass}">
       ${alertEmoji} <strong>${alertColor.toUpperCase()}</strong> · ${d.summary_today}
     </div>
+
+    ${renderCadenceRow(id, data)}
+
+    ${renderRealtimeBoard(id)}
 
     <div class="section">
       <h2>📋 病史 / 上次评估</h2>
@@ -1135,6 +1394,10 @@ function renderWikiView(id, data) {
       📚 按 ad-wiki-pages 框架解读 · 同一份原始数据 (physio + behavior insights) · 不同的临床知识体系
     </div>
 
+    ${renderCadenceRow(id, data)}
+
+    ${renderRealtimeBoard(id)}
+
     <div class="section">
       <h2>AD 分期 <span class="desc">基于 wiki concepts/ad_staging + AT(N) 框架</span>
         <span class="badge" style="background:var(--orange-bg);color:var(--orange);margin-left:auto">${stage} · ${(c.stage_confidence*100).toFixed(0)}%</span>
@@ -1291,6 +1554,27 @@ function renderCustomPatient() {
     </div>
 
     <div class="section">
+      <h2>📋 自动生成的 3 层报告 <span class="desc">基于 CSV 数据 · WIKI 框架</span></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="cad ok" onclick="openCustomCadenceReport('1h')" style="text-align:left;padding:14px;border-width:2px">
+          <div style="font-size:13px;font-weight:700;color:var(--teal)">⏱ 小时报告 · Hourly</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">最后一行（最近时间点）的所有指标快照</div>
+          <div style="font-size:10px;color:var(--teal);margin-top:8px;font-weight:600">→ 查看完整报告</div>
+        </div>
+        <div class="cad warn" onclick="openCustomCadenceReport('7d')" style="text-align:left;padding:14px;border-width:2px">
+          <div style="font-size:13px;font-weight:700;color:var(--teal)">📊 周报 · Weekly</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">最近 7 行的趋势 + 周变化率</div>
+          <div style="font-size:10px;color:var(--teal);margin-top:8px;font-weight:600">→ 查看完整报告</div>
+        </div>
+        <div class="cad warn" onclick="openCustomCadenceReport('30d')" style="text-align:left;padding:14px;border-width:2px">
+          <div style="font-size:13px;font-weight:700;color:var(--teal)">📈 月报 · Monthly</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">全周期趋势 + wiki KB 阈值判断 + 综合分期</div>
+          <div style="font-size:10px;color:var(--teal);margin-top:8px;font-weight:600">→ 查看完整报告</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <h2>📊 关键指标变化（首日 vs 末日）</h2>
       ${rowsHtml ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
         <thead><tr style="background:var(--bg)">
@@ -1331,27 +1615,101 @@ function renderCustomPatient() {
 }
 
 function openCustomReportModal() {
+  openCustomCadenceReport('30d');
+}
+
+// 上传 CSV 的 3 cadence 报告（小时/周/月）
+function openCustomCadenceReport(cadence) {
   if (!customPatient) return;
   const cp = customPatient;
-  const last = cp.rows[cp.rows.length - 1];
-  const first = cp.rows[0];
-  openModal(`📄 自定义数据简报 · ${cp.name}`, `
-    <h3>数据概况</h3>
-    <div class="kv">
-      <span class="k">文件</span><span>${cp.name}</span>
-      <span class="k">时间点</span><span>${cp.rows.length}</span>
-      <span class="k">字段数</span><span>${cp.header.length}</span>
-    </div>
-    <h3>首日</h3>
-    <pre>${JSON.stringify(first, null, 2)}</pre>
-    <h3>末日</h3>
-    <pre>${JSON.stringify(last, null, 2)}</pre>
-    <h3>下一步</h3>
-    <ul>
-      <li>把这个 CSV 通过 <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline</a> 跑一遍获得 Agent insights + Narrator dashboard</li>
-      <li>或对照 <a href="https://jewelina95.github.io/ad-wiki-pages/" target="_blank">ad-wiki KB</a> 的临床阈值人工分析</li>
-    </ul>
-  `);
+  const rows = cp.rows;
+  function pickCol(names) { for (const n of names) if (n in rows[0]) return n; return null; }
+  const colGait = pickCol(['gait_speed','gait_speed_normal','step_speed','speed']);
+  const colMmse = pickCol(['mmse','mmse_score','MMSE']);
+  const colMood = pickCol(['mood','ema_mood','mood_score']);
+  const colHrv  = pickCol(['hrv_sdnn','hrv','sdnn','SDNN']);
+  const last = rows[rows.length - 1], first = rows[0];
+  let title, html;
+
+  if (cadence === '1h') {
+    title = `⏱ 小时报告 · ${cp.name}`;
+    const wikiHits = [];
+    if (colGait && parseFloat(last[colGait]) < 1.0) wikiHits.push(`步速 ${parseFloat(last[colGait]).toFixed(2)} m/s < 1.0 → MCR 可疑 (<a href="${WIKI_BASE_URL}/mcr_criteria.md" target="_blank">mcr_criteria ↗</a>)`);
+    if (colMood && parseFloat(last[colMood]) < 4) wikiHits.push(`mood ${last[colMood]}/10 < 4 → 抑郁风险 (<a href="${WIKI_BASE_URL}/bpsd_depression.md" target="_blank">bpsd_depression ↗</a>)`);
+    if (colHrv && parseFloat(last[colHrv]) < 35) wikiHits.push(`HRV SDNN ${last[colHrv]} ms < 35 → 自主神经异常 (<a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">ppg_hrv ↗</a>)`);
+    html = `
+      <h3>最近时间点快照</h3>
+      <table><tr><th>字段</th><th>值</th></tr>
+        ${Object.entries(last).slice(0, 18).map(([k,v]) => `<tr><td>${k}</td><td><code>${v}</code></td></tr>`).join('')}
+      </table>
+      <h3>WIKI KB 实时规则命中</h3>
+      ${wikiHits.length ? `<ul>${wikiHits.map(h => `<li>${h}</li>`).join('')}</ul>` : '<p style="color:var(--muted)">无明显异常命中</p>'}
+    `;
+  } else if (cadence === '7d') {
+    title = `📊 周报 · ${cp.name}`;
+    const week = rows.slice(-7);
+    const trend = (col) => {
+      if (!col || week.length < 2) return null;
+      const a = parseFloat(week[0][col]), b = parseFloat(week[week.length-1][col]);
+      if (isNaN(a) || isNaN(b)) return null;
+      return { col, a, b, delta: b-a, dpct: a ? ((b-a)/Math.abs(a)*100).toFixed(1) : 'n/a' };
+    };
+    const trends = [colGait,colMmse,colMood,colHrv].map(trend).filter(Boolean);
+    html = `
+      <h3>最近 7 天趋势</h3>
+      ${trends.length ? `<table>
+        <tr><th>指标</th><th>7 天前</th><th>本日</th><th>变化</th></tr>
+        ${trends.map(t => `<tr><td>${t.col}</td><td><code>${t.a.toFixed(2)}</code></td><td><code>${t.b.toFixed(2)}</code></td>
+          <td><span class="badge-inline ${Math.abs(t.delta) > Math.abs(t.a)*0.05 ? 'b-warn' : 'b-ok'}">${t.delta>=0?'+':''}${t.delta.toFixed(2)} (${t.dpct}%)</span></td></tr>`).join('')}
+      </table>` : '<p>未识别关键指标</p>'}
+      <h3>WIKI 周窗规则</h3>
+      <ul>
+        <li>步速周降 > 5% → 标记 (<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">imu_gait ↗</a>)</li>
+        <li>mood 周降 > 3 分 → BPSD 抑郁加重</li>
+        <li>HRV 周降 > 10% → 自主神经持续退化</li>
+      </ul>
+    `;
+  } else if (cadence === '30d') {
+    title = `📈 月报 · ${cp.name}`;
+    const trend = (col) => {
+      if (!col) return null;
+      const a = parseFloat(first[col]), b = parseFloat(last[col]);
+      if (isNaN(a) || isNaN(b)) return null;
+      return { col, a, b, delta: b-a, dpct: a ? ((b-a)/Math.abs(a)*100).toFixed(1) : 'n/a' };
+    };
+    const trends = [colGait,colMmse,colMood,colHrv].map(trend).filter(Boolean);
+    let stage = 'SCD';
+    if (colGait) { const g = parseFloat(last[colGait]); if (g < 0.8) stage = 'Mild'; else if (g < 1.0) stage = 'MCI'; }
+    if (colMmse) { const m = parseFloat(last[colMmse]); if (m < 18) stage = 'Moderate'; else if (m < 24) stage = 'Mild'; else if (m < 27) stage = 'MCI'; }
+    html = `
+      <h3>📈 ${cp.rows.length} 天全周期 · WIKI 综合判断</h3>
+      <div class="kv">
+        <span class="k">数据点</span><span>${rows.length}</span>
+        <span class="k">推断分期</span><span><span class="badge-inline b-warn">${stage}</span></span>
+      </div>
+      <h3>全周期变化</h3>
+      ${trends.length ? `<table>
+        <tr><th>指标</th><th>首日</th><th>末日</th><th>变化</th><th>wiki 阈值</th></tr>
+        ${trends.map(t => {
+          let thr = '';
+          if (t.col === colGait) thr = `<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">< 1.0 m/s ↗</a>`;
+          else if (t.col === colMmse) thr = `<a href="${WIKI_BASE_URL}/ad_staging.md" target="_blank">24/27 切点 ↗</a>`;
+          else if (t.col === colMood) thr = `<a href="${WIKI_BASE_URL}/bpsd_depression.md" target="_blank">< 4 ↗</a>`;
+          else if (t.col === colHrv) thr = `<a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">< 35 ms ↗</a>`;
+          return `<tr><td>${t.col}</td><td><code>${t.a.toFixed(2)}</code></td><td><code>${t.b.toFixed(2)}</code></td>
+            <td><span class="badge-inline ${Math.abs(t.delta) > Math.abs(t.a)*0.1 ? 'b-bad' : Math.abs(t.delta) > Math.abs(t.a)*0.05 ? 'b-warn' : 'b-ok'}">${t.delta>=0?'+':''}${t.delta.toFixed(2)} (${t.dpct}%)</span></td>
+            <td style="font-size:11px">${thr}</td></tr>`;
+        }).join('')}
+      </table>` : '<p>未识别关键指标</p>'}
+      <h3>处置建议（wiki 框架）</h3>
+      <ul>
+        <li>建议下一步：<a href="${WIKI_BASE_URL}/atn_framework.md" target="_blank">血液 p-tau217 + 神经内科 ↗</a></li>
+        <li>纵向重点：步态 / 语音 / HRV 三联</li>
+        <li>对应 MIND pipeline：跑 <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline ↗</a> 获得 Agent insights + Narrator</li>
+      </ul>
+    `;
+  }
+  openModal(title, html);
 }
 
 // ===== 渲染主面板 =====
