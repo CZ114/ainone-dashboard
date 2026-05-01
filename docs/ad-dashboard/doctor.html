@@ -340,6 +340,75 @@ body {
 }
 #toast.show { opacity: 0.95; }
 
+/* ===== Sensor Board ===== */
+.sensor-board-head {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; background: #0f172a; color: #e2e8f0;
+  border-radius: 8px 8px 0 0; font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+.sb-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.sb-dot.live { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 1.4s ease-in-out infinite; }
+.sb-dot.rec { background: #ef4444; animation: pulse 1s ease-in-out infinite; }
+.sb-dot.off { background: #64748b; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }
+.sensor-board-head .sep { opacity: 0.3; }
+.sensor-board-head .sr { color: #5eead4; }
+.sensor-board-head .pid { color: #fbbf24; }
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: #0f172a;
+  padding: 10px;
+  border-radius: 0 0 8px 8px;
+}
+.ch-card {
+  background: #1e293b;
+  border-radius: 6px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  position: relative;
+  overflow: hidden;
+}
+.ch-card .ch-name {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: #94a3b8; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ch-card .ch-tag {
+  font-size: 9px; padding: 1px 5px; border-radius: 3px;
+  background: #334155; color: #cbd5e1;
+}
+.ch-card .ch-tag.alert { background: #7f1d1d; color: #fecaca; }
+.ch-card .ch-val {
+  font-size: 20px; font-weight: 700; color: #f1f5f9;
+  font-family: ui-monospace, monospace;
+  margin: 4px 0 2px;
+}
+.ch-card .ch-val small { font-size: 12px; color: #64748b; font-weight: 400; }
+.ch-card .ch-wave {
+  width: 100%; height: 36px; margin-top: 4px;
+}
+.ch-card .ch-wave path {
+  fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round;
+}
+.ch-eda  path { stroke: #f59e0b; }
+.ch-ppg  path { stroke: #ef4444; }
+.ch-hr   path { stroke: #ec4899; }
+.ch-spo2 path { stroke: #06b6d4; }
+.ch-imu  path { stroke: #8b5cf6; }
+.ch-aud  path { stroke: #10b981; }
+.ch-card.flag-alert { border-color: #ef4444; box-shadow: 0 0 0 1px #ef4444; }
+.ch-card.flag-alert .ch-val { color: #fecaca; }
+.ch-card.flag-warn { border-color: #f59e0b; }
+
+@media (max-width: 1100px) { .channel-grid { grid-template-columns: repeat(2, 1fr); } }
+
 /* alert banner */
 .alert-banner {
   background: var(--red-bg);
@@ -475,7 +544,8 @@ const PATIENTS = {
       ["日落", "ok", "无"],
       ["游荡", "ok", "无"]
     ],
-    sparkData: [22.5, 22.8, 23.1, 23.2, 23.5, 24.0, 24.1, 24.3, 24.0]
+    sparkData: [22.5, 22.8, 23.1, 23.2, 23.5, 24.0, 24.1, 24.3, 24.0],
+    sensorProfile: "mci"
   },
 
   "P002": {
@@ -551,7 +621,8 @@ const PATIENTS = {
       ["日落", "bad", "活跃"],
       ["游荡", "warn", "偶发"]
     ],
-    sparkData: [18.2, 17.9, 17.5, 17.0, 16.8, 16.4, 16.2, 16.0, 16.0]
+    sparkData: [18.2, 17.9, 17.5, 17.0, 16.8, 16.4, 16.2, 16.0, 16.0],
+    sensorProfile: "alert"
   },
 
   "S01": {
@@ -604,7 +675,54 @@ const PATIENTS = {
       ["激越", "ok", "无"], ["焦虑", "ok", "无"], ["淡漠", "ok", "无"],
       ["抑郁", "ok", "无"], ["睡眠", "ok", "正常"], ["日落", "ok", "无"], ["游荡", "ok", "无"]
     ],
-    sparkData: [30,30,30,30,30,30,30,30,30]
+    sparkData: [30,30,30,30,30,30,30,30,30],
+    sensorProfile: "healthy"
+  }
+};
+
+// ===== 8 通道传感器配置 =====
+const CHANNELS = [
+  { id: "EDA",     unit: "µS",  cls: "ch-eda",  bandMin: 0,   bandMax: 12,   short: "皮肤电导" },
+  { id: "PPG-IR",  unit: "raw", cls: "ch-ppg",  bandMin: -1,  bandMax: 1,    short: "光电容积" },
+  { id: "HR",      unit: "bpm", cls: "ch-hr",   bandMin: 50,  bandMax: 110,  short: "心率" },
+  { id: "SpO2",    unit: "%",   cls: "ch-spo2", bandMin: 92,  bandMax: 100,  short: "血氧" },
+  { id: "IMU-AX",  unit: "g",   cls: "ch-imu",  bandMin: -2,  bandMax: 2,    short: "加速度 X" },
+  { id: "IMU-AY",  unit: "g",   cls: "ch-imu",  bandMin: -2,  bandMax: 2,    short: "加速度 Y" },
+  { id: "IMU-AZ",  unit: "g",   cls: "ch-imu",  bandMin: -2,  bandMax: 2,    short: "加速度 Z" },
+  { id: "AUDIO",   unit: "dB",  cls: "ch-aud",  bandMin: 30,  bandMax: 80,   short: "环境/语音" }
+];
+
+// 每种 profile 对每个通道的均值 / 抖动 / 标记
+const SENSOR_PROFILES = {
+  healthy: {
+    "EDA":    { base: 3.1,  noise: 0.3,  flag: null },
+    "PPG-IR": { base: 0,    noise: 0.6,  hr: 64, flag: null },
+    "HR":     { base: 64,   noise: 2.5,  flag: null },
+    "SpO2":   { base: 98,   noise: 0.5,  flag: null },
+    "IMU-AX": { base: 0,    noise: 0.15, flag: null },
+    "IMU-AY": { base: 0,    noise: 0.15, flag: null },
+    "IMU-AZ": { base: 1,    noise: 0.10, flag: null },
+    "AUDIO":  { base: 42,   noise: 8,    flag: null }
+  },
+  mci: {
+    "EDA":    { base: 4.2,  noise: 0.5,  flag: "warn" },
+    "PPG-IR": { base: 0,    noise: 0.6,  hr: 74, flag: null },
+    "HR":     { base: 74,   noise: 4,    flag: "warn" },
+    "SpO2":   { base: 97,   noise: 0.6,  flag: null },
+    "IMU-AX": { base: 0,    noise: 0.22, flag: null },
+    "IMU-AY": { base: 0,    noise: 0.22, flag: null },
+    "IMU-AZ": { base: 1,    noise: 0.18, flag: null },
+    "AUDIO":  { base: 38,   noise: 10,   flag: null }
+  },
+  alert: {
+    "EDA":    { base: 8.7,  noise: 1.2,  flag: "alert" },
+    "PPG-IR": { base: 0,    noise: 0.8,  hr: 92, flag: "alert" },
+    "HR":     { base: 92,   noise: 6,    flag: "alert" },
+    "SpO2":   { base: 95,   noise: 1.0,  flag: "warn" },
+    "IMU-AX": { base: 0,    noise: 0.4,  flag: "warn" },
+    "IMU-AY": { base: 0,    noise: 0.4,  flag: "warn" },
+    "IMU-AZ": { base: 1,    noise: 0.3,  flag: "warn" },
+    "AUDIO":  { base: 32,   noise: 6,    flag: null }
   }
 };
 
@@ -729,6 +847,37 @@ function selectPatient(id) {
 
     ${alertHtml}
 
+    <div class="section" style="padding:14px 16px">
+      <h2>📡 Sensor Board <span class="desc">手套 8 通道实时流</span>
+        <span class="badge" style="background:#0f172a;color:#5eead4;margin-left:auto">LIVE</span>
+      </h2>
+      <div class="sensor-board-head">
+        <span><span class="sb-dot live"></span>USB Serial</span>
+        <span class="sep">|</span>
+        <span class="sr">50 Hz</span>
+        <span class="sep">|</span>
+        <span><span class="sb-dot rec"></span>Recording</span>
+        <span class="sep">|</span>
+        <span>Patient: <span class="pid">${p.id}</span></span>
+        <span class="sep">|</span>
+        <span id="sbClock">${new Date().toTimeString().slice(0,8)}</span>
+      </div>
+      <div class="channel-grid" id="channelGrid">
+        ${CHANNELS.map(c => `
+          <div class="ch-card ${getChFlagClass(p.sensorProfile, c.id)}" data-ch="${c.id}">
+            <div class="ch-name">
+              <span>${c.id}</span>
+              <span class="ch-tag ${getChFlagClass(p.sensorProfile, c.id)==='flag-alert'?'alert':''}">${c.short}</span>
+            </div>
+            <div class="ch-val" id="val-${c.id}">— <small>${c.unit}</small></div>
+            <svg class="ch-wave" viewBox="0 0 240 36" preserveAspectRatio="none">
+              <path id="wave-${c.id}" d="" />
+            </svg>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
     <div class="section">
       <h2>AD 分期 <span class="desc">基于多模态融合 · AT(N) 框架</span>
         <span class="badge" style="background:var(--orange-bg);color:var(--orange);margin-left:auto">置信度 ${(p.confidence*100).toFixed(0)}%</span>
@@ -778,6 +927,93 @@ function selectPatient(id) {
   `;
 }
 
+// ===== Sensor Board 动画 =====
+const BUF_LEN = 80;     // 80 个采样点的滚动 buffer
+const TICK_MS = 100;    // 100ms 一帧
+let sensorBuffers = {};
+let sensorTimer = null;
+let sensorPhase = 0;
+
+function getChFlagClass(profile, chId) {
+  const p = SENSOR_PROFILES[profile] && SENSOR_PROFILES[profile][chId];
+  if (!p || !p.flag) return '';
+  return p.flag === 'alert' ? 'flag-alert' : 'flag-warn';
+}
+
+function startSensorBoard(profileName) {
+  const profile = SENSOR_PROFILES[profileName];
+  if (!profile) return;
+  // 初始化 buffer
+  sensorBuffers = {};
+  CHANNELS.forEach(c => { sensorBuffers[c.id] = new Array(BUF_LEN).fill(profile[c.id].base); });
+  if (sensorTimer) clearInterval(sensorTimer);
+  sensorPhase = 0;
+
+  sensorTimer = setInterval(() => {
+    sensorPhase += 1;
+    const t = sensorPhase * TICK_MS / 1000; // 秒
+    CHANNELS.forEach(c => {
+      const cfg = profile[c.id];
+      let v;
+      if (c.id === "PPG-IR") {
+        // PPG 振荡 = sin(2π·HR/60·t) + 噪声
+        const hr = cfg.hr || 70;
+        v = Math.sin(2 * Math.PI * (hr/60) * t) * 0.7 + (Math.random()-0.5) * cfg.noise;
+      } else if (c.id === "IMU-AX" || c.id === "IMU-AY") {
+        // 步态周期 ~1Hz
+        v = cfg.base + Math.sin(2 * Math.PI * 1.0 * t + (c.id==="IMU-AY"?Math.PI/2:0)) * 0.3
+            + (Math.random()-0.5) * cfg.noise;
+      } else if (c.id === "IMU-AZ") {
+        v = cfg.base + Math.sin(2 * Math.PI * 1.0 * t) * 0.15 + (Math.random()-0.5) * cfg.noise;
+      } else if (c.id === "EDA") {
+        // 慢漂移 + SCR 偶发尖峰
+        const drift = Math.sin(2 * Math.PI * 0.05 * t) * 0.4;
+        const scr = (profileName === 'alert' && Math.random() < 0.05) ? 2.5 : 0;
+        v = cfg.base + drift + scr + (Math.random()-0.5) * cfg.noise;
+      } else if (c.id === "AUDIO") {
+        // 语音活动模拟（间歇性突起）
+        const speech = Math.random() < (profileName==='healthy'?0.35:0.15) ? 25 : 0;
+        v = cfg.base + speech + (Math.random()-0.5) * cfg.noise;
+      } else {
+        // HR / SpO2 慢变
+        v = cfg.base + Math.sin(2 * Math.PI * 0.1 * t) * cfg.noise * 0.5
+            + (Math.random()-0.5) * cfg.noise;
+      }
+      sensorBuffers[c.id].push(v);
+      sensorBuffers[c.id].shift();
+
+      // 更新数值显示
+      const valEl = document.getElementById('val-' + c.id);
+      if (valEl) {
+        const fmt = c.id === "PPG-IR" ? v.toFixed(2)
+                  : c.id === "HR" || c.id === "AUDIO" ? Math.round(v)
+                  : c.id === "SpO2" ? v.toFixed(1)
+                  : v.toFixed(2);
+        valEl.innerHTML = `${fmt} <small>${c.unit}</small>`;
+      }
+
+      // 更新波形 path
+      const pathEl = document.getElementById('wave-' + c.id);
+      if (pathEl) {
+        const buf = sensorBuffers[c.id];
+        const lo = c.bandMin, hi = c.bandMax;
+        const w = 240, h = 36;
+        const d = buf.map((val, i) => {
+          const x = (i / (buf.length - 1)) * w;
+          const y = h - ((val - lo) / (hi - lo)) * h;
+          const yc = Math.max(1, Math.min(h-1, y));
+          return `${i===0?'M':'L'}${x.toFixed(1)},${yc.toFixed(1)}`;
+        }).join(' ');
+        pathEl.setAttribute('d', d);
+      }
+    });
+
+    // 更新时钟
+    const clk = document.getElementById('sbClock');
+    if (clk) clk.textContent = new Date().toTimeString().slice(0,8);
+  }, TICK_MS);
+}
+
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -787,9 +1023,16 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+// 选择患者后启动对应 sensor profile
+function selectPatientWithSensors(id) {
+  selectPatient(id);
+  startSensorBoard(PATIENTS[id].sensorProfile);
+}
+window.selectPatient = selectPatientWithSensors;
+
 // 初始化
 renderPatientList();
-selectPatient("P001");
+selectPatientWithSensors("P001");
 </script>
 
 </body>
