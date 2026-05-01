@@ -393,6 +393,52 @@ body {
   font-family: ui-monospace, monospace;
 }
 
+/* ===== Clinical SOAP letterhead ===== */
+.soap {
+  background: white; padding: 0; font-family: -apple-system, "PingFang SC", sans-serif;
+  line-height: 1.7; color: #1c1917;
+}
+.soap .letterhead {
+  border-bottom: 2px solid var(--text); padding-bottom: 12px; margin-bottom: 16px;
+}
+.soap .letterhead h2 {
+  margin: 0; font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.soap .letterhead .meta {
+  font-size: 12px; color: var(--muted); margin-top: 6px;
+  font-family: ui-monospace, monospace;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px;
+}
+.soap .section-head {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; margin: 18px 0 6px;
+  border-bottom: 1px solid var(--border); padding-bottom: 4px;
+}
+.soap p { margin: 6px 0; font-size: 13.5px; }
+.soap ul, .soap ol { margin: 6px 0; padding-left: 22px; }
+.soap li { margin: 4px 0; font-size: 13.5px; }
+.soap .objective-block {
+  background: #f8fafc; padding: 10px 14px; border-radius: 4px;
+  font-family: ui-monospace, monospace; font-size: 12.5px;
+  border-left: 3px solid var(--teal); margin: 6px 0;
+}
+.soap .objective-block .ob-row {
+  display: flex; gap: 8px; margin: 3px 0;
+}
+.soap .objective-block .ob-row .lbl { color: var(--muted); min-width: 180px; }
+.soap .objective-block .ob-row .val { color: var(--text); }
+.soap .objective-block .ob-row .interp { color: var(--orange); margin-left: 8px; }
+.soap .icd { font-family: ui-monospace, monospace; background: #fef3c7; padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+.soap .signoff {
+  border-top: 1px solid var(--border); margin-top: 18px;
+  padding-top: 10px; font-size: 11px; color: var(--muted); font-style: italic;
+}
+.soap a { color: var(--teal); }
+.soap .ref {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+  font-family: ui-monospace, monospace;
+}
+
 /* clickable hover */
 .cad, .modal-block, .bpsd-cell { cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
 .cad:hover, .modal-block:hover, .bpsd-cell:hover {
@@ -1005,7 +1051,7 @@ function renderRealtimeBoard(id) {
   `;
 }
 
-// ===== 5 cadence 报告生成器（双视角差异化） =====
+// ===== SOAP 临床报告生成器（参考 ~/.claude/skills/clinical-report-soap） =====
 function openMindCadenceReport(id, cadence) {
   const data = mindCache[id];
   if (!data) return;
@@ -1018,166 +1064,214 @@ function openMindCadenceReport(id, cadence) {
   const ema = data.ema || [];
   const notes = data.notes || [];
 
-  const titleMap = { '5min':'⚡ 5 分钟实时报告', '1h':'⏱ 1 小时报告', '1d':'📅 日报', '7d':'📊 周报', '30d':'📈 月报' };
-  let title = titleMap[cadence] + ` · ${id}` + (currentMindView==='wiki' ? ' · 📚 WIKI 风' : ' · 🧠 MIND 风');
+  const evidenceCite = currentMindView === 'wiki' ? 'AD wiki KB' : 'Multi-Agent pipeline (PhysioAgent + BehaviorAgent + ClinicalAgent + Narrator)';
+  const evidenceUrl = currentMindView === 'wiki' ? 'https://jewelina95.github.io/ad-wiki-pages/' : `https://github.com/Jewelina95/ad-mind-pipeline/tree/main/data_v2/${id}`;
+  const titleMap = { '1h': 'Sensor Event Note (1h)', '7d': 'Interval Progress Note (7d)', '30d': 'Monthly Visit Note (30d)' };
+  const today = new Date().toISOString().slice(0,10);
+  const title = `${titleMap[cadence]} · ${id} · ${currentMindView==='wiki' ? '📚 WIKI 引用' : '🧠 MIND 引用'}`;
   let html = '';
 
   // 通用辅助
   const lastEma = ema.length ? ema[ema.length-1] : null;
   const lastDayBpsd = bpsd.filter(e => e.day >= meta.bpsd === 0 ? 28 : (bpsd.length ? bpsd[bpsd.length-1].day - 1 : 28));
 
-  if (currentMindView === 'wiki') {
-    // ============ WIKI 风 ============
-    if (cadence === '5min') {
-      html = `
-        <h3>当前窗口</h3>
-        <p>过去 5 分钟内 EDA / HR / IMU 实时检查。</p>
-        <h3>触发规则（来自 wiki KB）</h3>
-        <ul>
-          <li>EDA + HR 同时上升 → 可能 BPSD 激越前兆 (<a href="${WIKI_BASE_URL}/bpsd_agitation.md" target="_blank">bpsd_agitation ↗</a>)</li>
-          <li>HR > 基线 +30% 持续 60s → 警报</li>
-          <li>IMU 高加速度 → <a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">跌倒检测</a></li>
-        </ul>
-        <h3>本患者状态</h3>
-        <p>${bpsd.length > 0 ? `本月共 ${bpsd.length} 次 BPSD 事件 · 最近一次：Day ${bpsd[bpsd.length-1].day} ${bpsd[bpsd.length-1].type || ''} (${bpsd[bpsd.length-1].duration_min || '?'} 分钟)` : '过去 30 天无急性 BPSD 事件'}</p>
-        <div class="cite-row">📚 KB 来源：<a href="${WIKI_BASE_URL}/bpsd.md" target="_blank">wiki/concepts/bpsd.md</a></div>
-      `;
-    } else if (cadence === '1h') {
-      html = `
-        <h3>本小时关注指标（wiki 框架）</h3>
-        <table>
-          <tr><th>指标</th><th>当前</th><th>解读</th></tr>
-          <tr><td>EMA mood</td><td><code>${lastEma?.mood ?? '-'}/10</code></td><td>${lastEma?.mood < 4 ? '低 → 抑郁风险' : '正常'}</td></tr>
-          <tr><td>EMA anxiety</td><td><code>${lastEma?.anxiety ?? '-'}/10</code></td><td>${lastEma?.anxiety > 5 ? '高 → BPSD 焦虑' : '正常'}</td></tr>
-          <tr><td>EMA sleep</td><td><code>${lastEma?.sleep ?? '-'}/10</code></td><td>${lastEma?.sleep < 5 ? '差 → 睡眠紊乱' : '正常'}</td></tr>
-        </table>
-        <h3>wiki KB 短时窗规则</h3>
-        <ul>
-          <li>HRV 持续 < 自身基线 -1SD → <a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">自主神经激活</a></li>
-          <li>持续静坐 > 90 分钟 → 久坐提醒</li>
-        </ul>
-      `;
-    } else if (cadence === '1d') {
-      html = `
-        <h3>今日（最近一天）观察</h3>
-        <ul>
-          <li>EMA 提交：${ema.length > 0 ? `${ema.length} 次` : '无'}</li>
-          <li>BPSD 事件：${bpsd.length > 0 ? bpsd.map(e => `Day ${e.day} ${e.type || '事件'}`).slice(-3).join('、') : '无'}</li>
-          <li>临床 notes：${notes.length}</li>
-        </ul>
-        <h3>wiki 日窗规则</h3>
-        <ul>
-          <li>睡眠 < 5h 或睡眠效率 < 80% → 标记 (<a href="${WIKI_BASE_URL}/bpsd_sleep_disorder.md" target="_blank">bpsd_sleep ↗</a>)</li>
-          <li>日落时段 EDA 异常模式 → 标记 (<a href="${WIKI_BASE_URL}/bpsd_sundowning.md" target="_blank">bpsd_sundowning ↗</a>)</li>
-        </ul>
-      `;
-    } else if (cadence === '7d') {
-      html = `
-        <h3>本周关键变化（来自 PhysioAgent + BehaviorAgent insights）</h3>
-        <ul>
-          ${ph.insights.slice(0,3).map(i => {
-            const klinks = (i.supporting_knowledge||[]).map(k => kbToWiki(k)).filter(w=>w.url).map(w => `<a href="${w.url}" target="_blank">${w.label}</a>`).join(' ');
-            return `<li>${i.observation}${klinks ? ' · ' + klinks : ''}</li>`;
-          }).join('')}
-        </ul>
-        <h3>wiki 周窗规则</h3>
-        <ul>
-          <li>步速周降 > 5% → 标记 (<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">imu_gait ↗</a>)</li>
-          <li>BPSD 事件 > 3/周 → 升级关注</li>
-        </ul>
-        <h3>给家属的话（本周一句话）</h3>
-        <p style="background:var(--bg);padding:10px;border-radius:6px">${d.summary_today}</p>
-      `;
-    } else if (cadence === '30d') {
-      html = `
-        <h3>📈 月报 · 阶段判断</h3>
-        <div class="kv">
-          <span class="k">综合分期</span><span><code>${c.stage_inclination}</code></span>
-          <span class="k">置信度</span><span>${(c.stage_confidence*100).toFixed(0)}%</span>
-          <span class="k">建议金标准</span><span>${c.gold_standard_referral === 'yes' ? '✓ 是' : '观察'}</span>
-        </div>
-        <h3>wiki 月窗规则</h3>
-        <ul>
-          <li>CCI 偏离基线 > 2SD → SCD→MCI 拐点候选 (<a href="${WIKI_BASE_URL}/ad_staging.md" target="_blank">ad_staging ↗</a>)</li>
-          <li>步态 + 语言 + HRV 三指标一致下行 → 进展预警</li>
-          <li>建议 PET / 血液 p-tau217 (<a href="${WIKI_BASE_URL}/atn_framework.md" target="_blank">AT(N) 框架 ↗</a>)</li>
-        </ul>
-        <h3>本月 PhysioAgent 关键发现</h3>
-        <ul>
-          ${ph.insights.map(i => `<li>${i.observation} <span style="color:var(--muted);font-size:11px">(conf ${(i.confidence*100).toFixed(0)}%)</span></li>`).join('')}
-        </ul>
-        <h3>本月 BehaviorAgent 关键发现</h3>
-        <ul>
-          ${bh.insights.map(i => `<li>${i.observation} <span style="color:var(--muted);font-size:11px">(conf ${(i.confidence*100).toFixed(0)}%)</span></li>`).join('')}
-        </ul>
-      `;
-    }
-  } else {
-    // ============ MIND 风 ============
-    if (cadence === '5min') {
-      html = `
-        <h3>实时事件检测</h3>
-        <p>本患者过去 30 天 BPSD 事件流：</p>
-        ${bpsd.length === 0 ? '<p style="color:var(--muted)">无 BPSD 事件记录</p>' : `
-          <table>
-            <tr><th>Day</th><th>类型</th><th>时长 (min)</th><th>触发情境</th></tr>
-            ${bpsd.map(e => `<tr><td>${e.day}</td><td>${e.type || '-'}</td><td>${e.duration_min || '-'}</td><td>${e.context || e.trigger || '-'}</td></tr>`).join('')}
-          </table>
+  // ===== SOAP 临床报告 =====
+  // 阶段 → ICD-10
+  const stageToIcd = (s) => {
+    if (!s) return { code:'R41.81', label:'Age-related cognitive decline' };
+    if (s.includes('mci_to_mild') || s.includes('mild_ad')) return { code:'G30.9 + F02.80', label:'Alzheimer disease, unspecified, with dementia' };
+    if (s.includes('mci'))      return { code:'G31.84', label:'Mild cognitive impairment' };
+    if (s.includes('moderate')) return { code:'G30.1 + F02.81', label:'Late-onset AD with behavioral disturbance' };
+    if (s.includes('severe'))   return { code:'G30.1 + F02.81', label:'Late-onset AD with behavioral disturbance' };
+    return { code:'R41.81', label:'Age-related cognitive decline' };
+  };
+  const icd = stageToIcd(c.stage_inclination);
+
+  // BPSD 文字化
+  const bpsdNarrative = bpsd.length === 0 ? '本月监测期内未记录到明显 BPSD 事件。' :
+    `本月监测期内共记录 ${bpsd.length} 次 BPSD 事件：` +
+    bpsd.map(e => `D${e.day} ${e.type || '事件'} ${e.duration_min ? `(${e.duration_min} 分钟)` : ''}${e.context ? ' · ' + e.context : ''}`).join('；') + '。';
+
+  // EMA 文字化
+  const emaNarrative = ema.length === 0 ? '无患者自报情绪/睡眠 EMA。' :
+    `EMA 共采集 ${ema.length} 次。最近一次：mood ${lastEma.mood ?? '-'}/10、anxiety ${lastEma.anxiety ?? '-'}/10、sleep ${lastEma.sleep ?? '-'}/10、energy ${lastEma.energy ?? '-'}/10。`;
+
+  // 物理 metric → 临床短语 (从 ph.insights 提取)
+  const objectiveRows = ph.insights.slice(0, 6).map(i => {
+    const klinks = (i.supporting_knowledge || []).map(k => kbToWiki(k)).filter(w => w.url);
+    const cite = currentMindView === 'wiki' && klinks.length
+      ? klinks.slice(0,1).map(w => `<a href="${w.url}" target="_blank">${w.label}↗</a>`).join('')
+      : `<a href="${evidenceUrl}" target="_blank">${i.id}↗</a>`;
+    return `<div class="ob-row"><span class="lbl">${i.observation}</span><span class="interp">${i.clinical_implication}</span> <span class="ref">${cite}</span></div>`;
+  }).join('');
+
+  // Behavior insights → narrative HPI
+  const hpiBehavior = bh.insights.slice(0, 4).map(i => `${i.observation}（${i.clinical_implication}）`).join('；');
+
+  const letterhead = (type) => `
+    <div class="letterhead">
+      <h2>${type}</h2>
+      <div class="meta">
+        <span><strong>Patient</strong>: ${id}（脱敏）</span>
+        <span><strong>Age / Sex</strong>: ${meta.age} / ${meta.sex === 'M' ? '男' : '女'}</span>
+        <span><strong>Education</strong>: ${meta.edu} 年</span>
+        <span><strong>Monitoring window</strong>: Day 0–${meta.bpsd === 0 ? '30' : '30'}</span>
+        <span><strong>Date</strong>: ${today}</span>
+        <span><strong>Provider</strong>: AD glove monitoring (auto-generated)</span>
+        <span><strong>Evidence basis</strong>: ${evidenceCite}</span>
+        <span><strong>Source</strong>: <a href="${evidenceUrl}" target="_blank">${evidenceUrl.replace('https://','')}</a></span>
+      </div>
+    </div>
+  `;
+
+  const signoff = `
+    <div class="signoff">
+      This report is auto-generated from continuous wearable monitoring (multimodal IMU/PPG/EDA/voice) and
+      integrates the patient's longitudinal sensor trajectory with clinical decision rules. It does not
+      replace gold-standard biomarker confirmation (plasma p-tau217 / CSF / amyloid PET) and requires
+      physician review and electronic signature before any clinical decision is acted on.
+    </div>
+  `;
+
+  if (cadence === '30d') {
+    // ===== Monthly Visit Note (full SOAP) =====
+    html = `
+    <div class="soap">
+      ${letterhead('NEUROLOGY / GERIATRIC PROGRESS NOTE — MONTHLY')}
+
+      <div class="section-head">S — Subjective</div>
+      <p>${meta.age} 岁${meta.sex === 'M' ? '男' : '女'}性，受教育 ${meta.edu} 年。本次为佩戴智能手套监测系统的 ${meta.n_days || 30} 天阶段性评估。</p>
+      <p>${d.medical_history}</p>
+      <p>本期临床 Notes：${d.session_recap}</p>
+      <p>${bpsdNarrative}</p>
+      <p>${hpiBehavior || '行为情绪域无明显异常。'}</p>
+      <p>${emaNarrative}</p>
+
+      <div class="section-head">O — Objective</div>
+      <p>Wearable-derived metrics over the ${meta.n_days || 30}-day monitoring window:</p>
+      <div class="objective-block">${objectiveRows || '<div class="ob-row">No structured PhysioAgent insights returned.</div>'}</div>
+      <p style="margin-top:10px">Caregiver-reported BPSD events: ${bpsd.length === 0 ? '无' : bpsd.map(e => `${e.type || '事件'} D${e.day}`).join('、')}.</p>
+      <p>Patient-reported EMA: ${lastEma ? `mood ${lastEma.mood}/10, anxiety ${lastEma.anxiety}/10, sleep ${lastEma.sleep}/10, energy ${lastEma.energy}/10` : '无'}.</p>
+      <p>Sensor-derived MMSE estimate (cognitive composite): refer to Narrator dashboard for current value vs Day 0 baseline.</p>
+
+      <div class="section-head">A — Assessment</div>
+      <p><strong>Working diagnosis:</strong> ${icd.label} <span class="icd">ICD-10: ${icd.code}</span> · stage tendency: <code>${c.stage_inclination}</code> · clinician confidence ${(c.stage_confidence*100).toFixed(0)}%.</p>
+      <p><strong>Differential diagnoses to consider:</strong></p>
+      <ol>${(c.differential_concern || d.differential_concern || []).map(x => `<li>${x}</li>`).join('')}</ol>
+
+      <div class="section-head">P — Plan</div>
+      <p><strong>1. Diagnostic workup</strong></p>
+      <ul>
+        ${c.gold_standard_referral === 'yes' ? `
+        <li>Plasma p-tau217 (Quanterix or equivalent) — required to confirm AD pathology before initiating anti-amyloid therapy.</li>
+        <li>Brain MRI (T1, T2-FLAIR, SWI) — evaluate vascular load and hippocampal atrophy; rule out NPH, mass.</li>
+        <li>Amyloid PET if biomarker-positive and patient is candidate for lecanemab / donanemab.</li>
+        ` : `
+        <li>Continue clinical monitoring; biomarker workup deferred at this time.</li>
         `}
-        <div class="cite-row">📂 来源：<a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/bpsd_events.jsonl" target="_blank">bpsd_events.jsonl ↗</a></div>
-      `;
-    } else if (cadence === '1h') {
-      html = `
-        <h3>EMA 时间序列（最近 5 条）</h3>
-        ${ema.length === 0 ? '<p>无 EMA</p>' : `
-          <table>
-            <tr><th>Day</th><th>Mood</th><th>Anxiety</th><th>Sleep</th><th>Energy</th></tr>
-            ${ema.slice(-5).map(e => `<tr><td>${e.day || '-'}</td><td>${e.mood ?? '-'}</td><td>${e.anxiety ?? '-'}</td><td>${e.sleep ?? '-'}</td><td>${e.energy ?? '-'}</td></tr>`).join('')}
-          </table>
-        `}
-        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/ema.jsonl" target="_blank">ema.jsonl ↗</a></div>
-      `;
-    } else if (cadence === '1d') {
-      const lastNote = notes[notes.length - 1];
-      html = `
-        <h3>临床 Notes（最近）</h3>
-        ${lastNote ? `<pre>${JSON.stringify(lastNote, null, 2)}</pre>` : '<p>无</p>'}
-        <h3>BPSD 当日</h3>
-        <p>${bpsd.length > 0 ? bpsd.slice(-2).map(e => `Day ${e.day} · ${e.type || '事件'} · ${e.duration_min || '?'} 分钟`).join('；') : '无'}</p>
-      `;
-    } else if (cadence === '7d') {
-      html = `
-        <h3>BehaviorAgent 本周 insights</h3>
-        ${bh.insights.map(i => `
-          <div style="padding:10px;border-left:3px solid var(--purple);background:var(--purple-bg);margin-bottom:6px;border-radius:0 6px 6px 0">
-            <strong>${i.observation}</strong>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${i.clinical_implication}</div>
-            <div style="font-size:11px;margin-top:4px">conf <code>${(i.confidence*100).toFixed(0)}%</code> · domain <code>${i.domain}</code></div>
-          </div>
-        `).join('')}
-        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/insights_behavior.json" target="_blank">insights_behavior.json ↗</a></div>
-      `;
-    } else if (cadence === '30d') {
-      html = `
-        <h3>📈 Narrator 月度 Dashboard</h3>
-        <div class="kv">
-          <span class="k">Alert</span><span><span class="badge-inline ${d.alert_level==='red'?'b-bad':d.alert_level==='yellow'?'b-warn':'b-ok'}">${d.alert_level.toUpperCase()}</span></span>
-          <span class="k">Summary</span><span>${d.summary_today}</span>
-        </div>
-        <h3>Patient Data Insights (4 张卡)</h3>
-        ${d.patient_data_insights.map((ins, i) => `
-          <div style="padding:10px;background:var(--bg);border-radius:6px;margin-bottom:6px">
-            <strong>${i+1}. ${ins.card_title}</strong>
-            <div style="font-size:12px;margin-top:4px">${ins.card_md.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>
-          </div>
-        `).join('')}
-        <h3>Differential</h3>
-        <ul>${d.differential_concern.map(x => `<li>${x}</li>`).join('')}</ul>
-        <h3>ClinicalAgent 转诊判断</h3>
-        <p>${c.referral_rationale}</p>
-        <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/dashboard.json" target="_blank">dashboard.json ↗</a></div>
-      `;
-    }
+        <li>Formal neuropsychological testing to characterize domain-specific deficits.</li>
+        <li>Routine labs to exclude reversible causes: B12, folate, TSH, CMP, RPR.</li>
+      </ul>
+      <p><strong>2. Pharmacologic</strong></p>
+      <ul>
+        ${c.stage_inclination?.includes('mild') || c.stage_inclination?.includes('mci_to_mild') ? '<li>Hold cholinesterase inhibitor pending biomarker confirmation. If confirmed AD: donepezil 5 mg PO daily, titrate to 10 mg in 4 weeks.</li>' : ''}
+        ${(bh.insights || []).some(i => (i.supporting_knowledge || []).some(k => k.startsWith('BPSD_DEPRESSION'))) ? '<li>Depressive symptoms warrant trial of SSRI: sertraline 25 mg PO daily, titrate. Reassess in 4–6 weeks.</li>' : ''}
+        <li>Avoid anticholinergics, long-acting benzodiazepines, antihistamines.</li>
+      </ul>
+      <p><strong>3. Non-pharmacologic</strong></p>
+      <ul>
+        ${(c.intervention_priority || []).map(iv => `<li><strong>${iv.type}</strong> (${iv.urgency}): ${iv.rationale}.</li>`).join('') || '<li>Continue music therapy, cognitive training, sleep hygiene as previously prescribed.</li>'}
+      </ul>
+      <p><strong>4. Caregiver / safety</strong></p>
+      <ul>
+        ${bpsd.some(e => e.type && e.type.includes('wander')) ? '<li><strong>Wandering risk active</strong>. Activate glove GPS tracking. Provide caregiver with written wandering response protocol. Consider ID bracelet.</li>' : ''}
+        <li>Caregiver burden assessment (Zarit Burden Interview) at next visit.</li>
+        <li>Review medication management (pill organizer, daily reminder).</li>
+        <li>Driving evaluation if not already documented.</li>
+        <li>Discuss advance directives, power of attorney with family.</li>
+      </ul>
+      <p><strong>5. Follow-up</strong></p>
+      <ul>
+        <li>Reassess in 4 weeks with continued wearable monitoring.</li>
+        <li>Sooner contact if: new safety event (fall, getting lost), new BPSD episode > 30 min, or caregiver crisis.</li>
+        <li>Continued data review at next visit; sensor metrics will reflect treatment response or progression.</li>
+      </ul>
+
+      ${signoff}
+    </div>
+    `;
+  } else if (cadence === '7d') {
+    // ===== Weekly Interval Progress Note =====
+    const weekBpsd = bpsd.slice(-3);
+    const weekInsights = bh.insights.slice(0, 3);
+    html = `
+    <div class="soap">
+      ${letterhead('INTERVAL PROGRESS NOTE — WEEKLY')}
+
+      <div class="section-head">S — Subjective (this week)</div>
+      <p>${weekBpsd.length > 0
+        ? `Caregiver reports ${weekBpsd.length} BPSD episode${weekBpsd.length > 1 ? 's' : ''} this week: ` + weekBpsd.map(e => `${e.type || '事件'} D${e.day} (${e.duration_min || '?'} 分钟)`).join(', ') + '.'
+        : 'Caregiver reports no acute BPSD episodes this week.'}</p>
+      <p>${lastEma ? `Patient-reported EMA latest: mood ${lastEma.mood}/10, anxiety ${lastEma.anxiety}/10, sleep ${lastEma.sleep}/10.` : '无 EMA。'}</p>
+
+      <div class="section-head">O — Objective (interval change)</div>
+      <p>Wearable trends across this 7-day interval:</p>
+      <div class="objective-block">
+        ${weekInsights.map(i => `<div class="ob-row"><span class="lbl">${i.observation}</span><span class="interp">${i.clinical_implication}</span></div>`).join('') || '<div class="ob-row">No new behavioral insights this week.</div>'}
+      </div>
+
+      <div class="section-head">A — Assessment</div>
+      <p>Patient remains on stable trajectory of ${c.stage_inclination} (confidence ${(c.stage_confidence*100).toFixed(0)}%). ${weekBpsd.length > 1 ? '<strong>BPSD frequency this week exceeds typical baseline; consider escalating non-pharmacologic intervention.</strong>' : 'No new differential concern this week.'}</p>
+
+      <div class="section-head">P — Plan changes</div>
+      <ul>
+        <li>Continue current treatment plan as documented in the most recent monthly visit note.</li>
+        ${weekBpsd.length > 1 ? '<li>Escalate music therapy frequency from once daily to twice daily.</li>' : ''}
+        ${lastEma && lastEma.mood < 4 ? '<li>Mood persistently low; consider initiating SSRI or escalating dose at next visit.</li>' : ''}
+        ${lastEma && lastEma.sleep < 5 ? '<li>Reinforce sleep hygiene with caregiver. Document sleep diary for one week.</li>' : ''}
+        <li>Next routine review: end of next week. Sooner if new safety event.</li>
+      </ul>
+
+      ${signoff}
+    </div>
+    `;
+  } else if (cadence === '1h') {
+    // ===== Hourly Sensor Event Note =====
+    const recentBpsd = bpsd[bpsd.length - 1];
+    html = `
+    <div class="soap">
+      ${letterhead('SENSOR EVENT NOTE — HOURLY')}
+
+      <div class="section-head">Trigger</div>
+      <p>${recentBpsd
+        ? `Most recent recorded event: <strong>${recentBpsd.type || '事件'}</strong> on D${recentBpsd.day}, duration ${recentBpsd.duration_min || '?'} min. ${recentBpsd.context || recentBpsd.trigger ? 'Context: ' + (recentBpsd.context || recentBpsd.trigger) + '.' : ''}`
+        : 'No acute event firing in the current hour. Routine monitoring active.'
+      }</p>
+
+      <div class="section-head">Real-time wearable signals (latest hour)</div>
+      <div class="objective-block">
+        <div class="ob-row"><span class="lbl">EDA tonic level</span><span class="val">streaming · see realtime board</span></div>
+        <div class="ob-row"><span class="lbl">Heart rate</span><span class="val">streaming · see realtime board</span></div>
+        <div class="ob-row"><span class="lbl">IMU activity</span><span class="val">streaming · see realtime board</span></div>
+        <div class="ob-row"><span class="lbl">Audio (speech) presence</span><span class="val">streaming · see realtime board</span></div>
+      </div>
+
+      <div class="section-head">EMA (most recent)</div>
+      <p>${lastEma ? `mood ${lastEma.mood}/10, anxiety ${lastEma.anxiety}/10, sleep ${lastEma.sleep}/10, energy ${lastEma.energy}/10.` : 'No EMA submission in current hour.'}</p>
+
+      <div class="section-head">Action taken</div>
+      <ul>
+        ${recentBpsd && recentBpsd.type && recentBpsd.type.includes('agitat') ? '<li>Triggered music therapy via glove speaker (patient-preferred era).</li><li>Caregiver alerted via app push.</li>' : ''}
+        ${recentBpsd && recentBpsd.type && recentBpsd.type.includes('wander') ? '<li>GPS tracking activated. Caregiver alerted with current location.</li>' : ''}
+        ${!recentBpsd ? '<li>No intervention required. Continue routine monitoring.</li>' : ''}
+      </ul>
+
+      <div class="section-head">Recheck</div>
+      <p>Re-evaluate at next hourly cycle. Escalate to weekly review if EDA / HR / mood remain abnormal at recheck.</p>
+
+      ${signoff}
+    </div>
+    `;
   }
 
   openModal(title, html);
@@ -1618,7 +1712,7 @@ function openCustomReportModal() {
   openCustomCadenceReport('30d');
 }
 
-// 上传 CSV 的 3 cadence 报告（小时/周/月）
+// 上传 CSV 的 3 cadence 报告（SOAP 格式）
 function openCustomCadenceReport(cadence) {
   if (!customPatient) return;
   const cp = customPatient;
@@ -1629,24 +1723,67 @@ function openCustomCadenceReport(cadence) {
   const colMood = pickCol(['mood','ema_mood','mood_score']);
   const colHrv  = pickCol(['hrv_sdnn','hrv','sdnn','SDNN']);
   const last = rows[rows.length - 1], first = rows[0];
+  const today = new Date().toISOString().slice(0,10);
   let title, html;
 
+  // 根据末日推断分期
+  let stage = 'unspecified', icd = { code: 'R41.81', label: 'Age-related cognitive decline' };
+  if (colGait) {
+    const g = parseFloat(last[colGait]);
+    if (g < 0.8) { stage = 'mild AD'; icd = { code: 'G30.9', label: 'AD unspecified' }; }
+    else if (g < 1.0) { stage = 'MCI'; icd = { code: 'G31.84', label: 'Mild cognitive impairment' }; }
+  }
+  if (colMmse) {
+    const m = parseFloat(last[colMmse]);
+    if (m < 18) { stage = 'moderate AD'; icd = { code: 'G30.1 + F02.81', label: 'Late-onset AD with behavioral disturbance' }; }
+    else if (m < 24) { stage = 'mild AD'; icd = { code: 'G30.9', label: 'AD unspecified' }; }
+    else if (m < 27) { stage = 'MCI'; icd = { code: 'G31.84', label: 'Mild cognitive impairment' }; }
+  }
+
+  const lhead = (type) => `
+    <div class="letterhead">
+      <h2>${type}</h2>
+      <div class="meta">
+        <span><strong>Source</strong>: uploaded CSV — <code>${cp.name}</code></span>
+        <span><strong>Records</strong>: ${rows.length} rows · ${cp.header.length} cols</span>
+        <span><strong>Date</strong>: ${today}</span>
+        <span><strong>Provider</strong>: AD glove monitoring (auto-generated)</span>
+      </div>
+    </div>
+  `;
+  const sign = `
+    <div class="signoff">
+      Auto-generated from uploaded longitudinal CSV. Requires physician review and electronic signature.
+      Recommend running this CSV through <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline</a> for full Multi-Agent inference.
+    </div>
+  `;
+
   if (cadence === '1h') {
-    title = `⏱ 小时报告 · ${cp.name}`;
-    const wikiHits = [];
-    if (colGait && parseFloat(last[colGait]) < 1.0) wikiHits.push(`步速 ${parseFloat(last[colGait]).toFixed(2)} m/s < 1.0 → MCR 可疑 (<a href="${WIKI_BASE_URL}/mcr_criteria.md" target="_blank">mcr_criteria ↗</a>)`);
-    if (colMood && parseFloat(last[colMood]) < 4) wikiHits.push(`mood ${last[colMood]}/10 < 4 → 抑郁风险 (<a href="${WIKI_BASE_URL}/bpsd_depression.md" target="_blank">bpsd_depression ↗</a>)`);
-    if (colHrv && parseFloat(last[colHrv]) < 35) wikiHits.push(`HRV SDNN ${last[colHrv]} ms < 35 → 自主神经异常 (<a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">ppg_hrv ↗</a>)`);
+    title = `Sensor Event Note · ${cp.name}`;
+    const findings = [];
+    if (colGait) {
+      const g = parseFloat(last[colGait]);
+      findings.push(`<div class="ob-row"><span class="lbl">Gait speed</span><span class="val">${g.toFixed(2)} m/s</span><span class="interp">${g < 1.0 ? 'below MCR threshold (Verghese 2014)' : 'within reference'}</span></div>`);
+    }
+    if (colMood) findings.push(`<div class="ob-row"><span class="lbl">EMA mood</span><span class="val">${last[colMood]}/10</span><span class="interp">${parseFloat(last[colMood]) < 4 ? 'below depression screening cutoff' : 'within reference'}</span></div>`);
+    if (colHrv) findings.push(`<div class="ob-row"><span class="lbl">HRV SDNN</span><span class="val">${last[colHrv]} ms</span><span class="interp">${parseFloat(last[colHrv]) < 35 ? 'reduced autonomic variability' : 'within reference'}</span></div>`);
     html = `
-      <h3>最近时间点快照</h3>
-      <table><tr><th>字段</th><th>值</th></tr>
-        ${Object.entries(last).slice(0, 18).map(([k,v]) => `<tr><td>${k}</td><td><code>${v}</code></td></tr>`).join('')}
-      </table>
-      <h3>WIKI KB 实时规则命中</h3>
-      ${wikiHits.length ? `<ul>${wikiHits.map(h => `<li>${h}</li>`).join('')}</ul>` : '<p style="color:var(--muted)">无明显异常命中</p>'}
+    <div class="soap">
+      ${lhead('SENSOR EVENT NOTE — HOURLY (uploaded CSV)')}
+      <div class="section-head">Trigger</div>
+      <p>Most recent row of uploaded longitudinal record (record ${rows.length} of ${rows.length}).</p>
+      <div class="section-head">Real-time wearable signals</div>
+      <div class="objective-block">${findings.join('') || '<div class="ob-row">No recognized columns (expected gait_speed, mmse, mood, hrv_sdnn).</div>'}</div>
+      <div class="section-head">Action</div>
+      <ul>
+        <li>Continue routine monitoring; no acute event firing.</li>
+        <li>Recheck at next hourly cycle.</li>
+      </ul>
+      ${sign}
+    </div>
     `;
   } else if (cadence === '7d') {
-    title = `📊 周报 · ${cp.name}`;
+    title = `Interval Progress Note · ${cp.name}`;
     const week = rows.slice(-7);
     const trend = (col) => {
       if (!col || week.length < 2) return null;
@@ -1655,22 +1792,32 @@ function openCustomCadenceReport(cadence) {
       return { col, a, b, delta: b-a, dpct: a ? ((b-a)/Math.abs(a)*100).toFixed(1) : 'n/a' };
     };
     const trends = [colGait,colMmse,colMood,colHrv].map(trend).filter(Boolean);
+    const concerning = trends.filter(t => Math.abs(t.delta) > Math.abs(t.a) * 0.05);
     html = `
-      <h3>最近 7 天趋势</h3>
-      ${trends.length ? `<table>
-        <tr><th>指标</th><th>7 天前</th><th>本日</th><th>变化</th></tr>
-        ${trends.map(t => `<tr><td>${t.col}</td><td><code>${t.a.toFixed(2)}</code></td><td><code>${t.b.toFixed(2)}</code></td>
-          <td><span class="badge-inline ${Math.abs(t.delta) > Math.abs(t.a)*0.05 ? 'b-warn' : 'b-ok'}">${t.delta>=0?'+':''}${t.delta.toFixed(2)} (${t.dpct}%)</span></td></tr>`).join('')}
-      </table>` : '<p>未识别关键指标</p>'}
-      <h3>WIKI 周窗规则</h3>
+    <div class="soap">
+      ${lhead('INTERVAL PROGRESS NOTE — WEEKLY (uploaded CSV)')}
+      <div class="section-head">S — Subjective</div>
+      <p>Patient is on continuous wearable monitoring (uploaded longitudinal CSV). Reporting interval covers the last 7 records of the uploaded series.</p>
+
+      <div class="section-head">O — Objective (week-over-week change)</div>
+      <div class="objective-block">
+        ${trends.length ? trends.map(t => `<div class="ob-row"><span class="lbl">${t.col}</span><span class="val">${t.a.toFixed(2)} → ${t.b.toFixed(2)} (${t.delta>=0?'+':''}${t.dpct}%)</span><span class="interp">${Math.abs(t.delta)>Math.abs(t.a)*0.1 ? 'significant weekly change' : Math.abs(t.delta)>Math.abs(t.a)*0.05 ? 'modest change' : 'stable'}</span></div>`).join('') : '<div class="ob-row">No recognized longitudinal columns.</div>'}
+      </div>
+
+      <div class="section-head">A — Assessment</div>
+      <p>${concerning.length === 0 ? 'Patient remains stable across all monitored domains this week.' : `${concerning.length} metric${concerning.length>1?'s':''} (${concerning.map(t=>t.col).join(', ')}) showed > 5% weekly change. Pending physician review for clinical significance.`}</p>
+
+      <div class="section-head">P — Plan changes</div>
       <ul>
-        <li>步速周降 > 5% → 标记 (<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">imu_gait ↗</a>)</li>
-        <li>mood 周降 > 3 分 → BPSD 抑郁加重</li>
-        <li>HRV 周降 > 10% → 自主神经持续退化</li>
+        <li>Continue current treatment as documented in most recent monthly visit note.</li>
+        ${concerning.length > 1 ? '<li>Multiple metrics shifting; consider escalating non-pharmacologic interventions or earlier follow-up.</li>' : ''}
+        <li>Next routine review: end of next week.</li>
       </ul>
+      ${sign}
+    </div>
     `;
   } else if (cadence === '30d') {
-    title = `📈 月报 · ${cp.name}`;
+    title = `Monthly Visit Note · ${cp.name}`;
     const trend = (col) => {
       if (!col) return null;
       const a = parseFloat(first[col]), b = parseFloat(last[col]);
@@ -1678,35 +1825,55 @@ function openCustomCadenceReport(cadence) {
       return { col, a, b, delta: b-a, dpct: a ? ((b-a)/Math.abs(a)*100).toFixed(1) : 'n/a' };
     };
     const trends = [colGait,colMmse,colMood,colHrv].map(trend).filter(Boolean);
-    let stage = 'SCD';
-    if (colGait) { const g = parseFloat(last[colGait]); if (g < 0.8) stage = 'Mild'; else if (g < 1.0) stage = 'MCI'; }
-    if (colMmse) { const m = parseFloat(last[colMmse]); if (m < 18) stage = 'Moderate'; else if (m < 24) stage = 'Mild'; else if (m < 27) stage = 'MCI'; }
     html = `
-      <h3>📈 ${cp.rows.length} 天全周期 · WIKI 综合判断</h3>
-      <div class="kv">
-        <span class="k">数据点</span><span>${rows.length}</span>
-        <span class="k">推断分期</span><span><span class="badge-inline b-warn">${stage}</span></span>
-      </div>
-      <h3>全周期变化</h3>
-      ${trends.length ? `<table>
-        <tr><th>指标</th><th>首日</th><th>末日</th><th>变化</th><th>wiki 阈值</th></tr>
-        ${trends.map(t => {
+    <div class="soap">
+      ${lhead('NEUROLOGY / GERIATRIC PROGRESS NOTE — MONTHLY (uploaded CSV)')}
+
+      <div class="section-head">S — Subjective</div>
+      <p>Patient enrolled in continuous wearable monitoring program with longitudinal record of ${rows.length} time points uploaded.</p>
+      <p>No subjective caregiver narrative available from CSV alone — recommend pairing this report with caregiver interview at next visit.</p>
+
+      <div class="section-head">O — Objective (full monitoring window)</div>
+      <div class="objective-block">
+        ${trends.length ? trends.map(t => {
           let thr = '';
-          if (t.col === colGait) thr = `<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">< 1.0 m/s ↗</a>`;
-          else if (t.col === colMmse) thr = `<a href="${WIKI_BASE_URL}/ad_staging.md" target="_blank">24/27 切点 ↗</a>`;
-          else if (t.col === colMood) thr = `<a href="${WIKI_BASE_URL}/bpsd_depression.md" target="_blank">< 4 ↗</a>`;
-          else if (t.col === colHrv) thr = `<a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">< 35 ms ↗</a>`;
-          return `<tr><td>${t.col}</td><td><code>${t.a.toFixed(2)}</code></td><td><code>${t.b.toFixed(2)}</code></td>
-            <td><span class="badge-inline ${Math.abs(t.delta) > Math.abs(t.a)*0.1 ? 'b-bad' : Math.abs(t.delta) > Math.abs(t.a)*0.05 ? 'b-warn' : 'b-ok'}">${t.delta>=0?'+':''}${t.delta.toFixed(2)} (${t.dpct}%)</span></td>
-            <td style="font-size:11px">${thr}</td></tr>`;
-        }).join('')}
-      </table>` : '<p>未识别关键指标</p>'}
-      <h3>处置建议（wiki 框架）</h3>
+          if (t.col === colGait) thr = `<a href="${WIKI_BASE_URL}/imu_gait.md" target="_blank">imu_gait↗</a>`;
+          else if (t.col === colMmse) thr = `<a href="${WIKI_BASE_URL}/ad_staging.md" target="_blank">ad_staging↗</a>`;
+          else if (t.col === colMood) thr = `<a href="${WIKI_BASE_URL}/bpsd_depression.md" target="_blank">bpsd_depression↗</a>`;
+          else if (t.col === colHrv) thr = `<a href="${WIKI_BASE_URL}/ppg_hrv.md" target="_blank">ppg_hrv↗</a>`;
+          return `<div class="ob-row"><span class="lbl">${t.col}</span><span class="val">${t.a.toFixed(2)} → ${t.b.toFixed(2)} (${t.delta>=0?'+':''}${t.dpct}%)</span><span class="ref">${thr}</span></div>`;
+        }).join('') : '<div class="ob-row">No recognized longitudinal columns.</div>'}
+      </div>
+
+      <div class="section-head">A — Assessment</div>
+      <p><strong>Working diagnosis:</strong> ${icd.label} <span class="icd">ICD-10: ${icd.code}</span> · suspected stage: <strong>${stage}</strong></p>
+      <p>Differential to consider: AD vs Lewy body dementia (clarify with REM sleep history, hallucinations); AD vs vascular dementia (assess cerebrovascular risk and brain MRI); primary depression vs AD-comorbid depression.</p>
+
+      <div class="section-head">P — Plan</div>
+      <p><strong>1. Diagnostic workup</strong></p>
       <ul>
-        <li>建议下一步：<a href="${WIKI_BASE_URL}/atn_framework.md" target="_blank">血液 p-tau217 + 神经内科 ↗</a></li>
-        <li>纵向重点：步态 / 语音 / HRV 三联</li>
-        <li>对应 MIND pipeline：跑 <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline ↗</a> 获得 Agent insights + Narrator</li>
+        <li>Plasma p-tau217 to confirm AD pathology (<a href="${WIKI_BASE_URL}/atn_framework.md" target="_blank">AT(N) framework ↗</a>).</li>
+        <li>Brain MRI (T1, T2-FLAIR, SWI) to evaluate vascular load and hippocampal atrophy.</li>
+        <li>Formal neuropsychological testing.</li>
       </ul>
+      <p><strong>2. Pharmacologic / Non-pharmacologic</strong></p>
+      <ul>
+        <li>If AD confirmed: cholinesterase inhibitor (donepezil 5 mg, titrate).</li>
+        <li>Music therapy, cognitive training, sleep hygiene.</li>
+      </ul>
+      <p><strong>3. Caregiver / safety</strong></p>
+      <ul>
+        <li>Caregiver burden assessment.</li>
+        <li>Safety review (driving, medication management).</li>
+      </ul>
+      <p><strong>4. Follow-up</strong></p>
+      <ul>
+        <li>Reassess in 4 weeks with continued wearable monitoring.</li>
+        <li>Recommended next step: run uploaded CSV through <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline ↗</a> to generate full Multi-Agent insights for next visit.</li>
+      </ul>
+
+      ${sign}
+    </div>
     `;
   }
   openModal(title, html);
