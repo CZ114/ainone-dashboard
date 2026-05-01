@@ -35,10 +35,11 @@ header p { margin: 0 auto; max-width: 720px; opacity: 0.85; font-size: 15px; }
 .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
 .portal {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
   margin-top: -32px;
 }
+@media (max-width: 900px) { .portal { grid-template-columns: 1fr; } }
 .tile {
   background: var(--card);
   border-radius: 16px;
@@ -58,6 +59,18 @@ header p { margin: 0 auto; max-width: 720px; opacity: 0.85; font-size: 15px; }
 .tile p { margin: 0; color: var(--muted); font-size: 14px; }
 .tile.patient { border-top: 4px solid var(--teal); }
 .tile.doctor { border-top: 4px solid var(--rose); }
+.tile.realtime { border-top: 4px solid #f59e0b; }
+.tile.realtime .cta { color: #d97706; }
+.tile .demo-badge {
+  display: inline-block; font-size: 10px; padding: 2px 8px;
+  background: #fef3c7; color: #92400e; border-radius: 4px;
+  font-weight: 600; margin-left: 6px; vertical-align: middle;
+}
+.tile .live-badge {
+  display: inline-block; font-size: 10px; padding: 2px 8px;
+  background: #d1fae5; color: #065f46; border-radius: 4px;
+  font-weight: 600; margin-left: 6px; vertical-align: middle;
+}
 .tile ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
 .tile ul li { margin: 3px 0; }
 .cta {
@@ -108,7 +121,7 @@ footer {
 
   <a class="tile patient" href="patient.html">
     <div class="icon">🌿</div>
-    <h2>患者端</h2>
+    <h2>患者端 <span class="demo-badge">DEMO</span></h2>
     <p>给本人或家属看。简单、温和，告诉你"今天怎么样"和"接下来该做什么"。</p>
     <ul>
       <li>今日红黄绿状态灯</li>
@@ -121,15 +134,28 @@ footer {
 
   <a class="tile doctor" href="doctor.html">
     <div class="icon">🩺</div>
-    <h2>医生端</h2>
-    <p>给临床医生看。多患者切换、5 时间尺度、Agent 推理链 + KB / 论文引用。</p>
+    <h2>医生端 <span class="demo-badge">DEMO</span></h2>
+    <p>给临床医生看 mock 数据 + Agent 推理。所有卡片可点开看详情。</p>
     <ul>
       <li>AD 分期 + 置信度（SCD→Severe）</li>
-      <li>HRV / 步态 / EDA / 语音 多模态</li>
-      <li>BPSD 7 症状风险条 + 1-2h 预警</li>
-      <li>建议转诊 / 生成家属周报</li>
+      <li>HRV / 步态 / EDA / 语音 可点开</li>
+      <li>5 cadence 时间尺度详情</li>
+      <li>实际生成临床/家属周报</li>
     </ul>
     <div class="cta">进入医生端 →</div>
+  </a>
+
+  <a class="tile realtime" href="/dashboard">
+    <div class="icon">📡</div>
+    <h2>实时面板 <span class="live-badge">LIVE</span></h2>
+    <p>给开发/研究自己用。直连本机 backend + ESP32，实时显示真实传感器流。</p>
+    <ul>
+      <li>真实 USB Serial / BLE / WiFi 数据</li>
+      <li>多通道实时波形（陈哲做的）</li>
+      <li>录制 / 回放 / Claude AI 聊天</li>
+      <li>需先 <code>python backend/run.py</code></li>
+    </ul>
+    <div class="cta">打开实时面板 →</div>
   </a>
 
 </div>

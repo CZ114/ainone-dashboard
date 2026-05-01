@@ -336,9 +336,68 @@ body {
   position: fixed; bottom: 30px; right: 30px;
   background: var(--text); color: white; padding: 12px 20px; border-radius: 8px;
   font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
-  max-width: 360px;
+  max-width: 360px; z-index: 100;
 }
 #toast.show { opacity: 0.95; }
+
+/* ===== Modal ===== */
+#modal {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+#modal.show { display: flex; }
+#modal .panel {
+  background: white; border-radius: 12px;
+  width: min(820px, 100%); max-height: 90vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+#modal .panel-head {
+  padding: 16px 22px; border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  display: flex; align-items: center; gap: 12px;
+}
+#modal .panel-head .title { font-size: 16px; font-weight: 700; flex: 1; }
+#modal .panel-head .x {
+  background: transparent; border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: 6px; cursor: pointer; font-family: inherit;
+}
+#modal .panel-head .x:hover { background: white; }
+#modal .panel-body { padding: 22px 26px; overflow-y: auto; flex: 1; font-size: 14px; }
+#modal h3 { margin: 16px 0 8px; font-size: 14px; }
+#modal h3:first-child { margin-top: 0; }
+#modal table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+#modal th, #modal td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+#modal th { background: var(--bg); font-weight: 600; }
+#modal .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; font-size: 13px; margin: 6px 0 12px; }
+#modal .kv .k { color: var(--muted); }
+#modal .badge-inline {
+  display: inline-block; font-size: 11px; padding: 1px 7px;
+  border-radius: 4px; font-weight: 600;
+}
+#modal .b-warn { background: var(--orange-bg); color: var(--orange); }
+#modal .b-bad  { background: var(--red-bg); color: var(--red); }
+#modal .b-ok   { background: var(--green-bg); color: var(--green); }
+#modal ul { padding-left: 20px; }
+#modal li { margin: 4px 0; }
+#modal .cite-row {
+  font-size: 12px; color: var(--muted); margin-top: 8px;
+  padding: 8px 12px; background: var(--bg); border-radius: 6px;
+}
+#modal .cite-row a { color: var(--teal); text-decoration: none; }
+#modal pre {
+  background: var(--bg); padding: 12px; border-radius: 6px;
+  font-size: 12px; overflow-x: auto;
+  font-family: ui-monospace, monospace;
+}
+
+/* clickable hover */
+.cad, .modal-block, .bpsd-cell { cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+.cad:hover, .modal-block:hover, .bpsd-cell:hover {
+  transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
 
 /* ===== Sensor Board ===== */
 .sensor-board-head {
@@ -442,6 +501,7 @@ body {
     <a href="index.html">首页</a>
     <a href="patient.html">患者端</a>
     <a href="doctor.html" class="active" style="background:#be123c;color:white;border-color:#be123c">医生端</a>
+    <a href="/dashboard">实时面板</a>
   </div>
 </nav>
 
@@ -467,6 +527,17 @@ body {
 </div>
 
 <div id="toast"></div>
+
+<!-- 详情 Modal -->
+<div id="modal" onclick="if(event.target===this) closeModal()">
+  <div class="panel">
+    <div class="panel-head">
+      <span class="title" id="modalTitle">详情</span>
+      <button class="x" onclick="closeModal()">关闭 ✕</button>
+    </div>
+    <div class="panel-body" id="modalBody"></div>
+  </div>
+</div>
 
 <script>
 // ===== Mock 患者数据 =====
@@ -764,7 +835,7 @@ function selectPatient(id) {
 
   const cadenceHtml = ['5min','1h','1d','7d','30d'].map(k => {
     const c = p.cadence[k];
-    return `<div class="cad ${c.level}">
+    return `<div class="cad ${c.level}" onclick="openCadenceModal('${k}','${p.id}')">
       <div class="ic">${k==='5min'?'⚡':k==='1h'?'⏱':k==='1d'?'📅':k==='7d'?'📊':'📈'}</div>
       <div class="name">${k} 窗口</div>
       <div class="v">${c.v}</div>
@@ -774,7 +845,7 @@ function selectPatient(id) {
   const modalHtml = ['hrv','gait','eda','voice'].map(k => {
     const m = p.metrics[k];
     return `
-      <div class="modal-block">
+      <div class="modal-block" onclick="openMetricModal('${k}','${p.id}')">
         <h4>${m.icon} ${m.name}</h4>
         ${m.rows.map(r => `
           <div class="row">
@@ -798,8 +869,8 @@ function selectPatient(id) {
     </div>
   `).join('');
 
-  const bpsdHtml = p.bpsd.map(b => `
-    <div class="bpsd-cell lv-${b[1]}">
+  const bpsdHtml = p.bpsd.map((b, idx) => `
+    <div class="bpsd-cell lv-${b[1]}" onclick="openBpsdModal(${idx},'${p.id}')">
       <div class="nm">${b[0]}</div>
       <div class="lv">${b[1]==='ok'?'正常':b[1]==='warn'?'关注':'高风险'}</div>
       <div class="nb">${b[2]}</div>
@@ -848,19 +919,21 @@ function selectPatient(id) {
     ${alertHtml}
 
     <div class="section" style="padding:14px 16px">
-      <h2>📡 Sensor Board <span class="desc">手套 8 通道实时流</span>
-        <span class="badge" style="background:#0f172a;color:#5eead4;margin-left:auto">LIVE</span>
+      <h2>📡 Sensor Board <span class="desc">手套 8 通道（演示模式 · 模拟数据）</span>
+        <span class="badge" style="background:#fef3c7;color:#854d0e;margin-left:auto;border:1px solid #f59e0b">⚠ DEMO</span>
       </h2>
       <div class="sensor-board-head">
-        <span><span class="sb-dot live"></span>USB Serial</span>
+        <span style="color:#fbbf24"><span class="sb-dot" style="background:#fbbf24"></span>SIMULATED</span>
         <span class="sep">|</span>
         <span class="sr">50 Hz</span>
         <span class="sep">|</span>
-        <span><span class="sb-dot rec"></span>Recording</span>
+        <span>Profile: <span class="pid">${p.sensorProfile}</span></span>
         <span class="sep">|</span>
         <span>Patient: <span class="pid">${p.id}</span></span>
         <span class="sep">|</span>
         <span id="sbClock">${new Date().toTimeString().slice(0,8)}</span>
+        <span class="sep">|</span>
+        <span style="color:#94a3b8;font-size:11px">真实数据需本机跑 backend + ESP32</span>
       </div>
       <div class="channel-grid" id="channelGrid">
         ${CHANNELS.map(c => `
@@ -912,15 +985,15 @@ function selectPatient(id) {
     </div>
 
     <div class="section">
-      <h2>处置 <span class="desc">将判断转化为操作</span></h2>
+      <h2>处置 <span class="desc">将判断转化为操作 · 点击查看实际生成的内容</span></h2>
       <div class="action-row">
-        <button class="btn primary" onclick="showToast('已生成本周家属版报告（红黄绿+行动建议）')">📄 生成家属周报</button>
-        <button class="btn primary" onclick="showToast('已发送临床简报至主治医生工作站')">📋 推送医生周报</button>
+        <button class="btn primary" onclick="openReportModal('family','${p.id}')">📄 生成家属周报</button>
+        <button class="btn primary" onclick="openReportModal('clinical','${p.id}')">📋 推送医生周报</button>
         ${p.stage === 'MCI' || p.stage === 'Mild' ?
-          '<button class="btn warn" onclick="showToast(\'已提交：建议下一步做血液 p-tau217 / 神经内科会诊\')">🩺 建议金标准检查</button>' : ''}
+          `<button class="btn warn" onclick="openReportModal('goldstandard','${p.id}')">🩺 建议金标准检查</button>` : ''}
         ${p.alert ?
-          '<button class="btn warn" onclick="showToast(\'已触发干预：音乐疗法 + 通知看护人\')">🎵 立即触发干预</button>' : ''}
-        <button class="btn" onclick="showToast('已开启 24h 加密监测')">🔒 加密监测</button>
+          `<button class="btn warn" onclick="openReportModal('intervention','${p.id}')">🎵 立即触发干预</button>` : ''}
+        <button class="btn" onclick="window.open('/dashboard','_blank')">📡 打开实时面板（需 backend）↗</button>
         <button class="btn" onclick="window.open('https://jewelina95.github.io/ad-wiki-pages/','_blank')">📚 打开 wiki KB ↗</button>
       </div>
     </div>
@@ -1015,6 +1088,272 @@ function startSensorBoard(profileName) {
     const clk = document.getElementById('sbClock');
     if (clk) clk.textContent = new Date().toTimeString().slice(0,8);
   }, TICK_MS);
+}
+
+// ===== Modal 系统 =====
+function openModal(title, html) {
+  document.getElementById('modalTitle').innerHTML = title;
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ----- Cadence 详情 -----
+const CADENCE_DETAILS = {
+  "5min": { ic:"⚡", name:"5 分钟实时窗", purpose:"急性事件检测",
+    measures:["EDA SCL/SCR 突变", "HR 突升 / 突降", "IMU 大幅活动突变", "麦克风音量异常"],
+    triggers:["EDA + HR 同时上升 → 可能 BPSD 激越前兆 (Iaboni 2022 AUC 0.87)", "HR > 基线 +30% 持续 60s → 警报", "IMU 高加速度 → 跌倒检测"],
+    output:"红/黄警报 → 推送看护人手机", citeWiki:"bpsd_agitation"},
+  "1h":  { ic:"⏱", name:"1 小时短时窗", purpose:"短时状态汇总",
+    measures:["HRV 时域 (SDNN, RMSSD)", "活动量分布", "情绪唤醒度", "姿态变化"],
+    triggers:["HRV 持续 < 自身基线 -1SD → 自主神经激活", "持续静坐 > 90 分钟 → 久坐提醒"],
+    output:"实时状态板（颜色 + 数值）", citeWiki:"ppg_hrv"},
+  "1d":  { ic:"📅", name:"1 日窗", purpose:"日报",
+    measures:["睡眠时长 + 质量 (PPG+IMU)", "总活动量 / 步数", "ADL 任务完成度", "日落综合征模式 (15-19 时段 EDA/HR)"],
+    triggers:["睡眠 < 5h 或睡眠效率 < 80% → 标记", "日落时段 EDA 异常模式 → 标记"],
+    output:"每日报告 → 医生 + 家属", citeWiki:"bpsd_sundowning"},
+  "7d":  { ic:"📊", name:"7 日周窗", purpose:"短期趋势",
+    measures:["步速下降斜率", "HRV 周均值变化", "语速 / 停顿率周变化", "BPSD 事件频次"],
+    triggers:["步速周降 > 5% → 标记", "BPSD 事件 > 3/周 → 升级关注"],
+    output:"周趋势 + 家属周报", citeWiki:"imu_gait"},
+  "30d": { ic:"📈", name:"30 日月窗", purpose:"阶段判断 · 拐点识别",
+    measures:["综合认知指数 CCI", "MMSE / MoCA 估计", "纵向轨迹拐点", "AT(N) 标志物推断"],
+    triggers:["CCI 偏离基线 > 2SD → SCD→MCI 拐点候选", "步态 + 语言 + HRV 三指标一致下行 → 进展预警"],
+    output:"阶段转化提醒 → 建议 PET / 血液 p-tau217", citeWiki:"ad_staging"}
+};
+function openCadenceModal(k, pid) {
+  const d = CADENCE_DETAILS[k];
+  const p = PATIENTS[pid];
+  const c = p.cadence[k];
+  const html = `
+    <h3>${d.ic} ${d.name} · 当前 <span class="badge-inline ${c.level==='alert'?'b-bad':c.level==='warn'?'b-warn':'b-ok'}">${c.v}</span></h3>
+    <div class="kv">
+      <span class="k">用途</span><span>${d.purpose}</span>
+      <span class="k">输出</span><span>${d.output}</span>
+    </div>
+    <h3>这个窗口在测什么</h3>
+    <ul>${d.measures.map(m => `<li>${m}</li>`).join('')}</ul>
+    <h3>触发规则</h3>
+    <ul>${d.triggers.map(t => `<li>${t}</li>`).join('')}</ul>
+    <div class="cite-row">📚 KB 引用：<a href="https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/${d.citeWiki}.md" target="_blank">wiki/concepts/${d.citeWiki}.md ↗</a></div>
+  `;
+  openModal(`${d.ic} ${d.name} · ${p.name}`, html);
+}
+
+// ----- 多模态指标详情 -----
+const METRIC_DETAILS = {
+  hrv: { name:"HRV (PPG)",
+    rationale:"心率变异性反映自主神经平衡。AD 早期 Tau 沉积影响岛叶和迷走通路，导致 HRV 持续下降。",
+    thresholds:[
+      ["SDNN", "正常 ≥ 50 ms · MCI 偏低 35-50 · AD 显著降低 < 35"],
+      ["RMSSD", "副交感指标 · 正常 ≥ 27 ms"],
+      ["LF/HF", "交感/副交感比 · > 2.5 提示交感优势"],
+      ["静息 HR", "AD 患者偏快 (基线漂移)"]
+    ],
+    refs:[["Collins 2012", "HRV 与 AD 风险独立相关"], ["wiki/concepts/ppg_hrv", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/ppg_hrv.md"]]},
+  gait: { name:"步态 (IMU)",
+    rationale:"前额叶-海马回路损伤 → 运动认知整合障碍 · 基底节-皮质回路受损 → 步态变异性升高。步速拐点可在 MCI 前 12.1 年出现。",
+    thresholds:[
+      ["步速", "MCR 阳性阈值 < 1.0 m/s · 健康 ≥ 1.2"],
+      ["步频", "正常 100-120 spm"],
+      ["步态变异性", "正常 < 3% · 升高 > 5% 提示认知-运动失耦"],
+      ["双任务代价 DTC", "> 15% 提示前额叶执行下降"]
+    ],
+    refs:[["Buracchio 2010", "步速拐点早 12.1 年"], ["Verghese 2014", "MCR 标准"], ["wiki/concepts/imu_gait", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/imu_gait.md"]]},
+  eda: { name:"EDA",
+    rationale:"皮肤电活动 = 交感胆碱能纤维输出。杏仁核-岛叶回路在 AD 早期受累 · 个性化阈值最重要（个体差异远大于群体差）",
+    thresholds:[
+      ["SCL 均值", "个性化基线偏移 > 30% → 警报"],
+      ["SCR 频率", "BPSD 激越 > 3/min"],
+      ["NS-SCR", "焦虑指标 · > 2/min 提示高唤醒"],
+      ["唤醒度", "EDA + HR 联合标记"]
+    ],
+    refs:[["Iaboni 2022", "EDA+HR+ACC 联合检测 BPSD AUC 0.87"], ["wiki/concepts/eda_signal", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/eda_signal.md"]]},
+  voice: { name:"语音",
+    rationale:"颞叶损伤 → 词汇检索困难 · 海马受损 → 工作记忆障碍。语言变化可早于确诊 10 年。",
+    thresholds:[
+      ["语速", "中文成人 4-5 字/秒 · MCI 降至 2.5-3.5"],
+      ["停顿率", "正常 < 12% · MCI 18-25% · AD > 30%"],
+      ["TTR", "词汇多样性 · 正常 ≥ 0.7 · AD < 0.5"],
+      ["F0 抖动", "声带稳定性"]
+    ],
+    refs:[["TAUKADIAL 2024", "中文 AUC 0.78-0.85"], ["ADReSS baseline"], ["wiki/concepts/voice", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/voice_acoustic_linguistic.md"]]}
+};
+function openMetricModal(k, pid) {
+  const d = METRIC_DETAILS[k];
+  const p = PATIENTS[pid];
+  const m = p.metrics[k];
+  const html = `
+    <h3>${m.icon} ${d.name} · ${p.name} 当前</h3>
+    <table>
+      <tr><th>指标</th><th>当前值</th><th>解读</th></tr>
+      ${m.rows.map((r, i) => `
+        <tr>
+          <td>${r[0]}</td>
+          <td><code>${r[1]}</code> ${r[2]?`<span class="badge-inline ${r[2]==='flag-bad'?'b-bad':r[2]==='flag-warn'?'b-warn':'b-ok'}">${r[2]==='flag-bad'?'异常':r[2]==='flag-warn'?'偏离':'正常'}</span>`:''}</td>
+          <td>${d.thresholds[i] ? d.thresholds[i][1] : ''}</td>
+        </tr>
+      `).join('')}
+    </table>
+    <h3>临床原理</h3>
+    <p>${d.rationale}</p>
+    <h3>引用</h3>
+    <ul>
+      ${d.refs.map(r => `<li>${r[1] && r[1].startsWith('http') ? `<a href="${r[1]}" target="_blank">${r[0]} ↗</a>` : r[0] + (r[1] ? ' — ' + r[1] : '')}</li>`).join('')}
+    </ul>
+  `;
+  openModal(`${m.icon} ${d.name} · 详情`, html);
+}
+
+// ----- BPSD 详情 -----
+const BPSD_DETAILS = [
+  { nm:"激越", desc:"无目的运动、抗拒护理、攻击性", signal:"EDA SCL +30%、HR +20bpm、IMU 高加速度、语音音量↑", warn:"日落时段 (15-19) 高发", wiki:"bpsd_agitation"},
+  { nm:"焦虑", desc:"反复询问、不安、坐立不宁", signal:"NS-SCR > 2/min、HRV 显著下降、语速加快", warn:"环境改变 / 家人离开后 30 分钟内", wiki:"bpsd_anxiety"},
+  { nm:"淡漠", desc:"兴趣丧失、动机降低、社交退缩", signal:"日活动量 < 基线 -40%、语音事件 < 5/h、面无表情", warn:"持续 ≥ 2 周达到诊断标准", wiki:"bpsd_apathy"},
+  { nm:"抑郁", desc:"情绪低落、悲伤、自责", signal:"语速变慢、F0 单调、夜醒次数增加、晨起 HR 偏低", warn:"自杀念头需立即转诊", wiki:"bpsd_depression"},
+  { nm:"睡眠", desc:"入睡困难、夜醒、白天嗜睡", signal:"PPG 夜间 HR 高、IMU 翻身次数 > 12/夜、白天打盹", warn:"持续 < 5h 立即升级", wiki:"bpsd_sleep_disorder"},
+  { nm:"日落综合征", desc:"傍晚混乱加剧、激越发作", signal:"15-19 时段 EDA/HR 异常模式 + IMU 不安", warn:"光疗 + 环境调整可缓解", wiki:"bpsd_sundowning"},
+  { nm:"游荡", desc:"无目的徘徊、走失风险", signal:"GPS / IMU 长时间无目的位移、夜间外出", warn:"高风险患者需 GPS 定位 + 门禁", wiki:"bpsd_wandering"}
+];
+function openBpsdModal(idx, pid) {
+  const d = BPSD_DETAILS[idx];
+  const p = PATIENTS[pid];
+  const b = p.bpsd[idx];
+  const lvText = b[1]==='ok'?'正常':b[1]==='warn'?'关注':'高风险';
+  const html = `
+    <h3>${d.nm} · 当前 <span class="badge-inline ${b[1]==='bad'?'b-bad':b[1]==='warn'?'b-warn':'b-ok'}">${lvText} (${b[2]})</span></h3>
+    <div class="kv">
+      <span class="k">临床表现</span><span>${d.desc}</span>
+      <span class="k">传感器特征</span><span>${d.signal}</span>
+      <span class="k">关键提醒</span><span>${d.warn}</span>
+    </div>
+    <h3>本患者最近 30d ${d.nm} 事件</h3>
+    <p style="color:var(--muted)">${b[1]==='bad' ? '检测到 8 次明显事件，集中在 16:30-18:00 时段' : b[1]==='warn' ? '检测到 2-3 次轻度事件' : '无明显事件'}</p>
+    <div class="cite-row">📚 <a href="https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/${d.wiki}.md" target="_blank">wiki/concepts/${d.wiki}.md ↗</a> · NPI 量表对应维度</div>
+  `;
+  openModal(`${d.nm} · ${p.name}`, html);
+}
+
+// ----- 周报 / 干预 / 转诊 弹窗 -----
+function openReportModal(kind, pid) {
+  const p = PATIENTS[pid];
+  const today = new Date().toISOString().slice(0,10);
+  let title, html;
+
+  if (kind === 'clinical') {
+    title = `📋 临床周报 · ${p.name}`;
+    html = `
+      <pre style="white-space:pre-wrap">CLINICAL WEEKLY REPORT
+==============================================
+Patient: ${p.name} (${p.id}) · ${p.age}岁 ${p.sex}
+Reporting period: ${today} (last 7 days)
+Glove worn: ${p.onGloveSince}
+Generated by: Unified Clinical Agent (Claude)
+==============================================
+
+ASSESSMENT
+  Stage: ${p.stage} (confidence ${(p.confidence*100).toFixed(0)}%)
+  Last MMSE: ${p.lastMMSE} · CDR: ${p.lastCDR}
+  Trend (9w): ${p.sparkData[0]} → ${p.sparkData[p.sparkData.length-1]}
+
+KEY METRICS (week mean ± SD)
+  HRV SDNN     : ${p.metrics.hrv.rows[0][1]}
+  Gait speed   : ${p.metrics.gait.rows[0][1]}
+  Stride var   : ${p.metrics.gait.rows[2][1]}
+  EDA SCL      : ${p.metrics.eda.rows[0][1]}
+  Speech rate  : ${p.metrics.voice.rows[0][1]}
+  Pause ratio  : ${p.metrics.voice.rows[1][1]}
+
+REASONING CHAIN
+${p.reasoning.map((r, i) => `  ${i+1}. ${r.title}\n     ${r.body}`).join('\n\n')}
+
+BPSD WEEKLY SCORECARD
+${p.bpsd.map(b => `  ${b[0].padEnd(4,' ')}: ${b[1].toUpperCase().padEnd(5,' ')} (${b[2]})`).join('\n')}
+
+RECOMMENDATIONS
+${p.stage === 'MCI' || p.stage === 'Mild' ? '  ▸ 建议下一步：血液 p-tau217 + 神经内科会诊\n  ▸ 考虑做 amyloid PET 确认 AT(N) 阳性\n' : ''}${p.alert ? '  ▸ 急性 BPSD 风险：本周触发 8 次干预\n  ▸ 评估 Lecanemab 期间 ARIA 监测\n' : ''}  ▸ 继续每周纵向监测，关注步态/语音/HRV 三联指标
+  ▸ 下次评估：${new Date(Date.now()+7*86400000).toISOString().slice(0,10)}
+
+FOOTER
+  报告基于 multi-modal sensor fusion + clinical KB
+  不替代金标准诊断 (PET / CSF / 血液 p-tau217)</pre>
+      <div class="cite-row">📚 报告模板见 <a href="https://jewelina95.github.io/ad-wiki-pages/wiki/agents/care_management_agent.md" target="_blank">care_management_agent ↗</a></div>
+    `;
+  } else if (kind === 'family') {
+    title = `📄 家属周报 · ${p.name}`;
+    const stage = p.stage === 'Healthy' ? '健康' : p.stage === 'MCI' ? '轻度认知下降' : p.stage === 'Mild' ? '轻度阿尔兹海默' : '中度阿尔兹海默';
+    const lightColor = p.alert ? '🔴' : (p.stage === 'MCI' || p.stage === 'Mild') ? '🟡' : '🟢';
+    html = `
+      <h3>${lightColor} 这一周整体：${p.alert ? '需要注意' : (p.stage==='MCI'||p.stage==='Mild') ? '基本稳定，但有几点要关注' : '状态良好'}</h3>
+      <div class="kv">
+        <span class="k">本周阶段</span><span>${stage}</span>
+        <span class="k">睡眠</span><span>平均 ${p.cadence['1d'].v.includes('h') ? p.cadence['1d'].v.replace('睡眠 ','') : '6.5h'}（${p.cadence['1d'].level==='ok'?'OK':'偏少'}）</span>
+        <span class="k">活动</span><span>${p.cadence['7d'].level==='ok'?'正常':'有所减少'}</span>
+        <span class="k">情绪</span><span>${p.alert ? '本周有几次明显波动' : '相对平稳'}</span>
+      </div>
+      <h3>建议家属做的事</h3>
+      <ul>
+        ${p.alert ? '<li>傍晚 4-7 点尽量陪伴，避免环境过度刺激</li>' : ''}
+        ${p.stage==='MCI' || p.stage==='Mild' ? '<li>多和长辈聊天、回忆往事，鼓励参与日常事务</li>' : ''}
+        <li>记得提醒按时吃药、定时活动</li>
+        <li>下次体检时把这份周报给医生看</li>
+      </ul>
+      <h3>什么时候需要立刻联系医生</h3>
+      <ul>
+        <li>突然加重的混乱 / 攻击行为</li>
+        <li>连续 2 天以上几乎不睡 / 不吃</li>
+        <li>跌倒、失去方向感、走失</li>
+      </ul>
+      <div class="cite-row">这份报告由智能手套自动生成 · 仅供日常参考 · 不替代医生诊断</div>
+    `;
+  } else if (kind === 'goldstandard') {
+    title = `🩺 金标准检查推荐 · ${p.name}`;
+    html = `
+      <h3>为什么推荐做金标准</h3>
+      <p>本患者综合多模态指标已达到 <strong>${p.stage}</strong>（置信度 ${(p.confidence*100).toFixed(0)}%），但手套系统是<strong>临床推断</strong>，不能替代生物学确诊。Lecanemab / Donanemab 治疗窗口仅对 MCI / 轻度 AD 有效，需要 amyloid 阳性确认。</p>
+      <h3>推荐流程（按优先顺序）</h3>
+      <table>
+        <tr><th>检查</th><th>价格</th><th>侵入性</th><th>诊断价值</th></tr>
+        <tr><td>血液 p-tau217</td><td>~¥1500</td><td>抽血</td><td>amyloid 阳性 PPV ~85%</td></tr>
+        <tr><td>amyloid PET</td><td>~¥6000-10000</td><td>静脉注射</td><td>金标准</td></tr>
+        <tr><td>CSF Aβ42/40 + p-tau</td><td>~¥3000</td><td>腰穿</td><td>金标准</td></tr>
+        <tr><td>结构 MRI 海马</td><td>~¥1200</td><td>无</td><td>辅助证据</td></tr>
+      </table>
+      <h3>如何转诊</h3>
+      <ul>
+        <li>导出本患者 30 天纵向数据 → PDF 报告（按本周报模板）</li>
+        <li>转诊至神经内科 / 记忆障碍门诊</li>
+        <li>携带：手套报告 + 既往 MMSE/MoCA 记录 + 用药清单</li>
+      </ul>
+      <div class="cite-row">📚 <a href="https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/atn_framework.md" target="_blank">AT(N) 框架 ↗</a> · Jack 2024 修订标准</div>
+    `;
+  } else if (kind === 'intervention') {
+    title = `🎵 干预方案 · ${p.name}`;
+    html = `
+      <h3>当前急性事件</h3>
+      <p style="color:var(--red)"><strong>${p.alertText || '无'}</strong></p>
+      <h3>立即执行（按顺序）</h3>
+      <ol>
+        <li><strong>音乐疗法</strong>：通过手套扬声器播放患者偏好曲目（50年代老歌）· 30 分钟 · 监测 EDA 是否回落</li>
+        <li><strong>语音引导深呼吸</strong>：5 分钟引导式 4-7-8 呼吸法</li>
+        <li><strong>通知主要看护人</strong>：短信 + App 推送，提示陪伴</li>
+        <li><strong>环境调整</strong>：降低光线、关闭电视等强刺激</li>
+      </ol>
+      <h3>30 分钟后检查</h3>
+      <ul>
+        <li>EDA SCL 是否回落至基线 ±20% 内</li>
+        <li>HR 是否 < 80 bpm</li>
+        <li>如未缓解 → 升级至看护人现场处理 + 考虑非紧急医疗咨询</li>
+      </ul>
+      <h3>近期模式</h3>
+      <p>该患者过去 30 天有 8 次类似事件，集中在 16:30-18:00 时段（日落综合征窗口）。建议在此时段提前预防（散步、家属陪伴、固定怀旧节目）。</p>
+      <div class="cite-row">📚 <a href="https://jewelina95.github.io/ad-wiki-pages/wiki/agents/intervention_agent.md" target="_blank">intervention_agent ↗</a> · Iaboni 2022 BPSD 干预证据</div>
+    `;
+  }
+  openModal(title, html);
 }
 
 let toastTimer;
