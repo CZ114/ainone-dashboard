@@ -514,8 +514,16 @@ body {
 
     <div id="patientList"></div>
 
-    <div style="margin-top:20px; padding:10px 12px; background:var(--bg); border-radius:8px; font-size:11px; color:var(--muted)">
-      <strong style="color:var(--text)">说明：</strong>当前为脱敏 mock 数据。真实部署时连接 backend WebSocket 拉取患者实时特征。
+    <div style="margin-top:14px; padding:10px 12px; background:#faf5ff; border:1px dashed #c4b5fd; border-radius:8px;">
+      <div style="font-size:11px;color:#6b21a8;font-weight:600;margin-bottom:6px">📤 上传你的 progression.csv</div>
+      <input type="file" id="customCsv" accept=".csv" onchange="handleCustomUpload(event)" style="font-size:11px;width:100%">
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">从 ad-synthetic-generator 或自己的纵向数据导入</div>
+    </div>
+
+    <div style="margin-top:14px; padding:10px 12px; background:var(--bg); border-radius:8px; font-size:11px; color:var(--muted)">
+      <strong style="color:var(--text)">数据来源：</strong><br>
+      🧠 MIND = <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank" style="color:var(--teal)">ad-mind-pipeline</a><br>
+      📚 WIKI = <a href="https://jewelina95.github.io/ad-wiki-pages/" target="_blank" style="color:var(--teal)">ad-wiki-pages KB</a>
     </div>
   </aside>
 
@@ -799,10 +807,32 @@ const SENSOR_PROFILES = {
 
 const STAGE_NAMES = ["SCD", "MCI", "Mild", "Moderate", "Severe"];
 
+// ===== MIND 真实数据源 =====
+const MIND_BASE = "https://raw.githubusercontent.com/Jewelina95/ad-mind-pipeline/main/data_v2";
+const MIND_PATIENTS_META = {
+  "P01": { age: 68, sex: "M", edu: 12, pattern: "linear",      bpsd: 2 },
+  "P02": { age: 73, sex: "M", edu: 6,  pattern: "stepwise",    bpsd: 1 },
+  "P03": { age: 70, sex: "M", edu: 16, pattern: "plateau",     bpsd: 0 },
+  "P04": { age: 75, sex: "F", edu: 9,  pattern: "fluctuation", bpsd: 1 },
+  "P05": { age: 72, sex: "M", edu: 12, pattern: "acute_event", bpsd: 0 }
+};
+const mindCache = {};
+async function fetchMindPatient(id) {
+  if (mindCache[id]) return mindCache[id];
+  const [persona, dashboard, clinical] = await Promise.all([
+    fetch(`${MIND_BASE}/${id}/persona.json`).then(r => r.json()),
+    fetch(`${MIND_BASE}/${id}/dashboard.json`).then(r => r.json()),
+    fetch(`${MIND_BASE}/${id}/insights_clinical.json`).then(r => r.json())
+  ]);
+  mindCache[id] = { persona, dashboard, clinical };
+  return mindCache[id];
+}
+let customPatient = null;
+
 // ===== 渲染患者列表 =====
 function renderPatientList() {
   const list = document.getElementById('patientList');
-  list.innerHTML = Object.values(PATIENTS).map(p => {
+  const mockHtml = Object.values(PATIENTS).map(p => {
     const stageClass =
       p.stageIdx === -1 ? 'stage-scd' :
       p.stageIdx === 1  ? 'stage-mci' :
@@ -817,6 +847,297 @@ function renderPatientList() {
       </div>
     `;
   }).join('');
+
+  const mindHtml = Object.entries(MIND_PATIENTS_META).map(([id, m]) => `
+    <div class="patient-card" data-id="${id}" onclick="selectMindPatient('${id}')">
+      <div class="name">${id} <span style="font-size:9px;color:#7c3aed;background:#f5f3ff;padding:1px 5px;border-radius:3px;font-weight:600">MIND</span></div>
+      <div class="meta">${m.age}岁 ${m.sex} · 教育${m.edu}年 · ${m.pattern}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">BPSD ${m.bpsd}次 · 30天纵向</div>
+    </div>
+  `).join('');
+
+  list.innerHTML = `
+    <div style="font-size:11px;color:#7c3aed;margin:6px 0 6px;font-weight:600">🧠 MIND Pipeline · 真实合成数据 (5)</div>
+    ${mindHtml}
+    <div style="font-size:11px;color:var(--teal);margin:14px 0 6px;font-weight:600">📚 WIKI KB Demo · Mock (3)</div>
+    ${mockHtml}
+  `;
+}
+
+// ===== 选 MIND 真实患者 =====
+async function selectMindPatient(id) {
+  const main = document.getElementById('mainPanel');
+  document.querySelectorAll('.patient-card').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+  if (sensorTimer) clearInterval(sensorTimer);
+  main.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px">⏳</div><div style="margin-top:10px">从 ad-mind-pipeline 加载 ' + id + ' 中…</div></div>';
+
+  try {
+    const data = await fetchMindPatient(id);
+    renderMindView(id, data);
+  } catch (e) {
+    main.innerHTML = `<div style="padding:30px"><div class="alert-banner">加载失败：${e.message}<br>请确认 https://github.com/Jewelina95/ad-mind-pipeline 是 public</div></div>`;
+  }
+}
+
+function renderMindView(id, data) {
+  const meta = MIND_PATIENTS_META[id];
+  const d = data.dashboard;
+  const c = data.clinical;
+  const alertColor = d.alert_level;
+  const alertBgClass = alertColor === 'red' ? 'alert-banner' : alertColor === 'yellow' ? 'alert-banner warn' : 'alert-banner ok';
+  const alertEmoji = alertColor === 'red' ? '🔴' : alertColor === 'yellow' ? '🟡' : '🟢';
+
+  document.getElementById('mainPanel').innerHTML = `
+    <div class="patient-bar">
+      <div>
+        <div class="pname">${id} <span style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:2px 8px;border-radius:4px;margin-left:6px">🧠 MIND Pipeline</span></div>
+        <div class="pmeta">${meta.age}岁 ${meta.sex} · 教育 ${meta.edu} 年 · 进展模式: <code>${meta.pattern}</code> · 30 天纵向</div>
+      </div>
+      <div class="stat">
+        <div class="v" style="color:#7c3aed">${c.stage_inclination}</div>
+        <div class="l">分期倾向 (ClinicalAgent)</div>
+      </div>
+      <div class="stat">
+        <div class="v">${(c.stage_confidence*100).toFixed(0)}%</div>
+        <div class="l">置信度</div>
+      </div>
+      <div class="stat">
+        <div class="v">${c.gold_standard_referral === 'yes' ? '✓ 推荐' : '观察'}</div>
+        <div class="l">金标准转诊</div>
+      </div>
+    </div>
+
+    <div class="${alertBgClass}">
+      ${alertEmoji} <strong>${alertColor.toUpperCase()}</strong> · ${d.summary_today}
+    </div>
+
+    <div class="section">
+      <h2>📋 病史 / 上次评估</h2>
+      <p style="margin:6px 0;font-size:13px"><strong>病史：</strong>${d.medical_history}</p>
+      <p style="margin:6px 0;font-size:13px"><strong>近期 Notes：</strong>${d.session_recap}</p>
+    </div>
+
+    <div class="section">
+      <h2>🔍 Patient Data Insights <span class="desc">PhysioAgent + BehaviorAgent + ClinicalAgent 综合 → Narrator</span></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${d.patient_data_insights.map(ins => `
+          <div class="modal-block ${ins.alert==='red'?'flag-alert':ins.alert==='yellow'?'flag-warn':''}" style="cursor:default">
+            <h4>${ins.alert==='red'?'🔴':ins.alert==='yellow'?'🟡':'🟢'} ${ins.card_title}</h4>
+            <div style="font-size:13px;line-height:1.6">${ins.card_md.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px">linked: ${ins.linked_insights.join(', ')}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>💊 今日干预建议 <span class="desc">ClinicalAgent intervention_priority</span></h2>
+      ${d.interventions_today.map(iv => `
+        <div style="padding:10px 12px;border-left:3px solid ${iv.urgency==='now'?'var(--red)':'var(--yellow)'};background:${iv.urgency==='now'?'var(--red-bg)':'var(--yellow-bg)'};border-radius:0 6px 6px 0;margin-bottom:6px;font-size:13px">
+          <span style="font-weight:600">${iv.type}</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:white;color:${iv.urgency==='now'?'var(--red)':'var(--yellow)'};margin-left:6px">${iv.urgency}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${iv.rationale}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="section">
+      <h2>⚠️ 鉴别诊断关注</h2>
+      <ul style="padding-left:20px;font-size:13px">
+        ${d.differential_concern.map(x => `<li style="margin:4px 0">${x}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>处置</h2>
+      <div class="action-row">
+        <button class="btn primary" onclick="openMindReportModal('${id}')">📄 查看完整 report.md</button>
+        ${c.gold_standard_referral === 'yes' ? `<button class="btn warn" onclick="openMindReferralModal('${id}')">🩺 转诊建议详情</button>` : ''}
+        <button class="btn" onclick="window.open('https://github.com/Jewelina95/ad-mind-pipeline/tree/main/data_v2/${id}','_blank')">📂 GitHub 源数据 ↗</button>
+        <button class="btn" onclick="window.location.href='index.html'">📡 实时面板（本机）</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px">
+        本视图直接渲染 <code>${id}/dashboard.json</code> · 推理输出来自 PhysioAgent + BehaviorAgent + ClinicalAgent，由 Narrator 综合
+      </div>
+    </div>
+  `;
+}
+
+// 打开 report.md modal（懒加载）
+async function openMindReportModal(id) {
+  openModal(`📄 ${id} · report.md`, '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ 加载中…</div>');
+  try {
+    const r = await fetch(`${MIND_BASE}/${id}/report.md`);
+    const md = await r.text();
+    const html = md
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+    document.getElementById('modalBody').innerHTML = `<p>${html}</p>
+      <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/report.md" target="_blank">GitHub 原文 ↗</a></div>`;
+  } catch (e) {
+    document.getElementById('modalBody').innerHTML = `<div style="color:var(--red)">加载失败：${e.message}</div>`;
+  }
+}
+
+function openMindReferralModal(id) {
+  const c = mindCache[id] && mindCache[id].clinical;
+  if (!c) return;
+  const html = `
+    <h3>🩺 ClinicalAgent 转诊判断</h3>
+    <div class="kv">
+      <span class="k">分期倾向</span><span><code>${c.stage_inclination}</code> (置信度 ${(c.stage_confidence*100).toFixed(0)}%)</span>
+      <span class="k">推荐金标准</span><span>${c.gold_standard_referral === 'yes' ? '✓ 是' : '观察'}</span>
+    </div>
+    <h3>原因</h3>
+    <p>${c.referral_rationale}</p>
+    <h3>鉴别诊断</h3>
+    <ul>${c.differential_concern.map(x => `<li>${x}</li>`).join('')}</ul>
+    <h3>干预优先级</h3>
+    <ul>
+      ${c.intervention_priority.map(iv => `<li><strong>${iv.type}</strong> (${iv.urgency}) — ${iv.rationale}</li>`).join('')}
+    </ul>
+    <div class="cite-row">📂 <a href="https://github.com/Jewelina95/ad-mind-pipeline/blob/main/data_v2/${id}/insights_clinical.json" target="_blank">insights_clinical.json ↗</a></div>
+  `;
+  openModal(`🩺 转诊建议 · ${id}`, html);
+}
+
+// ===== 上传 progression.csv =====
+function handleCustomUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const text = ev.target.result;
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length < 2) throw new Error("CSV 至少 1 行表头 + 1 行数据");
+      const header = lines[0].split(',').map(x => x.trim());
+      const rows = lines.slice(1).map(l => {
+        const cells = l.split(',').map(x => x.trim());
+        const obj = {};
+        header.forEach((h, i) => obj[h] = cells[i]);
+        return obj;
+      });
+      customPatient = { name: file.name, header, rows };
+      renderCustomPatient();
+      document.querySelectorAll('.patient-card').forEach(el => el.classList.remove('active'));
+    } catch (err) {
+      alert('CSV 解析失败：' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderCustomPatient() {
+  if (!customPatient) return;
+  const cp = customPatient;
+  if (sensorTimer) clearInterval(sensorTimer);
+  const last = cp.rows[cp.rows.length - 1];
+  const first = cp.rows[0];
+
+  // 自动检测一些常见列名
+  function pickCol(names) {
+    for (const n of names) if (n in last) return n;
+    return null;
+  }
+  const colGait = pickCol(['gait_speed','gait_speed_normal','step_speed','speed']);
+  const colMmse = pickCol(['mmse','mmse_score','MMSE']);
+  const colMood = pickCol(['mood','ema_mood','mood_score']);
+  const colHrv  = pickCol(['hrv_sdnn','hrv','sdnn','SDNN']);
+
+  const rowsHtml = [colGait,colMmse,colMood,colHrv].filter(Boolean).map(col => {
+    const v0 = parseFloat(first[col]) || 0;
+    const v1 = parseFloat(last[col]) || 0;
+    const delta = v1 - v0;
+    const pct = v0 ? (delta/v0*100).toFixed(1) : 'n/a';
+    const flagClass = Math.abs(delta) > Math.abs(v0)*0.1 ? 'flag-warn' : 'flag-ok';
+    return `<tr><td>${col}</td><td><code>${v0.toFixed(2)}</code></td><td><code>${v1.toFixed(2)}</code></td><td><span class="badge-inline ${flagClass==='flag-warn'?'b-warn':'b-ok'}">${delta>=0?'+':''}${delta.toFixed(2)} (${pct}%)</span></td></tr>`;
+  }).join('');
+
+  document.getElementById('mainPanel').innerHTML = `
+    <div class="patient-bar">
+      <div>
+        <div class="pname">📤 自定义上传 <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px">CUSTOM CSV</span></div>
+        <div class="pmeta">${cp.name} · ${cp.rows.length} 行 × ${cp.header.length} 列</div>
+      </div>
+      <div class="stat" style="flex:1;text-align:right">
+        <div class="l" style="font-size:11px">支持的列名（任意一个）</div>
+        <div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">gait_speed · mmse · mood · hrv_sdnn</div>
+      </div>
+    </div>
+
+    <div class="alert-banner ok">
+      ✅ 解析成功 · 共 ${cp.rows.length} 个时间点 · 已识别 ${[colGait,colMmse,colMood,colHrv].filter(Boolean).length} 个关键列
+    </div>
+
+    <div class="section">
+      <h2>📊 关键指标变化（首日 vs 末日）</h2>
+      ${rowsHtml ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg)">
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">指标</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">首日</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">末日</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">变化</th>
+        </tr></thead>
+        <tbody>${rowsHtml.replace(/<td>/g,'<td style="padding:6px 10px;border:1px solid var(--border)">')}</tbody>
+      </table>` : '<p style="color:var(--muted)">未识别到 gait_speed / mmse / mood / hrv_sdnn 等关键列。请确认 CSV 包含这些字段名。</p>'}
+    </div>
+
+    <div class="section">
+      <h2>📋 全部列</h2>
+      <div style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);background:var(--bg);padding:10px;border-radius:6px;word-break:break-all">${cp.header.join(' · ')}</div>
+    </div>
+
+    <div class="section">
+      <h2>🔍 末日值（最后一行）</h2>
+      <div class="kv">
+        ${Object.entries(last).slice(0, 16).map(([k,v]) => `<span class="k">${k}</span><span><code>${v}</code></span>`).join('')}
+      </div>
+      ${Object.keys(last).length > 16 ? `<div style="font-size:11px;color:var(--muted)">…还有 ${Object.keys(last).length - 16} 个字段</div>` : ''}
+    </div>
+
+    <div class="section">
+      <h2>处置</h2>
+      <div class="action-row">
+        <button class="btn primary" onclick="openCustomReportModal()">📄 生成简易报告</button>
+        <button class="btn" onclick="document.getElementById('customCsv').click()">📤 重新上传</button>
+        <button class="btn" onclick="window.open('https://github.com/Jewelina95/ad-synthetic-generator','_blank')">📂 ad-synthetic-generator ↗</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px">
+        当前为客户端简单解析。完整 MIND-pipeline 推理需要在服务端跑 Analyzer + 3 LLM Agents + Narrator（见 <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank" style="color:var(--teal)">ad-mind-pipeline ↗</a>）
+      </div>
+    </div>
+  `;
+}
+
+function openCustomReportModal() {
+  if (!customPatient) return;
+  const cp = customPatient;
+  const last = cp.rows[cp.rows.length - 1];
+  const first = cp.rows[0];
+  openModal(`📄 自定义数据简报 · ${cp.name}`, `
+    <h3>数据概况</h3>
+    <div class="kv">
+      <span class="k">文件</span><span>${cp.name}</span>
+      <span class="k">时间点</span><span>${cp.rows.length}</span>
+      <span class="k">字段数</span><span>${cp.header.length}</span>
+    </div>
+    <h3>首日</h3>
+    <pre>${JSON.stringify(first, null, 2)}</pre>
+    <h3>末日</h3>
+    <pre>${JSON.stringify(last, null, 2)}</pre>
+    <h3>下一步</h3>
+    <ul>
+      <li>把这个 CSV 通过 <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline</a> 跑一遍获得 Agent insights + Narrator dashboard</li>
+      <li>或对照 <a href="https://jewelina95.github.io/ad-wiki-pages/" target="_blank">ad-wiki KB</a> 的临床阈值人工分析</li>
+    </ul>
+  `);
 }
 
 // ===== 渲染主面板 =====
