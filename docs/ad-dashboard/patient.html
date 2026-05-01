@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>患者端 · AD 智能手套</title>
+<style>
+:root {
+  --bg: #fefce8;
+  --card: #ffffff;
+  --text: #1c1917;
+  --muted: #57534e;
+  --teal: #0f766e;
+  --green: #16a34a;
+  --green-bg: #dcfce7;
+  --yellow: #ca8a04;
+  --yellow-bg: #fef9c3;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --border: #e7e5e4;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 16px;
+}
+.nav {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.nav .brand { font-weight: 700; color: var(--teal); }
+.nav .pills { margin-left: auto; display: flex; gap: 8px; }
+.nav .pills a {
+  padding: 6px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.nav .pills a.active { background: var(--teal); color: white; border-color: var(--teal); }
+.wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
+
+.hero-status {
+  background: var(--green-bg);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  margin-bottom: 20px;
+  border: 2px solid var(--green);
+}
+.hero-status .light {
+  display: inline-block;
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--green);
+  margin-bottom: 12px;
+  box-shadow: 0 0 0 6px rgba(22,163,74,0.2);
+}
+.hero-status h1 { margin: 4px 0; font-size: 28px; color: var(--green); }
+.hero-status p { margin: 0; color: var(--text); font-size: 15px; }
+.hero-status .ts { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+.section-title {
+  margin: 28px 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.metric {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.metric .lbl { color: var(--muted); font-size: 13px; }
+.metric .val { font-size: 26px; font-weight: 700; margin: 4px 0; }
+.metric .val small { font-size: 14px; font-weight: 400; color: var(--muted); }
+.metric .delta { font-size: 12px; }
+.metric .delta.up { color: var(--green); }
+.metric .delta.down { color: var(--red); }
+.metric .delta.flat { color: var(--muted); }
+.metric .icon { float: right; font-size: 22px; opacity: 0.7; }
+
+.todo-list {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.todo-item {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.todo-item:last-child { border-bottom: 0; }
+.todo-item .check {
+  width: 22px; height: 22px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.todo-item.done .check {
+  background: var(--green);
+  border-color: var(--green);
+  position: relative;
+}
+.todo-item.done .check::after {
+  content: "✓"; color: white; position: absolute;
+  left: 4px; top: -3px; font-size: 16px; font-weight: 700;
+}
+.todo-item.done .body { opacity: 0.5; text-decoration: line-through; }
+.todo-item .body { flex: 1; }
+.todo-item .body .t { font-weight: 600; font-size: 15px; }
+.todo-item .body .when { color: var(--muted); font-size: 13px; }
+.todo-item .badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--yellow-bg); color: var(--yellow);
+  font-weight: 600;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.act-btn {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.act-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: var(--teal); }
+.act-btn .ai { font-size: 28px; }
+.act-btn .at { font-weight: 600; font-size: 14px; margin-top: 6px; }
+.act-btn .as { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.summary-card {
+  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  border: 1px solid #99f6e4;
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+.summary-card .lbl { font-size: 13px; color: var(--teal); font-weight: 600; }
+.summary-card .text { font-size: 15px; margin-top: 6px; }
+.summary-card .stat-row {
+  display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap;
+  font-size: 13px; color: var(--muted);
+}
+.summary-card .stat-row strong { color: var(--text); font-size: 15px; }
+
+.emergency {
+  background: var(--red);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  margin-top: 24px;
+  border: 0;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.emergency:hover { background: #b91c1c; }
+.emergency .ico { font-size: 22px; }
+
+.disclaimer {
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow);
+  color: #713f12;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-top: 24px;
+}
+.disclaimer strong { color: var(--yellow); }
+
+#toast {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: white; padding: 12px 22px; border-radius: 999px;
+  font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#toast.show { opacity: 0.95; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">🧤 AD 手套</span>
+  <div class="pills">
+    <a href="index.html">首页</a>
+    <a href="patient.html" class="active">患者端</a>
+    <a href="doctor.html">医生端</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- 红黄绿状态 -->
+  <div class="hero-status">
+    <div class="light"></div>
+    <h1>今天状态很好</h1>
+    <p>各项指标都在你正常范围内，继续保持。</p>
+    <div class="ts">最近一次评估：今天 09:42（基于过去 24 小时数据）</div>
+  </div>
+
+  <!-- 4 个核心指标 -->
+  <div class="section-title">今天的几件小事</div>
+  <div class="metrics">
+
+    <div class="metric">
+      <span class="icon">❤️</span>
+      <div class="lbl">心率</div>
+      <div class="val">72 <small>次/分</small></div>
+      <div class="delta flat">和平时差不多</div>
+    </div>
+
+    <div class="metric">
+      <span class="icon">🚶</span>
+      <div class="lbl">活动</div>
+      <div class="val">3,420 <small>步</small></div>
+      <div class="delta up">↑ 比昨天多走了 480 步</div>
+    </div>
+
+    <div class="metric">
+      <span class="icon">🌙</span>
+      <div class="lbl">昨晚睡眠</div>
+      <div class="val">7.2 <small>小时</small></div>
+      <div class="delta up">↑ 睡得比较踏实</div>
+    </div>
+
+    <div class="metric">
+      <span class="icon">😊</span>
+      <div class="lbl">心情</div>
+      <div class="val">平稳</div>
+      <div class="delta flat">没有明显起伏</div>
+    </div>
+
+  </div>
+
+  <!-- 今日提醒 -->
+  <div class="section-title">今天的提醒</div>
+  <div class="todo-list" id="todoList">
+
+    <div class="todo-item done" onclick="toggleTodo(this)">
+      <div class="check"></div>
+      <div class="body">
+        <div class="t">早上的药 💊</div>
+        <div class="when">已经按时吃啦 · 08:00</div>
+      </div>
+    </div>
+
+    <div class="todo-item" onclick="toggleTodo(this)">
+      <div class="check"></div>
+      <div class="body">
+        <div class="t">午饭后散散步 🌳</div>
+        <div class="when">建议时间：13:30 · 20 分钟左右就够</div>
+      </div>
+      <span class="badge">推荐</span>
+    </div>
+
+    <div class="todo-item" onclick="toggleTodo(this)">
+      <div class="check"></div>
+      <div class="body">
+        <div class="t">下午 4 点女儿要来 👨‍👩‍👧</div>
+        <div class="when">提前听几首老歌，放松一下心情</div>
+      </div>
+    </div>
+
+    <div class="todo-item" onclick="toggleTodo(this)">
+      <div class="check"></div>
+      <div class="body">
+        <div class="t">晚上的药 💊</div>
+        <div class="when">提醒时间：19:00</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 快捷操作 -->
+  <div class="section-title">需要的时候点一下</div>
+  <div class="actions">
+
+    <button class="act-btn" onclick="showToast('正在播放您喜欢的老歌…')">
+      <div class="ai">🎵</div>
+      <div class="at">听音乐</div>
+      <div class="as">舒缓 / 怀旧</div>
+    </button>
+
+    <button class="act-btn" onclick="showToast('开始 5 分钟深呼吸引导')">
+      <div class="ai">🌬️</div>
+      <div class="at">深呼吸</div>
+      <div class="as">5 分钟</div>
+    </button>
+
+    <button class="act-btn" onclick="showToast('正在拨号给：女儿（小芳）…')">
+      <div class="ai">📞</div>
+      <div class="at">打电话</div>
+      <div class="as">给家人</div>
+    </button>
+
+  </div>
+
+  <!-- 本周一句话 -->
+  <div class="section-title">这一周</div>
+  <div class="summary-card">
+    <div class="lbl">📊 本周整体</div>
+    <div class="text">这周睡眠和活动都比上周好，心率也稳定。家属来访的那两天心情格外舒展。</div>
+    <div class="stat-row">
+      <span><strong>5/7</strong> 天按时吃药</span>
+      <span><strong>21,840</strong> 步</span>
+      <span>平均睡眠 <strong>6.9</strong> 小时</span>
+    </div>
+  </div>
+
+  <!-- 紧急按钮 -->
+  <button class="emergency" onclick="showToast('已通知主治医生和紧急联系人')">
+    <span class="ico">🚨</span>
+    <span>不舒服？一键通知医生和家人</span>
+  </button>
+
+  <div class="disclaimer">
+    <strong>提示：</strong>这里看到的都是手套实时记录的数据，仅供日常参考，不能替代医生的诊断。如果连续几天感觉不一样，请告诉医生。
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+function toggleTodo(el) {
+  el.classList.toggle('done');
+}
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+
+</body>
+</html>

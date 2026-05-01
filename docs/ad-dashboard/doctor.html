@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>医生端 · AD 智能手套</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --teal: #0f766e;
+  --teal-bg: #f0fdfa;
+  --border: #e2e8f0;
+  --green: #16a34a;
+  --green-bg: #dcfce7;
+  --yellow: #ca8a04;
+  --yellow-bg: #fef9c3;
+  --orange: #ea580c;
+  --orange-bg: #ffedd5;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --purple: #7c3aed;
+  --purple-bg: #f5f3ff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 14px;
+}
+.nav {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.nav .brand { font-weight: 700; color: var(--teal); }
+.nav .pills { margin-left: auto; display: flex; gap: 8px; }
+.nav .pills a {
+  padding: 6px 14px; border-radius: 999px;
+  text-decoration: none; font-size: 13px; color: var(--muted);
+  border: 1px solid var(--border);
+}
+.nav .pills a.active { background: var(--rose, #be123c); color: white; border-color: var(--rose, #be123c); }
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0;
+  min-height: calc(100vh - 56px);
+}
+
+/* ===== 左侧：患者列表 ===== */
+.sidebar {
+  background: white;
+  border-right: 1px solid var(--border);
+  padding: 18px 14px;
+  overflow-y: auto;
+}
+.sidebar h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.patient-card {
+  padding: 12px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.patient-card:hover { background: var(--bg); }
+.patient-card.active {
+  background: var(--teal-bg);
+  border-color: var(--teal);
+}
+.patient-card .name { font-weight: 600; font-size: 14px; }
+.patient-card .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.patient-card .stage {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 4px; margin-top: 4px;
+}
+.stage-scd { background: var(--green-bg); color: #14532d; }
+.stage-mci { background: var(--yellow-bg); color: #713f12; }
+.stage-mild { background: var(--orange-bg); color: #7c2d12; }
+.stage-mod { background: var(--red-bg); color: #7f1d1d; }
+.stage-sev { background: #1c1917; color: white; }
+
+.patient-card .alert-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red); margin-left: 4px; vertical-align: middle;
+}
+
+/* ===== 右侧：主面板 ===== */
+.main {
+  padding: 22px 26px 60px;
+  overflow-y: auto;
+}
+
+.patient-bar {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.patient-bar .pname { font-size: 18px; font-weight: 700; }
+.patient-bar .pmeta { color: var(--muted); font-size: 13px; }
+.patient-bar .stat { padding: 0 14px; border-left: 1px solid var(--border); }
+.patient-bar .stat:first-of-type { border-left: 0; padding-left: 0; }
+.patient-bar .stat .v { font-size: 16px; font-weight: 600; }
+.patient-bar .stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.section {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+.section h2 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section h2 .desc {
+  font-weight: 400; color: var(--muted); font-size: 12px;
+}
+.section h2 .badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* 分期条 */
+.stage-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.stage-cell {
+  padding: 10px 6px;
+  text-align: center;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--muted);
+  border: 2px solid transparent;
+}
+.stage-cell.active {
+  background: var(--orange-bg);
+  color: var(--orange);
+  border-color: var(--orange);
+  box-shadow: 0 2px 8px rgba(234,88,12,0.2);
+}
+.stage-cell .lbl { font-size: 11px; opacity: 0.8; }
+.stage-cell .stg { font-size: 14px; font-weight: 700; }
+.confidence-bar {
+  height: 6px; background: var(--border); border-radius: 3px;
+  overflow: hidden; margin: 8px 0 4px;
+}
+.confidence-bar > div {
+  height: 100%; background: var(--orange); transition: width 0.5s;
+}
+.conf-label {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: var(--muted);
+}
+
+/* Cadence 行 */
+.cadence-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.cad {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.cad .ic { font-size: 18px; }
+.cad .name { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.cad .v { font-size: 13px; margin-top: 4px; }
+.cad.alert { background: var(--red-bg); border-color: var(--red); }
+.cad.warn { background: var(--yellow-bg); border-color: var(--yellow); }
+.cad.ok { background: var(--green-bg); border-color: var(--green); }
+
+/* Multi-modal 指标 */
+.modal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.modal-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--bg);
+}
+.modal-block h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  display: flex; gap: 6px; align-items: center;
+}
+.modal-block .row {
+  display: flex; justify-content: space-between;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.modal-block .row:last-child { border-bottom: 0; }
+.modal-block .row .k { color: var(--muted); }
+.modal-block .row .v { font-weight: 600; font-family: ui-monospace, monospace; }
+.modal-block .row .v.flag-warn { color: var(--orange); }
+.modal-block .row .v.flag-bad { color: var(--red); }
+.modal-block .row .v.flag-ok { color: var(--green); }
+.modal-block .src {
+  font-size: 10px; color: var(--muted); margin-top: 6px;
+  font-style: italic;
+}
+
+/* Reasoning chain */
+.reason-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reason-step {
+  padding: 12px 14px;
+  border-left: 3px solid var(--teal);
+  background: var(--teal-bg);
+  border-radius: 0 8px 8px 0;
+}
+.reason-step .num {
+  display: inline-block; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--teal); color: white;
+  text-align: center; font-weight: 700; font-size: 12px;
+  line-height: 22px; margin-right: 8px;
+}
+.reason-step .title { font-weight: 600; font-size: 13px; }
+.reason-step .body { margin-top: 6px; font-size: 13px; color: var(--text); }
+.reason-step .cite {
+  margin-top: 8px;
+  font-size: 11px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.reason-step .cite a {
+  background: white; border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 4px;
+  text-decoration: none; color: var(--teal);
+  font-family: ui-monospace, monospace;
+}
+.reason-step .cite a:hover { background: var(--teal); color: white; border-color: var(--teal); }
+.reason-step.warn { border-left-color: var(--orange); background: var(--orange-bg); }
+.reason-step.warn .num { background: var(--orange); }
+.reason-step.warn .cite a { color: var(--orange); }
+.reason-step.warn .cite a:hover { background: var(--orange); }
+
+/* BPSD 7 行 */
+.bpsd-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.bpsd-cell {
+  padding: 10px 6px;
+  text-align: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.bpsd-cell .nm { font-size: 11px; font-weight: 600; }
+.bpsd-cell .lv {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; margin-top: 4px;
+}
+.bpsd-cell.lv-ok { background: var(--green-bg); }
+.bpsd-cell.lv-ok .lv { background: var(--green); color: white; }
+.bpsd-cell.lv-warn { background: var(--yellow-bg); }
+.bpsd-cell.lv-warn .lv { background: var(--yellow); color: white; }
+.bpsd-cell.lv-bad { background: var(--red-bg); border-color: var(--red); }
+.bpsd-cell.lv-bad .lv { background: var(--red); color: white; }
+.bpsd-cell .nb { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* Actions */
+.action-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.btn {
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--border); background: white;
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--teal); color: white; border-color: var(--teal); }
+.btn.primary:hover { background: #115e59; }
+.btn.warn { background: var(--orange); color: white; border-color: var(--orange); }
+.btn.warn:hover { background: #c2410c; }
+
+/* Sparkline */
+.spark {
+  height: 30px; width: 100%; margin-top: 6px;
+}
+.spark path { fill: none; stroke: var(--teal); stroke-width: 1.5; }
+.spark .dot { fill: var(--teal); }
+
+#toast {
+  position: fixed; bottom: 30px; right: 30px;
+  background: var(--text); color: white; padding: 12px 20px; border-radius: 8px;
+  font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  max-width: 360px;
+}
+#toast.show { opacity: 0.95; }
+
+/* alert banner */
+.alert-banner {
+  background: var(--red-bg);
+  border: 1px solid var(--red);
+  color: #7f1d1d;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.alert-banner.warn { background: var(--yellow-bg); border-color: var(--yellow); color: #713f12; }
+.alert-banner.ok { background: var(--green-bg); border-color: var(--green); color: #14532d; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+  .modal-grid { grid-template-columns: 1fr 1fr; }
+  .cadence-grid { grid-template-columns: 1fr 1fr; }
+  .bpsd-grid { grid-template-columns: repeat(4, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand">🧤 AD 手套</span>
+  <div class="pills">
+    <a href="index.html">首页</a>
+    <a href="patient.html">患者端</a>
+    <a href="doctor.html" class="active" style="background:#be123c;color:white;border-color:#be123c">医生端</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ===== 左侧：患者列表 ===== -->
+  <aside class="sidebar">
+    <h3>患者列表 (3)</h3>
+    <input class="search" placeholder="🔍 搜索 ID / 姓名" />
+
+    <div id="patientList"></div>
+
+    <div style="margin-top:20px; padding:10px 12px; background:var(--bg); border-radius:8px; font-size:11px; color:var(--muted)">
+      <strong style="color:var(--text)">说明：</strong>当前为脱敏 mock 数据。真实部署时连接 backend WebSocket 拉取患者实时特征。
+    </div>
+  </aside>
+
+  <!-- ===== 右侧：主面板 ===== -->
+  <main class="main" id="mainPanel">
+    <!-- 由 JS 渲染 -->
+  </main>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== Mock 患者数据 =====
+const PATIENTS = {
+  "P001": {
+    id: "P001", name: "张某 (匿名)", age: 73, sex: "女",
+    stage: "MCI", stageIdx: 1, confidence: 0.78,
+    onGloveSince: "2026-02-15", lastMMSE: 24, lastCDR: 0.5,
+    alert: false, alertText: null,
+    cadence: {
+      "5min":  { v: "EDA 平稳", level: "ok" },
+      "1h":    { v: "活动 正常", level: "ok" },
+      "1d":    { v: "睡眠 6.3h", level: "warn" },
+      "7d":    { v: "步速 ↓5%", level: "warn" },
+      "30d":   { v: "CCI ↓0.3 SD", level: "warn" }
+    },
+    metrics: {
+      hrv: { name: "HRV (PPG)", icon: "❤️", rows: [
+        ["SDNN", "38 ms", "warn", "略低于自身基线 (45±6)"],
+        ["RMSSD", "26 ms", "flag-warn"],
+        ["LF/HF", "2.3", ""],
+        ["静息 HR", "74 bpm", ""]
+      ], src: "wiki/concepts/ppg_hrv.md"},
+      gait: { name: "步态 (IMU)", icon: "🚶", rows: [
+        ["步速", "0.93 m/s", "flag-warn"],
+        ["步频", "108 spm", ""],
+        ["步态变异性", "5.8%", "flag-warn"],
+        ["双任务代价", "+18%", "flag-warn"]
+      ], src: "wiki/concepts/imu_gait.md + Verghese MCR"},
+      eda: { name: "EDA", icon: "💧", rows: [
+        ["SCL 均值", "4.2 µS", ""],
+        ["SCR 频率", "1.8/min", ""],
+        ["NS-SCR", "0.7/min", ""],
+        ["唤醒度", "中等", ""]
+      ], src: "wiki/concepts/eda_signal.md"},
+      voice: { name: "语音", icon: "🎤", rows: [
+        ["语速", "3.1 字/秒", "flag-warn"],
+        ["停顿率", "22%", "flag-warn"],
+        ["TTR", "0.61", ""],
+        ["F0 抖动", "1.2%", ""]
+      ], src: "TAUKADIAL 2024 + ADReSS"}
+    },
+    reasoning: [
+      {
+        title: "特征汇总",
+        body: "30d 窗口内：步速相对自身基线 ↓5%、双任务代价 +18%、停顿率 22% (基线 14%)。HRV SDNN 38ms 较基线 45ms 偏低。",
+        cites: [["features bundle", "#"], ["baseline 4.8", "https://jewelina95.github.io/ad-wiki-pages/wiki/datasets/baseline_4.8.md"]],
+        type: "info"
+      },
+      {
+        title: "KB 检索：MCR 复合指标",
+        body: "命中 Verghese MCR 标准：步速 < 1.0 m/s + 主观认知主诉 → 满足 MCR 阳性。MCR 阳性人群 3 年内进展为痴呆的风险约为对照的 2 倍。",
+        cites: [["mcr_criteria", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/mcr_criteria.md"], ["Verghese 2014"]],
+        type: "warn"
+      },
+      {
+        title: "KB 检索：双任务代价",
+        body: "DTC > 15% 与前额叶执行功能下降相关，是 MCI 阶段的敏感指标 (Montero-Odasso 2017)。当前 +18% 已跨阈值。",
+        cites: [["imu_gait", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/imu_gait.md"], ["Buracchio 2010"]],
+        type: "warn"
+      },
+      {
+        title: "综合判断 → MCI",
+        body: "运动认知 (MCR+) + 语言 (停顿率↑、语速↓) + 自主神经 (HRV 下行) 三模态一致性指向 MCI 阶段。AT(N) 生物标志物未做，分期为临床推断而非生物学确诊。建议下一步做血液 p-tau217 或转诊神经内科考虑 PET。",
+        cites: [["ad_staging", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/ad_staging.md"], ["atn_framework", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/atn_framework.md"], ["Jack 2024"]],
+        type: "warn"
+      }
+    ],
+    bpsd: [
+      ["激越", "ok", "无"],
+      ["焦虑", "warn", "↑"],
+      ["淡漠", "warn", "↑"],
+      ["抑郁", "ok", "无"],
+      ["睡眠", "warn", "↓"],
+      ["日落", "ok", "无"],
+      ["游荡", "ok", "无"]
+    ],
+    sparkData: [22.5, 22.8, 23.1, 23.2, 23.5, 24.0, 24.1, 24.3, 24.0]
+  },
+
+  "P002": {
+    id: "P002", name: "李某 (匿名)", age: 79, sex: "男",
+    stage: "Moderate", stageIdx: 3, confidence: 0.86,
+    onGloveSince: "2025-11-04", lastMMSE: 16, lastCDR: 2,
+    alert: true, alertText: "⚠️ 5 min 窗口检测到 EDA + HR 同时上升，可能 1-2h 内出现激越发作",
+    cadence: {
+      "5min":  { v: "EDA + HR 突升", level: "alert" },
+      "1h":    { v: "情绪激活", level: "warn" },
+      "1d":    { v: "睡眠 4.8h", level: "alert" },
+      "7d":    { v: "步速 ↓12%", level: "alert" },
+      "30d":   { v: "CCI ↓1.4 SD", level: "alert" }
+    },
+    metrics: {
+      hrv: { name: "HRV (PPG)", icon: "❤️", rows: [
+        ["SDNN", "22 ms", "flag-bad", "显著降低"],
+        ["RMSSD", "14 ms", "flag-bad"],
+        ["LF/HF", "3.8", "flag-bad"],
+        ["静息 HR", "92 bpm", "flag-warn"]
+      ], src: "wiki/concepts/ppg_hrv.md"},
+      gait: { name: "步态 (IMU)", icon: "🚶", rows: [
+        ["步速", "0.62 m/s", "flag-bad"],
+        ["步频", "82 spm", "flag-bad"],
+        ["步态变异性", "11.4%", "flag-bad"],
+        ["跌倒风险", "高", "flag-bad"]
+      ], src: "wiki/concepts/imu_gait.md"},
+      eda: { name: "EDA", icon: "💧", rows: [
+        ["SCL 均值", "8.7 µS", "flag-bad", "+45% 基线"],
+        ["SCR 频率", "5.2/min", "flag-bad"],
+        ["NS-SCR", "3.1/min", "flag-bad"],
+        ["唤醒度", "高", "flag-bad"]
+      ], src: "Iaboni 2022 BPSD AUC 0.87"},
+      voice: { name: "语音", icon: "🎤", rows: [
+        ["语速", "1.8 字/秒", "flag-bad"],
+        ["停顿率", "41%", "flag-bad"],
+        ["TTR", "0.42", "flag-bad"],
+        ["语义错误", "频繁", "flag-bad"]
+      ], src: "TAUKADIAL 2024"}
+    },
+    reasoning: [
+      {
+        title: "急性触发：5min 窗口异常",
+        body: "EDA SCL +45% 基线 + HR 92 bpm (基线 76±5) + 步态稳定 (排除运动因素)。时间 16:30 (日落综合征窗口内)。",
+        cites: [["realtime buffer", "#"]],
+        type: "warn"
+      },
+      {
+        title: "KB 检索：BPSD 激越前兆",
+        body: "Iaboni 2022：EDA + HR + ACC 联合检测 BPSD AUC 0.87，激越发作前 1-2h 出现 EDA 上升是稳定的预警信号。",
+        cites: [["bpsd_agitation", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/bpsd_agitation.md"], ["Iaboni 2022"]],
+        type: "warn"
+      },
+      {
+        title: "KB 检索：日落综合征",
+        body: "时间 16:30 命中日落综合征典型窗口 (15:00-19:00)。本患者过去 30d 在该时段有 8 次类似模式。",
+        cites: [["bpsd_sundowning", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/bpsd_sundowning.md"]],
+        type: "warn"
+      },
+      {
+        title: "建议干预",
+        body: "立即触发音乐疗法 (患者偏好：50 年代老歌) + 通知看护人陪伴。如 30 分钟后 EDA 未回落，启动语音引导呼吸。监测 ARIA 风险（患者正在用 Lecanemab）。",
+        cites: [["intervention_agent", "https://jewelina95.github.io/ad-wiki-pages/wiki/agents/intervention_agent.md"], ["medications_ad", "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts/medications_ad.md"]],
+        type: "info"
+      }
+    ],
+    bpsd: [
+      ["激越", "bad", "↑↑"],
+      ["焦虑", "bad", "↑↑"],
+      ["淡漠", "warn", "↑"],
+      ["抑郁", "warn", "↑"],
+      ["睡眠", "bad", "↓↓"],
+      ["日落", "bad", "活跃"],
+      ["游荡", "warn", "偶发"]
+    ],
+    sparkData: [18.2, 17.9, 17.5, 17.0, 16.8, 16.4, 16.2, 16.0, 16.0]
+  },
+
+  "S01": {
+    id: "S01", name: "S01 健康基线", age: 28, sex: "男",
+    stage: "Healthy", stageIdx: -1, confidence: 0.94,
+    onGloveSince: "2026-04-08", lastMMSE: 30, lastCDR: 0,
+    alert: false, alertText: null,
+    cadence: {
+      "5min":  { v: "全部正常", level: "ok" },
+      "1h":    { v: "活动 充足", level: "ok" },
+      "1d":    { v: "睡眠 7.8h", level: "ok" },
+      "7d":    { v: "稳定", level: "ok" },
+      "30d":   { v: "无漂移", level: "ok" }
+    },
+    metrics: {
+      hrv: { name: "HRV (PPG)", icon: "❤️", rows: [
+        ["SDNN", "62 ms", "flag-ok"],
+        ["RMSSD", "48 ms", "flag-ok"],
+        ["LF/HF", "1.4", "flag-ok"],
+        ["静息 HR", "64 bpm", "flag-ok"]
+      ], src: "baseline 4.8"},
+      gait: { name: "步态 (IMU)", icon: "🚶", rows: [
+        ["步速", "1.42 m/s", "flag-ok"],
+        ["步频", "118 spm", "flag-ok"],
+        ["步态变异性", "2.1%", "flag-ok"],
+        ["双任务代价", "+4%", "flag-ok"]
+      ], src: "baseline 4.8"},
+      eda: { name: "EDA", icon: "💧", rows: [
+        ["SCL 均值", "3.1 µS", "flag-ok"],
+        ["SCR 频率", "1.2/min", "flag-ok"],
+        ["NS-SCR", "0.4/min", "flag-ok"],
+        ["唤醒度", "低-中", "flag-ok"]
+      ], src: "baseline 4.8"},
+      voice: { name: "语音", icon: "🎤", rows: [
+        ["语速", "4.6 字/秒", "flag-ok"],
+        ["停顿率", "8%", "flag-ok"],
+        ["TTR", "0.78", "flag-ok"],
+        ["F0 抖动", "0.5%", "flag-ok"]
+      ], src: "baseline 4.8"}
+    },
+    reasoning: [
+      {
+        title: "S01 健康基线",
+        body: "用于校准 Agent feature pipeline 和阈值规则。全部指标在年龄常模内，无 AD 病理风险。",
+        cites: [["baseline_4.8", "https://jewelina95.github.io/ad-wiki-pages/wiki/datasets/baseline_4.8.md"]],
+        type: "info"
+      }
+    ],
+    bpsd: [
+      ["激越", "ok", "无"], ["焦虑", "ok", "无"], ["淡漠", "ok", "无"],
+      ["抑郁", "ok", "无"], ["睡眠", "ok", "正常"], ["日落", "ok", "无"], ["游荡", "ok", "无"]
+    ],
+    sparkData: [30,30,30,30,30,30,30,30,30]
+  }
+};
+
+const STAGE_NAMES = ["SCD", "MCI", "Mild", "Moderate", "Severe"];
+
+// ===== 渲染患者列表 =====
+function renderPatientList() {
+  const list = document.getElementById('patientList');
+  list.innerHTML = Object.values(PATIENTS).map(p => {
+    const stageClass =
+      p.stageIdx === -1 ? 'stage-scd' :
+      p.stageIdx === 1  ? 'stage-mci' :
+      p.stageIdx === 2  ? 'stage-mild' :
+      p.stageIdx === 3  ? 'stage-mod' :
+      p.stageIdx === 4  ? 'stage-sev' : 'stage-scd';
+    return `
+      <div class="patient-card" data-id="${p.id}" onclick="selectPatient('${p.id}')">
+        <div class="name">${p.name}${p.alert ? '<span class="alert-dot"></span>' : ''}</div>
+        <div class="meta">${p.id} · ${p.age}岁 ${p.sex} · MMSE ${p.lastMMSE}</div>
+        <span class="stage ${stageClass}">${p.stage}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ===== 渲染主面板 =====
+function selectPatient(id) {
+  const p = PATIENTS[id];
+  document.querySelectorAll('.patient-card').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  const stageHtml = STAGE_NAMES.map((s, i) => `
+    <div class="stage-cell ${i === p.stageIdx ? 'active' : ''}">
+      <div class="lbl">阶段 ${i+1}</div>
+      <div class="stg">${s}</div>
+    </div>
+  `).join('');
+
+  const cadenceHtml = ['5min','1h','1d','7d','30d'].map(k => {
+    const c = p.cadence[k];
+    return `<div class="cad ${c.level}">
+      <div class="ic">${k==='5min'?'⚡':k==='1h'?'⏱':k==='1d'?'📅':k==='7d'?'📊':'📈'}</div>
+      <div class="name">${k} 窗口</div>
+      <div class="v">${c.v}</div>
+    </div>`;
+  }).join('');
+
+  const modalHtml = ['hrv','gait','eda','voice'].map(k => {
+    const m = p.metrics[k];
+    return `
+      <div class="modal-block">
+        <h4>${m.icon} ${m.name}</h4>
+        ${m.rows.map(r => `
+          <div class="row">
+            <span class="k">${r[0]}</span>
+            <span class="v ${r[2]||''}" title="${r[3]||''}">${r[1]}</span>
+          </div>
+        `).join('')}
+        <div class="src">📚 ${m.src}</div>
+      </div>
+    `;
+  }).join('');
+
+  const reasonHtml = p.reasoning.map((r, i) => `
+    <div class="reason-step ${r.type==='warn'?'warn':''}">
+      <span class="num">${i+1}</span>
+      <span class="title">${r.title}</span>
+      <div class="body">${r.body}</div>
+      <div class="cite">
+        ${r.cites.map(c => `<a href="${c[1]||'#'}" ${c[1]?'target="_blank"':''}>${c[0]}</a>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  const bpsdHtml = p.bpsd.map(b => `
+    <div class="bpsd-cell lv-${b[1]}">
+      <div class="nm">${b[0]}</div>
+      <div class="lv">${b[1]==='ok'?'正常':b[1]==='warn'?'关注':'高风险'}</div>
+      <div class="nb">${b[2]}</div>
+    </div>
+  `).join('');
+
+  const alertHtml = p.alert
+    ? `<div class="alert-banner">${p.alertText}</div>`
+    : `<div class="alert-banner ok">✅ 当前无急性预警，常规监测中</div>`;
+
+  // MMSE sparkline
+  const sd = p.sparkData;
+  const sw = 240, sh = 30;
+  const maxV = 30, minV = 14;
+  const path = sd.map((v, i) => {
+    const x = (i / (sd.length - 1)) * sw;
+    const y = sh - ((v - minV) / (maxV - minV)) * sh;
+    return `${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const lastX = sw, lastY = sh - ((sd[sd.length-1] - minV) / (maxV - minV)) * sh;
+
+  const main = document.getElementById('mainPanel');
+  main.innerHTML = `
+    <div class="patient-bar">
+      <div>
+        <div class="pname">${p.name}</div>
+        <div class="pmeta">${p.id} · ${p.age}岁 ${p.sex} · 戴手套自 ${p.onGloveSince}</div>
+      </div>
+      <div class="stat">
+        <div class="v">${p.lastMMSE}</div>
+        <div class="l">最近 MMSE</div>
+      </div>
+      <div class="stat">
+        <div class="v">${p.lastCDR}</div>
+        <div class="l">CDR</div>
+      </div>
+      <div class="stat" style="flex:1">
+        <div class="l">MMSE 趋势 (近 9 周)</div>
+        <svg class="spark" viewBox="0 0 ${sw} ${sh+4}">
+          <path d="${path}" />
+          <circle class="dot" cx="${lastX}" cy="${lastY}" r="3" />
+        </svg>
+      </div>
+    </div>
+
+    ${alertHtml}
+
+    <div class="section">
+      <h2>AD 分期 <span class="desc">基于多模态融合 · AT(N) 框架</span>
+        <span class="badge" style="background:var(--orange-bg);color:var(--orange);margin-left:auto">置信度 ${(p.confidence*100).toFixed(0)}%</span>
+      </h2>
+      <div class="stage-bar">${stageHtml}</div>
+      <div class="confidence-bar"><div style="width:${p.confidence*100}%"></div></div>
+      <div class="conf-label">
+        <span>低置信</span>
+        <span>${p.stage === 'Healthy' ? '健康对照（不参与分期）' : `当前判断：${p.stage}`}</span>
+        <span>高置信</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>5 时间尺度 cadence <span class="desc">同一 Agent · 5 个窗口同时跑</span></h2>
+      <div class="cadence-grid">${cadenceHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>多模态指标 <span class="desc">HRV / 步态 / EDA / 语音</span></h2>
+      <div class="modal-grid">${modalHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>Agent 推理链 <span class="desc">每条结论可追溯到 wiki KB + 原始论文</span></h2>
+      <div class="reason-chain">${reasonHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>BPSD 7 症状风险 <span class="desc">基于 NPI 量表维度 + 多模态融合</span></h2>
+      <div class="bpsd-grid">${bpsdHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>处置 <span class="desc">将判断转化为操作</span></h2>
+      <div class="action-row">
+        <button class="btn primary" onclick="showToast('已生成本周家属版报告（红黄绿+行动建议）')">📄 生成家属周报</button>
+        <button class="btn primary" onclick="showToast('已发送临床简报至主治医生工作站')">📋 推送医生周报</button>
+        ${p.stage === 'MCI' || p.stage === 'Mild' ?
+          '<button class="btn warn" onclick="showToast(\'已提交：建议下一步做血液 p-tau217 / 神经内科会诊\')">🩺 建议金标准检查</button>' : ''}
+        ${p.alert ?
+          '<button class="btn warn" onclick="showToast(\'已触发干预：音乐疗法 + 通知看护人\')">🎵 立即触发干预</button>' : ''}
+        <button class="btn" onclick="showToast('已开启 24h 加密监测')">🔒 加密监测</button>
+        <button class="btn" onclick="window.open('https://jewelina95.github.io/ad-wiki-pages/','_blank')">📚 打开 wiki KB ↗</button>
+      </div>
+    </div>
+  `;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// 初始化
+renderPatientList();
+selectPatient("P001");
+</script>
+
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AD 智能手套 · Dashboard 入口</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --teal: #0f766e;
+  --teal-bg: #f0fdfa;
+  --rose: #be123c;
+  --rose-bg: #fff1f2;
+  --border: #e2e8f0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+}
+header {
+  background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%);
+  color: white;
+  padding: 56px 24px 64px;
+  text-align: center;
+}
+header h1 { margin: 0 0 10px; font-size: 30px; letter-spacing: -0.02em; }
+header p { margin: 0 auto; max-width: 720px; opacity: 0.85; font-size: 15px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+.portal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: -32px;
+}
+.tile {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 36px 28px;
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tile:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(15,23,42,0.10); }
+.tile .icon { font-size: 36px; }
+.tile h2 { margin: 0; font-size: 22px; }
+.tile p { margin: 0; color: var(--muted); font-size: 14px; }
+.tile.patient { border-top: 4px solid var(--teal); }
+.tile.doctor { border-top: 4px solid var(--rose); }
+.tile ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.tile ul li { margin: 3px 0; }
+.cta {
+  margin-top: auto;
+  font-weight: 600;
+  font-size: 14px;
+  padding-top: 12px;
+}
+.tile.patient .cta { color: var(--teal); }
+.tile.doctor .cta { color: var(--rose); }
+.aux {
+  margin-top: 32px;
+  padding: 18px 22px;
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.aux strong { color: var(--text); }
+.aux a { color: var(--teal); text-decoration: none; }
+.aux a:hover { text-decoration: underline; }
+footer {
+  margin-top: 48px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .portal { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AD 智能手套 · Dashboard</h1>
+  <p>EDA + PPG + IMU + 麦克风的可穿戴手套，搭配多智能体推理引擎，对阿尔兹海默症患者做实时监测与干预。下面分别是患者端和医生端入口。</p>
+</header>
+
+<div class="wrap">
+
+<div class="portal">
+
+  <a class="tile patient" href="patient.html">
+    <div class="icon">🌿</div>
+    <h2>患者端</h2>
+    <p>给本人或家属看。简单、温和，告诉你"今天怎么样"和"接下来该做什么"。</p>
+    <ul>
+      <li>今日红黄绿状态灯</li>
+      <li>心率、活动、睡眠、心情</li>
+      <li>吃药 / 散步 / 联系家人</li>
+      <li>一键听音乐 / 呼吸放松</li>
+    </ul>
+    <div class="cta">进入患者端 →</div>
+  </a>
+
+  <a class="tile doctor" href="doctor.html">
+    <div class="icon">🩺</div>
+    <h2>医生端</h2>
+    <p>给临床医生看。多患者切换、5 时间尺度、Agent 推理链 + KB / 论文引用。</p>
+    <ul>
+      <li>AD 分期 + 置信度（SCD→Severe）</li>
+      <li>HRV / 步态 / EDA / 语音 多模态</li>
+      <li>BPSD 7 症状风险条 + 1-2h 预警</li>
+      <li>建议转诊 / 生成家属周报</li>
+    </ul>
+    <div class="cta">进入医生端 →</div>
+  </a>
+
+</div>
+
+<div class="aux">
+  <strong>研究背景：</strong>
+  本系统的临床知识库、Agent 架构、传感器原理、合成数据校准等技术细节，见
+  <a href="https://jewelina95.github.io/ad-wiki-pages/" target="_blank">AD Wiki ↗</a>。
+  当前页面为可视化原型，数据为脱敏 mock。
+</div>
+
+<footer>
+  AD 智能手套 · 多智能体监测系统 · 原型 v0.1 · 不可替代医生诊断
+</footer>
+
+</div>
+
+</body>
+</html>
