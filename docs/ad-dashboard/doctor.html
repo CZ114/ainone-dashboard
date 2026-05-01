@@ -819,14 +819,47 @@ const MIND_PATIENTS_META = {
 const mindCache = {};
 async function fetchMindPatient(id) {
   if (mindCache[id]) return mindCache[id];
-  const [persona, dashboard, clinical] = await Promise.all([
+  const [persona, dashboard, clinical, physio, behavior] = await Promise.all([
     fetch(`${MIND_BASE}/${id}/persona.json`).then(r => r.json()),
     fetch(`${MIND_BASE}/${id}/dashboard.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/insights_clinical.json`).then(r => r.json())
+    fetch(`${MIND_BASE}/${id}/insights_clinical.json`).then(r => r.json()),
+    fetch(`${MIND_BASE}/${id}/insights_physio.json`).then(r => r.json()),
+    fetch(`${MIND_BASE}/${id}/insights_behavior.json`).then(r => r.json())
   ]);
-  mindCache[id] = { persona, dashboard, clinical };
+  mindCache[id] = { persona, dashboard, clinical, physio, behavior };
   return mindCache[id];
 }
+
+// ===== KB 代码 → wiki 页面映射 =====
+const WIKI_BASE_URL = "https://jewelina95.github.io/ad-wiki-pages/wiki/concepts";
+const KB_TO_WIKI = {
+  "MCR_CRITERIA":     { page: "mcr_criteria",        label: "MCR 综合征" },
+  "SENSOR_IMU":       { page: "imu_gait",            label: "IMU / 步态" },
+  "SENSOR_PPG":       { page: "ppg_hrv",             label: "PPG / HRV" },
+  "SENSOR_EDA":       { page: "eda_signal",          label: "EDA 信号" },
+  "SENSOR_VOICE":     { page: "voice_acoustic_linguistic", label: "语音特征" },
+  "NORM_GAIT":        { page: "gait_norms",          label: "步态常模" },
+  "BPSD_DEPRESSION":  { page: "bpsd_depression",     label: "BPSD 抑郁" },
+  "BPSD_ANXIETY":     { page: "bpsd_anxiety",        label: "BPSD 焦虑" },
+  "BPSD_AGITATION":   { page: "bpsd_agitation",      label: "BPSD 激越" },
+  "BPSD_APATHY":      { page: "bpsd_apathy",         label: "BPSD 淡漠" },
+  "BPSD_SLEEP":       { page: "bpsd_sleep_disorder", label: "BPSD 睡眠" },
+  "BPSD_SUNDOWNING":  { page: "bpsd_sundowning",     label: "日落综合征" },
+  "BPSD_WANDERING":   { page: "bpsd_wandering",      label: "BPSD 游荡" },
+  "AT_N":             { page: "atn_framework",       label: "AT(N) 框架" },
+  "AD_STAGING":       { page: "ad_staging",          label: "AD 分期" }
+};
+function kbToWiki(code) {
+  // 提取前缀 (e.g. "MCR_CRITERIA_001" → "MCR_CRITERIA")
+  const prefix = code.replace(/_\d+$/, "");
+  const m = KB_TO_WIKI[prefix];
+  if (!m) return { url: null, label: code };
+  return { url: `${WIKI_BASE_URL}/${m.page}.md`, label: m.label, code };
+}
+
+// ===== 当前视图状态 =====
+let currentMindView = 'mind';   // 'mind' | 'wiki'
+let currentMindId = null;
 let customPatient = null;
 
 // ===== 渲染患者列表 =====
@@ -869,14 +902,42 @@ async function selectMindPatient(id) {
   const main = document.getElementById('mainPanel');
   document.querySelectorAll('.patient-card').forEach(el => el.classList.toggle('active', el.dataset.id === id));
   if (sensorTimer) clearInterval(sensorTimer);
-  main.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px">⏳</div><div style="margin-top:10px">从 ad-mind-pipeline 加载 ' + id + ' 中…</div></div>';
+  currentMindId = id;
+  main.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px">⏳</div><div style="margin-top:10px">从 ad-mind-pipeline + ad-wiki-pages 实时拉取 ' + id + ' …</div></div>';
 
   try {
     const data = await fetchMindPatient(id);
-    renderMindView(id, data);
+    renderCurrentView(id, data);
   } catch (e) {
     main.innerHTML = `<div style="padding:30px"><div class="alert-banner">加载失败：${e.message}<br>请确认 https://github.com/Jewelina95/ad-mind-pipeline 是 public</div></div>`;
   }
+}
+
+function switchMindView(view) {
+  currentMindView = view;
+  if (currentMindId && mindCache[currentMindId]) {
+    renderCurrentView(currentMindId, mindCache[currentMindId]);
+  }
+}
+
+function renderCurrentView(id, data) {
+  if (currentMindView === 'wiki') {
+    renderWikiView(id, data);
+  } else {
+    renderMindView(id, data);
+  }
+}
+
+// 顶部框架对比 tab
+function renderViewTabs(id) {
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;background:white;border:1px solid var(--border);border-radius:10px;padding:6px;">
+      <button class="btn ${currentMindView==='mind'?'primary':''}" style="${currentMindView==='mind'?'background:#7c3aed;border-color:#7c3aed':''};font-weight:600" onclick="switchMindView('mind')">🧠 MIND 视角</button>
+      <button class="btn ${currentMindView==='wiki'?'primary':''}" style="${currentMindView==='wiki'?'background:#0f766e;border-color:#0f766e':''};font-weight:600" onclick="switchMindView('wiki')">📚 WIKI 视角</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--muted);padding-right:8px">同一份数据 · 两种框架并排对比 · 实时从 GitHub 拉取</span>
+    </div>
+  `;
 }
 
 function renderMindView(id, data) {
@@ -888,6 +949,7 @@ function renderMindView(id, data) {
   const alertEmoji = alertColor === 'red' ? '🔴' : alertColor === 'yellow' ? '🟡' : '🟢';
 
   document.getElementById('mainPanel').innerHTML = `
+    ${renderViewTabs(id)}
     <div class="patient-bar">
       <div>
         <div class="pname">${id} <span style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:2px 8px;border-radius:4px;margin-left:6px">🧠 MIND Pipeline</span></div>
@@ -958,6 +1020,158 @@ function renderMindView(id, data) {
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:10px">
         本视图直接渲染 <code>${id}/dashboard.json</code> · 推理输出来自 PhysioAgent + BehaviorAgent + ClinicalAgent，由 Narrator 综合
+      </div>
+    </div>
+  `;
+}
+
+// ===== WIKI 视角 (同一份 fetch 数据，按 wiki KB 框架重组) =====
+function renderWikiView(id, data) {
+  const meta = MIND_PATIENTS_META[id];
+  const d = data.dashboard;
+  const c = data.clinical;
+  const ph = data.physio;
+  const bh = data.behavior;
+
+  // 按 wiki 框架: Unified Clinical Agent 推理链
+  // 把 physio + behavior insights 合并成 reasoning chain，每条挂 wiki 链接
+  const allInsights = [...ph.insights, ...bh.insights];
+
+  // 由 supporting_knowledge 推断 wiki 引用
+  const reasoningHtml = allInsights.map((ins, i) => {
+    const kbLinks = (ins.supporting_knowledge || []).map(code => {
+      const w = kbToWiki(code);
+      return w.url ? `<a href="${w.url}" target="_blank">${w.label}</a>` : `<span>${w.label}</span>`;
+    }).join('');
+    const isWarn = ins.confidence >= 0.8;
+    return `
+      <div class="reason-step ${isWarn ? 'warn' : ''}">
+        <span class="num">${i+1}</span>
+        <span class="title">${ins.observation}</span>
+        <div class="body">
+          <strong>临床含义：</strong>${ins.clinical_implication}
+          ${ins.differential ? `<br><strong style="color:var(--muted)">鉴别：</strong><span style="color:var(--muted)">${ins.differential}</span>` : ''}
+        </div>
+        <div class="cite">
+          <a href="#" onclick="event.preventDefault();alert('Confidence: ${ins.confidence}\\nDomain: ${ins.domain}\\nID: ${ins.id}')">conf ${(ins.confidence*100).toFixed(0)}%</a>
+          ${kbLinks}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 把数字按 wiki concept 分组（HRV / 步态 / EDA / 语音 / BPSD）
+  const physioByDomain = {
+    "步态": ph.insights.filter(i => i.supporting_knowledge.some(k => k.startsWith('SENSOR_IMU') || k.startsWith('NORM_GAIT') || k.startsWith('MCR'))),
+    "HRV": ph.insights.filter(i => i.supporting_knowledge.some(k => k.startsWith('SENSOR_PPG'))),
+    "EDA": ph.insights.filter(i => i.supporting_knowledge.some(k => k.startsWith('SENSOR_EDA'))),
+  };
+  const physioGridHtml = Object.entries(physioByDomain).filter(([_,arr]) => arr.length).map(([dom, arr]) => `
+    <div class="modal-block" style="cursor:default">
+      <h4>${dom==='步态'?'🚶':dom==='HRV'?'❤️':'💧'} ${dom}</h4>
+      ${arr.map(i => `<div style="font-size:12px;padding:4px 0;border-bottom:1px dashed var(--border)">
+        ${i.observation}
+      </div>`).join('')}
+      <div class="src">📚 <a href="${WIKI_BASE_URL}/${dom==='HRV'?'ppg_hrv':dom==='EDA'?'eda_signal':'imu_gait'}.md" target="_blank">wiki/concepts/${dom==='HRV'?'ppg_hrv':dom==='EDA'?'eda_signal':'imu_gait'}.md ↗</a></div>
+    </div>
+  `).join('');
+
+  // BPSD 7 网格 — 从 behavior insights 推断
+  const bpsdMap = {激越:'ok', 焦虑:'ok', 淡漠:'ok', 抑郁:'ok', 睡眠:'ok', 日落:'ok', 游荡:'ok'};
+  bh.insights.forEach(i => {
+    i.supporting_knowledge.forEach(k => {
+      if (k.startsWith('BPSD_AGITATION'))  bpsdMap['激越'] = 'bad';
+      if (k.startsWith('BPSD_ANXIETY'))    bpsdMap['焦虑'] = 'warn';
+      if (k.startsWith('BPSD_DEPRESSION')) bpsdMap['抑郁'] = 'warn';
+      if (k.startsWith('BPSD_APATHY'))     bpsdMap['淡漠'] = 'warn';
+      if (k.startsWith('BPSD_SLEEP'))      bpsdMap['睡眠'] = 'warn';
+      if (k.startsWith('BPSD_SUNDOWNING')) bpsdMap['日落'] = 'warn';
+      if (k.startsWith('BPSD_WANDERING'))  bpsdMap['游荡'] = 'bad';
+    });
+  });
+  const bpsdHtml = Object.entries(bpsdMap).map(([nm, lv]) => `
+    <div class="bpsd-cell lv-${lv}" style="cursor:default">
+      <div class="nm">${nm}</div>
+      <div class="lv">${lv==='ok'?'正常':lv==='warn'?'关注':'高风险'}</div>
+    </div>
+  `).join('');
+
+  // 阶段映射
+  const stage = c.stage_inclination.includes('mci_to_mild') ? 'MCI' :
+                c.stage_inclination.includes('mci') ? 'MCI' :
+                c.stage_inclination.includes('mild') ? 'Mild' :
+                c.stage_inclination.includes('moderate') ? 'Moderate' :
+                c.stage_inclination.includes('severe') ? 'Severe' : 'SCD';
+  const stageIdx = ['SCD','MCI','Mild','Moderate','Severe'].indexOf(stage);
+  const stageBarHtml = ['SCD','MCI','Mild','Moderate','Severe'].map((s, i) => `
+    <div class="stage-cell ${i===stageIdx?'active':''}">
+      <div class="lbl">阶段 ${i+1}</div>
+      <div class="stg">${s}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('mainPanel').innerHTML = `
+    ${renderViewTabs(id)}
+    <div class="patient-bar">
+      <div>
+        <div class="pname">${id} <span style="font-size:11px;background:#f0fdfa;color:#0f766e;padding:2px 8px;border-radius:4px;margin-left:6px">📚 WIKI KB 视角</span></div>
+        <div class="pmeta">${meta.age}岁 ${meta.sex} · 教育 ${meta.edu} 年 · 进展模式: <code>${meta.pattern}</code></div>
+      </div>
+      <div class="stat">
+        <div class="v">${ph.insights.length + bh.insights.length}</div>
+        <div class="l">推理条</div>
+      </div>
+      <div class="stat">
+        <div class="v">${ph.kb_entries_used + bh.kb_entries_used}</div>
+        <div class="l">KB 条目引用</div>
+      </div>
+      <div class="stat">
+        <div class="v">${(c.stage_confidence*100).toFixed(0)}%</div>
+        <div class="l">综合置信度</div>
+      </div>
+    </div>
+
+    <div class="alert-banner ${d.alert_level==='red'?'':'warn'}">
+      📚 按 ad-wiki-pages 框架解读 · 同一份原始数据 (physio + behavior insights) · 不同的临床知识体系
+    </div>
+
+    <div class="section">
+      <h2>AD 分期 <span class="desc">基于 wiki concepts/ad_staging + AT(N) 框架</span>
+        <span class="badge" style="background:var(--orange-bg);color:var(--orange);margin-left:auto">${stage} · ${(c.stage_confidence*100).toFixed(0)}%</span>
+      </h2>
+      <div class="stage-bar">${stageBarHtml}</div>
+      <div class="confidence-bar"><div style="width:${c.stage_confidence*100}%"></div></div>
+      <div class="conf-label"><span>低</span><span>分期：${stage}</span><span>高</span></div>
+    </div>
+
+    <div class="section">
+      <h2>多模态指标 <span class="desc">PhysioAgent insights → wiki concepts/ 阈值映射</span></h2>
+      <div class="modal-grid">${physioGridHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>Unified Clinical Agent 推理链 <span class="desc">${ph.insights.length} 条 physio + ${bh.insights.length} 条 behavior · 每条挂 wiki KB</span></h2>
+      <div class="reason-chain">${reasoningHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>BPSD 7 症状 <span class="desc">基于 NPI 量表 · BehaviorAgent KB 命中</span></h2>
+      <div class="bpsd-grid">${bpsdHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>处置 <span class="desc">基于 wiki KB + ClinicalAgent 综合判断</span></h2>
+      <div class="action-row">
+        <button class="btn primary" onclick="openMindReportModal('${id}')">📄 完整 report.md</button>
+        ${c.gold_standard_referral === 'yes' ? `<button class="btn warn" onclick="openMindReferralModal('${id}')">🩺 转诊详情</button>` : ''}
+        <button class="btn" onclick="window.open('https://jewelina95.github.io/ad-wiki-pages/','_blank')">📚 完整 wiki KB ↗</button>
+        <button class="btn" onclick="window.open('https://github.com/Jewelina95/ad-mind-pipeline/tree/main/data_v2/${id}','_blank')">📂 GitHub 源数据 ↗</button>
+        <button class="btn" onclick="switchMindView('mind')" style="background:#7c3aed;color:white;border-color:#7c3aed">🧠 切到 MIND 视角对比</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px">
+        WIKI 视角：用 <a href="https://jewelina95.github.io/ad-wiki-pages/" target="_blank" style="color:var(--teal)">ad-wiki-pages</a> 的 concept / method / agent 框架重新组织。
+        每条结论的 KB 链接（MCR_CRITERIA → mcr_criteria.md 等）实时跟随 wiki 更新。
+        改 ad-wiki-pages 或 ad-mind-pipeline → 刷新页面就能看到差异。
       </div>
     </div>
   `;
