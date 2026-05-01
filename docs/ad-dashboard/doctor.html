@@ -501,7 +501,7 @@ body {
     <a href="index.html">首页</a>
     <a href="patient.html">患者端</a>
     <a href="doctor.html" class="active" style="background:#be123c;color:white;border-color:#be123c">医生端</a>
-    <a href="/dashboard">实时面板</a>
+    <a href="index.html" title="实时面板需本机跑 backend，回首页查看说明">实时（本机）</a>
   </div>
 </nav>
 
@@ -993,7 +993,7 @@ function selectPatient(id) {
           `<button class="btn warn" onclick="openReportModal('goldstandard','${p.id}')">🩺 建议金标准检查</button>` : ''}
         ${p.alert ?
           `<button class="btn warn" onclick="openReportModal('intervention','${p.id}')">🎵 立即触发干预</button>` : ''}
-        <button class="btn" onclick="window.open('/dashboard','_blank')">📡 打开实时面板（需 backend）↗</button>
+        <button class="btn" onclick="window.location.href='index.html'">📡 打开实时面板（需 backend）↗</button>
         <button class="btn" onclick="window.open('https://jewelina95.github.io/ad-wiki-pages/','_blank')">📚 打开 wiki KB ↗</button>
       </div>
     </div>

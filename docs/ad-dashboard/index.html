@@ -103,6 +103,33 @@ footer {
   font-size: 12px;
   color: var(--muted);
 }
+#rtModal {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+#rtModal.show { display: flex; }
+#rtModal .panel {
+  background: white; border-radius: 12px; width: min(700px, 100%);
+  max-height: 90vh; overflow-y: auto; padding: 28px 32px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+#rtModal h2 { margin: 0 0 14px; font-size: 20px; }
+#rtModal h3 { margin: 18px 0 6px; font-size: 14px; color: var(--teal); }
+#rtModal pre {
+  background: #0f172a; color: #e2e8f0; padding: 12px 14px;
+  border-radius: 6px; font-size: 12px; overflow-x: auto;
+  font-family: ui-monospace, monospace; line-height: 1.6;
+}
+#rtModal .openbtn {
+  display: inline-block; background: var(--teal); color: white;
+  padding: 10px 18px; border-radius: 8px; text-decoration: none;
+  font-size: 13px; font-weight: 600; margin-top: 12px; margin-right: 8px;
+}
+#rtModal .closebtn {
+  display: inline-block; background: white; border: 1px solid var(--border);
+  color: var(--muted); padding: 10px 18px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; font-family: inherit;
+}
 @media (max-width: 720px) {
   .portal { grid-template-columns: 1fr; }
 }
@@ -145,17 +172,17 @@ footer {
     <div class="cta">进入医生端 →</div>
   </a>
 
-  <a class="tile realtime" href="/dashboard">
+  <a class="tile realtime" href="javascript:void(0)" onclick="openRealtimeModal()">
     <div class="icon">📡</div>
-    <h2>实时面板 <span class="live-badge">LIVE</span></h2>
+    <h2>实时面板 <span class="live-badge">LOCAL</span></h2>
     <p>给开发/研究自己用。直连本机 backend + ESP32，实时显示真实传感器流。</p>
     <ul>
       <li>真实 USB Serial / BLE / WiFi 数据</li>
       <li>多通道实时波形（陈哲做的）</li>
       <li>录制 / 回放 / Claude AI 聊天</li>
-      <li>需先 <code>python backend/run.py</code></li>
+      <li>需要本机跑 backend，点查看说明</li>
     </ul>
-    <div class="cta">打开实时面板 →</div>
+    <div class="cta">查看本机运行说明 →</div>
   </a>
 
 </div>
@@ -172,6 +199,41 @@ footer {
 </footer>
 
 </div>
+
+<div id="rtModal" onclick="if(event.target===this) closeRtModal()">
+  <div class="panel">
+    <h2>📡 实时面板需要本机运行</h2>
+    <p style="color:var(--muted);font-size:14px">实时 ESP32 传感器数据是 React 应用 + FastAPI backend，无法部署到静态 GitHub Pages。需要在你电脑上跑起来：</p>
+
+    <h3>1. Clone 代码</h3>
+<pre>git clone https://github.com/CZ114/ainone-dashboard.git
+cd ainone-dashboard</pre>
+
+    <h3>2. 启动 backend（终端 1）</h3>
+<pre>cd backend
+pip install -r requirements.txt
+python run.py
+# 监听 http://localhost:8000</pre>
+
+    <h3>3. 启动 frontend（终端 2）</h3>
+<pre>cd frontend
+npm install
+npm run dev
+# 打开 http://localhost:5173</pre>
+
+    <h3>4. 插上 ESP32 板，访问 /dashboard</h3>
+    <p style="font-size:13px">如果你已经在跑了，点这个直接打开：</p>
+    <a class="openbtn" href="http://localhost:5173/dashboard" target="_blank">打开 localhost:5173/dashboard ↗</a>
+    <a class="openbtn" href="https://github.com/CZ114/ainone-dashboard#readme" target="_blank" style="background:#1c1917">看 README ↗</a>
+    <button class="closebtn" onclick="closeRtModal()">关闭</button>
+  </div>
+</div>
+
+<script>
+function openRealtimeModal() { document.getElementById('rtModal').classList.add('show'); }
+function closeRtModal() { document.getElementById('rtModal').classList.remove('show'); }
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeRtModal(); });
+</script>
 
 </body>
 </html>
