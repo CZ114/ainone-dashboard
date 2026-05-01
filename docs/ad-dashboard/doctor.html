@@ -856,12 +856,19 @@ const STAGE_NAMES = ["SCD", "MCI", "Mild", "Moderate", "Severe"];
 // ===== MIND 真实数据源 =====
 const MIND_BASE = "https://raw.githubusercontent.com/Jewelina95/ad-mind-pipeline/main/data_v2";
 const MIND_PATIENTS_META = {
-  "P01": { age: 68, sex: "M", edu: 12, pattern: "linear",      bpsd: 2, label: "线性退化 · 中等储备" },
-  "P02": { age: 73, sex: "M", edu: 6,  pattern: "stepwise",    bpsd: 1, label: "阶梯式 · 低教育" },
-  "P03": { age: 70, sex: "M", edu: 16, pattern: "plateau",     bpsd: 0, label: "平台期 · 高储备" },
-  "P04": { age: 75, sex: "F", edu: 9,  pattern: "fluctuation", bpsd: 1, label: "波动型 · 女性" }
+  "P01": { age: 68, sex: "M", edu: 12, pattern: "linear",      bpsd: 2, label: "线性退化 · 中等储备", pipeline: "full" },
+  "P02": { age: 73, sex: "M", edu: 6,  pattern: "stepwise",    bpsd: 1, label: "阶梯式 · 低教育",     pipeline: "raw" },
+  "P03": { age: 70, sex: "M", edu: 16, pattern: "plateau",     bpsd: 0, label: "平台期 · 高储备",     pipeline: "raw" },
+  "P04": { age: 75, sex: "F", edu: 9,  pattern: "fluctuation", bpsd: 1, label: "波动型 · 女性",       pipeline: "raw" }
 };
 const mindCache = {};
+async function fetchJson(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
 async function fetchJsonl(url) {
   try {
     const r = await fetch(url);
@@ -873,16 +880,18 @@ async function fetchJsonl(url) {
 async function fetchMindPatient(id) {
   if (mindCache[id]) return mindCache[id];
   const [persona, dashboard, clinical, physio, behavior, bpsd, ema, notes] = await Promise.all([
-    fetch(`${MIND_BASE}/${id}/persona.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/dashboard.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/insights_clinical.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/insights_physio.json`).then(r => r.json()),
-    fetch(`${MIND_BASE}/${id}/insights_behavior.json`).then(r => r.json()),
+    fetchJson(`${MIND_BASE}/${id}/persona.json`),
+    fetchJson(`${MIND_BASE}/${id}/dashboard.json`),
+    fetchJson(`${MIND_BASE}/${id}/insights_clinical.json`),
+    fetchJson(`${MIND_BASE}/${id}/insights_physio.json`),
+    fetchJson(`${MIND_BASE}/${id}/insights_behavior.json`),
     fetchJsonl(`${MIND_BASE}/${id}/bpsd_events.jsonl`),
     fetchJsonl(`${MIND_BASE}/${id}/ema.jsonl`),
     fetchJsonl(`${MIND_BASE}/${id}/notes.jsonl`)
   ]);
-  mindCache[id] = { persona, dashboard, clinical, physio, behavior, bpsd, ema, notes };
+  // Pipeline 完整度：4 个 JSON 全有 = full；只有 persona = pipeline 未跑
+  const complete = !!(dashboard && clinical && physio && behavior);
+  mindCache[id] = { persona, dashboard, clinical, physio, behavior, bpsd, ema, notes, complete };
   return mindCache[id];
 }
 
@@ -921,13 +930,18 @@ let customPatient = null;
 // ===== 渲染患者列表 =====
 function renderPatientList() {
   const list = document.getElementById('patientList');
-  const html = Object.entries(MIND_PATIENTS_META).map(([id, m]) => `
-    <div class="patient-card" data-id="${id}" onclick="selectMindPatient('${id}')">
-      <div class="name">${id}</div>
-      <div class="meta">${m.age}岁 ${m.sex} · 教育${m.edu}年</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px">${m.label} · BPSD ${m.bpsd}次 · 30天</div>
-    </div>
-  `).join('');
+  const html = Object.entries(MIND_PATIENTS_META).map(([id, m]) => {
+    const badge = m.pipeline === 'full'
+      ? '<span style="font-size:9px;background:#dcfce7;color:#14532d;padding:1px 5px;border-radius:3px;font-weight:600">FULL</span>'
+      : '<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:600">RAW</span>';
+    return `
+      <div class="patient-card" data-id="${id}" onclick="selectMindPatient('${id}')">
+        <div class="name">${id} ${badge}</div>
+        <div class="meta">${m.age}岁 ${m.sex} · 教育${m.edu}年</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${m.label} · BPSD ${m.bpsd}次 · 30天</div>
+      </div>
+    `;
+  }).join('');
   list.innerHTML = html;
 }
 
@@ -955,15 +969,133 @@ function switchMindView(view) {
 }
 
 function renderCurrentView(id, data) {
+  if (!data.complete) {
+    // Pipeline 未跑 — 仅渲染 raw 数据降级视图
+    renderRawOnlyView(id, data);
+    startSensorBoard('mci');
+    return;
+  }
   if (currentMindView === 'wiki') {
     renderWikiView(id, data);
   } else {
     renderMindView(id, data);
   }
-  // 渲染完后启动 sensor 流（按 alert 等级选 profile）
   const alert = data.dashboard.alert_level;
   const profile = alert === 'red' ? 'alert' : alert === 'yellow' ? 'mci' : 'healthy';
   startSensorBoard(profile);
+}
+
+// ===== Raw-only fallback (Pipeline 未跑的患者) =====
+function renderRawOnlyView(id, data) {
+  const meta = MIND_PATIENTS_META[id];
+  const bpsd = data.bpsd || [];
+  const ema = data.ema || [];
+  const notes = data.notes || [];
+
+  const lastEma = ema.length ? ema[ema.length - 1] : null;
+  const today = new Date().toISOString().slice(0,10);
+
+  document.getElementById('mainPanel').innerHTML = `
+    ${renderViewTabs(id)}
+    <div class="patient-bar">
+      <div>
+        <div class="pname">${id} <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;margin-left:6px">⚠ Raw data only</span></div>
+        <div class="pmeta">${meta.age}岁 ${meta.sex === 'M' ? '男' : '女'} · 教育 ${meta.edu} 年 · 进展模式: <code>${meta.pattern}</code> · 30 天纵向</div>
+      </div>
+      <div class="stat">
+        <div class="v">${ema.length}</div>
+        <div class="l">EMA 条数</div>
+      </div>
+      <div class="stat">
+        <div class="v">${bpsd.length}</div>
+        <div class="l">BPSD 事件</div>
+      </div>
+      <div class="stat">
+        <div class="v">${notes.length}</div>
+        <div class="l">临床 Notes</div>
+      </div>
+    </div>
+
+    <div class="alert-banner warn">
+      ⚠️ <strong>ad-mind-pipeline 还没对 ${id} 跑完整流程</strong> — 缺少 dashboard.json / insights_clinical / insights_physio / insights_behavior。当前显示原始 raw 数据。
+      <a href="https://github.com/Jewelina95/ad-mind-pipeline#readme" target="_blank" style="color:inherit;text-decoration:underline;margin-left:8px">查看如何运行 pipeline ↗</a>
+    </div>
+
+    ${renderRealtimeBoard(id)}
+
+    <div class="section">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);padding-bottom:6px">Persona</h2>
+      <div class="kv">
+        <span class="k">Patient ID</span><span><code>${id}</code></span>
+        <span class="k">Base subject</span><span>${data.persona?.base_subject || '-'}</span>
+        <span class="k">Age / Sex</span><span>${meta.age} / ${meta.sex === 'M' ? '男' : '女'}</span>
+        <span class="k">Education</span><span>${meta.edu} 年</span>
+        <span class="k">Cognitive reserve</span><span>${data.persona?.cognitive_reserve_factor || '-'}</span>
+        <span class="k">Progression pattern</span><span><code>${meta.pattern}</code></span>
+        <span class="k">BPSD prone</span><span>${data.persona?.bpsd_prone ? 'true' : 'false'}</span>
+        <span class="k">N days</span><span>${data.persona?.n_days || meta.bpsd === 0 ? '30' : '30'}</span>
+      </div>
+    </div>
+
+    ${bpsd.length ? `
+    <div class="section">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);padding-bottom:6px">BPSD Events (${bpsd.length})</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Day</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Type</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Duration</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Context</th>
+        </tr></thead>
+        <tbody>
+          ${bpsd.map(e => `<tr>
+            <td style="padding:6px 10px;border:1px solid var(--border)">D${e.day || '-'}</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.type || '-'}</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.duration_min ? e.duration_min + ' 分钟' : '-'}</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.context || e.trigger || '-'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+
+    ${ema.length ? `
+    <div class="section">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);padding-bottom:6px">EMA Latest 5 (of ${ema.length})</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Day</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Mood</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Anxiety</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Sleep</th>
+          <th style="text-align:left;padding:6px 10px;border:1px solid var(--border)">Energy</th>
+        </tr></thead>
+        <tbody>
+          ${ema.slice(-5).map(e => `<tr>
+            <td style="padding:6px 10px;border:1px solid var(--border)">D${e.day || '-'}</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.mood ?? '-'}/10</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.anxiety ?? '-'}/10</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.sleep ?? '-'}/10</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">${e.energy ?? '-'}/10</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="section">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);padding-bottom:6px">Next Steps</h2>
+      <p style="font-size:13.5px;line-height:1.7">本患者已有原始数据（persona + bpsd_events + ema + notes + progression），但还没运行 ad-mind-pipeline 的 PhysioAgent / BehaviorAgent / ClinicalAgent / Narrator 这 4 步推理。</p>
+      <ol style="padding-left:22px">
+        <li>Clone <a href="https://github.com/Jewelina95/ad-mind-pipeline" target="_blank">ad-mind-pipeline</a></li>
+        <li>设置 ANTHROPIC_API_KEY 环境变量</li>
+        <li>运行 <code>python 03_physio_agent.py ${id}</code> 等 4 个 agent 脚本</li>
+        <li>commit + push 到 main，刷新这个页面就会看到完整 SOAP 报告</li>
+      </ol>
+      <div class="action-row" style="margin-top:12px">
+        <button class="btn" onclick="window.open('https://github.com/Jewelina95/ad-mind-pipeline/tree/main/data_v2/${id}','_blank')">📂 GitHub 源数据 ↗</button>
+        <button class="btn" onclick="selectMindPatient('P01')">↩ 切到 P01 (完整 pipeline 输出)</button>
+      </div>
+    </div>
+  `;
 }
 
 // ===== 3 cadence 报告 (1h / 7d / 30d) - 两个视角共用入口、不同内容 =====
