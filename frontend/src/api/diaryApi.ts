@@ -101,6 +101,13 @@ export interface TestAgentResponse {
   error?: string;
 }
 
+export interface MainProviderInfo {
+  base_url: string | null;
+  model: string | null;
+  auth_present: boolean;
+  env_source: 'settings_json' | 'process_env' | 'default';
+}
+
 export interface ReplyResponse {
   /** Real persistent cwd that diary follow-up chats group under. */
   cwd: string;
@@ -204,6 +211,9 @@ export const diaryApi = {
   // config
   async getConfig(): Promise<{ config: DiaryConfig }> {
     return asJson(await fetch(`${API_BASE}/api/diary/config`));
+  },
+  async getMainProvider(): Promise<MainProviderInfo> {
+    return asJson(await fetch(`${API_BASE}/api/diary/main-provider`));
   },
   async patchConfig(patch: Partial<DiaryConfig>): Promise<{ config: DiaryConfig }> {
     return asJson(

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="520" viewBox="0 0 1800 520" role="img" aria-label="I-THREAD Lab logo horizontal">
+  <defs>
+    <style>
+      .blue{fill:#0717d8}.magenta{fill:#ec0a91}
+      .main{font-family:'Arial Rounded MT Bold','Trebuchet MS','DejaVu Sans',Arial,sans-serif;font-weight:700;letter-spacing:4px}
+      .sub{font-family:'Trebuchet MS','DejaVu Sans',Arial,sans-serif;font-weight:500;letter-spacing:0.2px}
+    </style>
+  </defs>
+  <rect width="1800" height="520" fill="#f7f7f7"/>
+  <g transform="translate(38 36)">
+    <text x="0" y="110" class="blue main" font-size="118">I-THREAD</text>
+    <text x="760" y="110" class="magenta main" font-size="118">Lab</text>
+    <text x="0" y="245" class="blue sub" font-size="78">Intelligent Textiles for Health Research,</text>
+    <text x="0" y="348" class="blue sub" font-size="78">Engineering, Augmentation, and Design</text>
+  </g>
+</svg>

@@ -38,6 +38,7 @@ import {
   handleDeleteSecret,
   handleGetConfig,
   handleGetEntry,
+  handleGetMainProvider,
   handleListAgents,
   handleListEntries,
   handleListSecrets,
@@ -132,6 +133,7 @@ export function createApp(
   );
   app.post("/api/diary/abort", (c) => handleDiaryAbort(c));
   app.get("/api/diary/stream", (c) => handleStream(c));
+  app.get("/api/diary/main-provider", (c) => handleGetMainProvider(c));
   app.get("/api/diary/config", (c) => handleGetConfig(c));
   app.patch("/api/diary/config", (c) => handlePatchConfig(c));
   app.get("/api/diary/agents", (c) => handleListAgents(c));

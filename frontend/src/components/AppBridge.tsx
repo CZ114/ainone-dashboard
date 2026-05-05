@@ -157,6 +157,7 @@ export function AppBridge() {
   useEffect(() => {
     void useDiaryStore.getState().loadEntries();
     void useDiaryStore.getState().loadConfig();
+    void useDiaryStore.getState().loadMainProvider();
     const disconnect = useDiaryStore.getState().connectStream();
     return () => {
       disconnect();

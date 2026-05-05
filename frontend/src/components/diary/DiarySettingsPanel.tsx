@@ -9,6 +9,8 @@ import { AgentEditor } from './AgentEditor';
 export function DiarySettingsPanel() {
   const config = useDiaryStore((s) => s.config);
   const configLoading = useDiaryStore((s) => s.configLoading);
+  const mainProvider = useDiaryStore((s) => s.mainProvider);
+  const loadMainProvider = useDiaryStore((s) => s.loadMainProvider);
   const agents = useDiaryStore((s) => s.agents);
   const secrets = useDiaryStore((s) => s.secrets);
   const agentsLoading = useDiaryStore((s) => s.agentsLoading);
@@ -35,7 +37,8 @@ export function DiarySettingsPanel() {
   useEffect(() => {
     void loadConfig();
     void loadAgents();
-  }, [loadConfig, loadAgents]);
+    void loadMainProvider();
+  }, [loadConfig, loadAgents, loadMainProvider]);
 
   const editingAgent = useMemo(() => {
     if (!editorAgentId) return null;
@@ -345,6 +348,7 @@ export function DiarySettingsPanel() {
               }}
               onTest={(id) => testAgent(id)}
               onUpsertSecret={async (n, v) => putSecret(n, v)}
+              mainProvider={mainProvider}
             />
           </div>
         )}
