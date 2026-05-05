@@ -9,17 +9,18 @@ import {
   type ExtensionStatus,
 } from '../../api/extensionsApi';
 import { ThemeToggle } from '../ThemeToggle';
+import { ThemePicker } from '../ThemePicker';
 import { ExtensionCard } from './ExtensionCard';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 
-type Tab = 'extensions' | 'diary' | 'about';
+type Tab = 'extensions' | 'diary' | 'appearance' | 'about';
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab: Tab = (() => {
     const t = searchParams.get('tab');
-    if (t === 'diary' || t === 'extensions' || t === 'about') return t;
+    if (t === 'diary' || t === 'extensions' || t === 'appearance' || t === 'about') return t;
     return 'extensions';
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -81,6 +82,9 @@ export function SettingsPage() {
         <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
           📓 Diary
         </TabButton>
+        <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')}>
+          🎨 Appearance
+        </TabButton>
         <TabButton active={activeTab === 'about'} onClick={() => setActiveTab('about')}>
           About
         </TabButton>
@@ -98,6 +102,7 @@ export function SettingsPage() {
             />
           )}
           {activeTab === 'diary' && <DiarySettingsPanel />}
+          {activeTab === 'appearance' && <ThemePicker />}
           {activeTab === 'about' && <AboutTabBody />}
         </div>
       </main>
