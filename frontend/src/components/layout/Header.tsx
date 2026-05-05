@@ -35,21 +35,25 @@ export function Header() {
   return (
     <header className="bg-card-bg border-b border-card-border px-6 py-2">
       <div className="flex items-center justify-between">
-        {/* Logo — i-Thread Lab horizontal mark, served from
-            frontend/public/logo-horizontal.svg. SVG so it stays crisp
-            at any retina scale and the dashboard's dark/light themes
-            both work without a second asset. */}
+        {/* Logo — i-Thread Lab horizontal mark. Clicking opens the
+            lab's homepage at imperial.ac.uk in a new tab; this is the
+            BRAND link, not a navigation control. The nav buttons to
+            the right handle in-app routing.
+            target="_blank" + rel="noopener noreferrer" so the new
+            tab can't reach back into our window via window.opener.
+            Asset served from frontend/public/logo-horizontal.svg —
+            SVG stays crisp at any retina scale and works on every
+            theme without a second asset. */}
         <a
-          href="/dashboard"
-          onClick={(e) => {
-            e.preventDefault();
-            goTo('/dashboard');
-          }}
+          href="https://www.imperial.ac.uk/hamlyn-centre/research/research-groups/i-thread-lab/"
+          target="_blank"
+          rel="noopener noreferrer"
           className="flex items-center gap-3 shrink-0"
-          aria-label="i-Thread Lab — Dashboard home"
+          aria-label="i-Thread Lab — Imperial Hamlyn Centre (opens in a new tab)"
+          title="Open i-Thread Lab homepage at imperial.ac.uk in a new tab"
         >
           <img
-            src="/logo-horizontal.png"
+            src="/logo-horizontal.svg"
             alt="i-Thread Lab"
             className="h-14 w-auto select-none md:h-16"
             draggable={false}
