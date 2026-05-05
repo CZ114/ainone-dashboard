@@ -19,6 +19,7 @@ import {
   findProvider,
   suggestSecretName,
 } from './providers';
+import type { MainProviderInfo } from '../../api/diaryApi';
 
 interface AgentEditorProps {
   agentId: string;
@@ -32,6 +33,26 @@ interface AgentEditorProps {
   /** Backed by diaryStore.putSecret. Lets simple-mode auto-create the
    *  per-provider secret so the user never has to touch the Secrets UI. */
   onUpsertSecret: (name: string, value: string) => Promise<void>;
+  /**
+   * Main-agent provider info from `~/.claude/settings.json`. When set,
+   * the editor LOCKS the provider picker to the matching family — diary
+   * agents cannot use a different API than the main chat. Prevents
+   * silent auth conflicts (e.g. Anthropic key reaching MiniMax). When
+   * null (loading or detection failed), the picker is unlocked.
+   */
+  mainProvider: MainProviderInfo | null;
+}
+
+// Match a main-provider base_url to one of our PROVIDERS entries.
+// Used to figure out which provider card to lock to. Returns the
+// provider id, or null if we can't match (rare custom router etc).
+function lockedProviderIdFor(main: MainProviderInfo | null): string | null {
+  if (!main) return null;
+  // Anthropic native (no BASE_URL)
+  if (!main.base_url) return 'anthropic';
+  // Reuse providers.ts's reverse-lookup logic
+  const detected = detectProvider({ ANTHROPIC_BASE_URL: main.base_url });
+  return detected.id;
 }
 
 interface EnvRow {
@@ -71,18 +92,46 @@ export function AgentEditor({
   onTest,
   onIdChange,
   onUpsertSecret,
+  mainProvider,
 }: AgentEditorProps) {
+  // Provider lock — when the dashboard knows which provider the
+  // user's main chat targets, all NEW diary agents must match. Saved
+  // agents inherit whatever provider they were created with (so an
+  // older agent from when the main chat was Anthropic doesn't
+  // disappear when the user switches main to DeepSeek), but the
+  // editor still locks the picker so any save respects the current
+  // main provider.
+  const lockedProviderId = useMemo(
+    () => lockedProviderIdFor(mainProvider),
+    [mainProvider],
+  );
+
   // ---- Simple-mode state ------------------------------------------------
   const detectedProvider = useMemo<Provider>(() => {
-    if (!initial) return PROVIDERS[0];
-    return detectProvider(initial.env);
-  }, [initial]);
+    if (initial) return detectProvider(initial.env);
+    // For a brand-new agent, default to the locked provider when known.
+    if (lockedProviderId) {
+      return findProvider(lockedProviderId) ?? PROVIDERS[0];
+    }
+    return PROVIDERS[0];
+  }, [initial, lockedProviderId]);
 
   const [providerId, setProviderId] = useState<string>(detectedProvider.id);
   const provider = useMemo(
     () => findProvider(providerId) ?? PROVIDERS[0],
     [providerId],
   );
+
+  // If main provider becomes known AFTER the editor mounted (race with
+  // store loading), snap providerId to the lock for new agents.
+  useEffect(() => {
+    if (!isNew) return;
+    if (!lockedProviderId) return;
+    if (providerId !== lockedProviderId) {
+      setProviderId(lockedProviderId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedProviderId]);
 
   const [modelId, setModelId] = useState<string>(
     initial?.model ?? detectedProvider.defaultModelId ?? PROVIDERS[0].defaultModelId,
@@ -276,24 +325,56 @@ export function AgentEditor({
       </div>
 
       {/* Step 1 — Provider picker. Hidden in Advanced (user is doing
-          their own env). */}
+          their own env). When mainProvider is known, the picker is
+          LOCKED to that family — diary agents must share the API
+          family of the user's main chat to avoid auth conflicts. */}
       {!advanced && (
         <section className="mb-4">
-          <h4 className="mb-1 text-xs font-medium text-text-secondary">
-            1. Provider
+          <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-text-secondary">
+            <span>1. Provider</span>
+            {lockedProviderId && (
+              <span
+                className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-normal text-accent"
+                title="Diary is locked to your main chat's provider family. Change ~/.claude/settings.json's ANTHROPIC_BASE_URL to switch."
+              >
+                🔒 locked to {findProvider(lockedProviderId)?.label}
+              </span>
+            )}
           </h4>
+          {lockedProviderId && (
+            <p className="mb-2 text-[11px] text-text-muted leading-snug">
+              Locked to your main chat's provider so diary runs share
+              the same API family. Switching would mix credentials and
+              produce silent auth failures. To change: edit{' '}
+              <code className="rounded bg-card-border/40 px-1">~/.claude/settings.json</code>{' '}
+              and restart the backend.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {PROVIDERS.map((p) => {
               const active = p.id === providerId;
+              const allowed = !lockedProviderId || p.id === lockedProviderId;
+              const onClick = () => {
+                if (!allowed) return;
+                setProviderId(p.id);
+              };
               return (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setProviderId(p.id)}
+                  onClick={onClick}
+                  disabled={!allowed}
+                  title={
+                    allowed
+                      ? p.shortNote
+                      : `Locked: main chat is on ${findProvider(lockedProviderId)?.label}. Edit ~/.claude/settings.json to switch.`
+                  }
                   className={`rounded border p-2 text-left text-xs transition-colors ${
                     active
                       ? 'border-accent bg-accent/15 text-text-primary'
-                      : 'border-card-border bg-window-bg/50 text-text-secondary hover:bg-card-border/40'
+                      : allowed
+                      ? 'border-card-border bg-window-bg/50 text-text-secondary hover:bg-card-border/40'
+                      : 'border-card-border bg-window-bg/30 text-text-muted opacity-40 cursor-not-allowed'
                   }`}
                 >
                   <div className="font-medium">{p.label}</div>

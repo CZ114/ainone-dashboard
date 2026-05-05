@@ -14,6 +14,7 @@ import {
   readAgentsFile,
   writeAgentsFile,
 } from "./store.ts";
+import { getMainProviderInfo } from "./mainProvider.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,15 +37,42 @@ async function loadDailyPrompt(): Promise<string> {
   return cachedDailyPrompt;
 }
 
-/** Built-in fallback used when the user hasn't created any agents yet. */
+/**
+ * Built-in fallback agent. Used when no explicit diary agent is
+ * configured.
+ *
+ * Behaviour change (May 2026): the fallback is no longer hardcoded to
+ * Haiku. It now mirrors the user's MAIN agent — whatever provider +
+ * model they have set in `~/.claude/settings.json` (or shell env). If
+ * the main agent is on DeepSeek, the fallback is on DeepSeek too. If
+ * the main agent is on Anthropic native, fallback uses Haiku as the
+ * cheapest member of that family.
+ *
+ * Why: avoids the surprise where a user switched their main env to
+ * MiniMax but the diary still tried to talk to Anthropic's endpoint,
+ * which produced an auth conflict + retry storm. This change keeps
+ * diary on the same API family by default.
+ */
 async function fallbackAgent(): Promise<AgentConfig> {
+  const main = await getMainProviderInfo();
+  const env: Record<string, string> = {};
+  if (main.base_url) {
+    env.ANTHROPIC_BASE_URL = main.base_url;
+  }
+  // If main agent has an explicit model, mirror it. Otherwise pick a
+  // cheap default — Haiku for Anthropic-native, "" for everything else
+  // (which forces the runner / CLI default).
+  const model =
+    main.model ??
+    (main.base_url === null ? "claude-haiku-4-5" : "");
   return {
     name: "Daily Observer",
-    description: "Brief factual observations on recent recordings.",
-    // Haiku is cheap and fast; the user can switch to Sonnet/Opus per agent
-    // once the Phase 2 editor lands.
-    model: "claude-haiku-4-5",
-    env: {}, // empty -> runner falls back to ~/.claude/settings.json
+    description:
+      main.base_url
+        ? `Mirrors your main chat's provider (${main.base_url}). Switch by editing ~/.claude/settings.json.`
+        : "Mirrors your main chat — Anthropic native.",
+    model,
+    env,
     system_prompt: await loadDailyPrompt(),
     sampling: { max_tokens: 800, temperature: 0.5 },
   };

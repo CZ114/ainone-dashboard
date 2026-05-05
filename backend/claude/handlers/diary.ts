@@ -35,6 +35,7 @@ import {
 } from "../diary/store.ts";
 import { runAndPersist } from "../diary/orchestrator.ts";
 import { runAgent, AgentError } from "../diary/runner.ts";
+import { getMainProviderInfo } from "../diary/mainProvider.ts";
 import {
   DEFAULT_AGENT_ID,
   deleteAgent as agentDelete,
@@ -321,6 +322,13 @@ export async function handleReply(c: Context) {
   } satisfies ReplyResponse);
 }
 
+// ---------- Main provider (read-only diagnostic) -----------------------------
+
+export async function handleGetMainProvider(c: Context) {
+  const info = await getMainProviderInfo();
+  return c.json(info);
+}
+
 // ---------- Config -----------------------------------------------------------
 
 export async function handleGetConfig(c: Context) {
@@ -395,6 +403,41 @@ export async function handleUpsertAgent(c: Context) {
       400,
     );
   }
+
+  // Provider-family lock. The diary feature deliberately restricts new
+  // agents to the SAME Anthropic-protocol provider as the user's main
+  // chat (read from ~/.claude/settings.json). Without this, a user
+  // could save an agent with a per-agent ANTHROPIC_BASE_URL that
+  // conflicts with the API key already inherited from their settings,
+  // which we've seen produce silent auth-mixing hangs.
+  //
+  // Comparison is on the literal string after trailing-slash trim;
+  // null/empty on either side means "Anthropic native".
+  function normaliseUrl(u: string | undefined | null): string | null {
+    if (!u) return null;
+    const t = u.trim();
+    if (!t) return null;
+    return t.endsWith("/") ? t.slice(0, -1) : t;
+  }
+  const main = await getMainProviderInfo();
+  const agentBaseUrl = normaliseUrl(body.env?.ANTHROPIC_BASE_URL);
+  if (agentBaseUrl !== (main.base_url ?? null)) {
+    return c.json(
+      {
+        error:
+          `Provider mismatch: this agent's ANTHROPIC_BASE_URL (${
+            agentBaseUrl ?? "Anthropic native"
+          }) does not match your main chat's provider (${
+            main.base_url ?? "Anthropic native"
+          }). Diary agents are locked to your main chat's provider family. ` +
+          `Change ~/.claude/settings.json's ANTHROPIC_BASE_URL first if you want to switch the diary's provider too.`,
+        main_provider_base_url: main.base_url,
+        agent_provider_base_url: agentBaseUrl,
+      },
+      409,
+    );
+  }
+
   await upsertAgent(id, {
     name: body.name,
     description: body.description,

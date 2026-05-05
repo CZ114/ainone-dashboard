@@ -35,14 +35,26 @@ export function Header() {
   return (
     <header className="bg-card-bg border-b border-card-border px-6 py-3">
       <div className="flex items-center justify-between">
-        {/* Logo and title */}
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📊</span>
-          <div>
-            <h1 className="text-lg font-bold text-text-primary">AinOne Dashboard</h1>
-            <p className="text-xs text-text-muted">Real-time multi-sensor visualization</p>
-          </div>
-        </div>
+        {/* Logo — i-Thread Lab horizontal mark, served from
+            frontend/public/logo-horizontal.svg. SVG so it stays crisp
+            at any retina scale and the dashboard's dark/light themes
+            both work without a second asset. */}
+        <a
+          href="/dashboard"
+          onClick={(e) => {
+            e.preventDefault();
+            goTo('/dashboard');
+          }}
+          className="flex items-center gap-3 shrink-0"
+          aria-label="i-Thread Lab — Dashboard home"
+        >
+          <img
+            src="/logo-horizontal.svg"
+            alt="i-Thread Lab"
+            className="h-9 w-auto select-none"
+            draggable={false}
+          />
+        </a>
 
         {/* Navigation — buttons (not <Link>) so we can wrap navigate
             in startTransition. */}

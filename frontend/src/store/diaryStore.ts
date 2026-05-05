@@ -12,6 +12,7 @@ import {
   type DiaryConfig,
   type DiaryEntry,
   type DiaryStreamEvent,
+  type MainProviderInfo,
   type SecretSummary,
   type TestAgentResponse,
 } from '../api/diaryApi';
@@ -37,6 +38,11 @@ interface DiaryState {
   // config
   config: DiaryConfig | null;
   configLoading: boolean;
+
+  // main-agent provider info — read from settings.json by backend.
+  // Drives AgentEditor's provider lock and DiaryPage's "active provider"
+  // badge so users always see what family their diary is in.
+  mainProvider: MainProviderInfo | null;
 
   // agents + secrets
   agents: AgentSummary[];
@@ -66,6 +72,7 @@ interface DiaryState {
   // config actions
   loadConfig: () => Promise<void>;
   patchConfig: (patch: Partial<DiaryConfig>) => Promise<void>;
+  loadMainProvider: () => Promise<void>;
 
   // agents + secrets actions
   loadAgents: () => Promise<void>;
@@ -100,6 +107,7 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
 
   config: null,
   configLoading: false,
+  mainProvider: null,
 
   agents: [],
   secretReferences: {},
@@ -237,6 +245,17 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
       const msg = err instanceof Error ? err.message : String(err);
       set({ error: msg });
       get().pushToast(`Config save failed: ${msg}`, 'error');
+    }
+  },
+
+  loadMainProvider: async () => {
+    try {
+      const info = await diaryApi.getMainProvider();
+      set({ mainProvider: info });
+    } catch (err) {
+      // Non-fatal — UI still functions, just without the lock badge.
+      // Log for debug; don't toast (this fires on every page load).
+      console.warn('[diary] main-provider fetch failed:', err);
     }
   },
 
