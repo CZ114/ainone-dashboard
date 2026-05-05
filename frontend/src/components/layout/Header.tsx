@@ -33,7 +33,7 @@ export function Header() {
   };
 
   return (
-    <header className="bg-card-bg border-b border-card-border px-6 py-3">
+    <header className="bg-card-bg border-b border-card-border px-6 py-2">
       <div className="flex items-center justify-between">
         {/* Logo — i-Thread Lab horizontal mark, served from
             frontend/public/logo-horizontal.svg. SVG so it stays crisp
@@ -51,7 +51,7 @@ export function Header() {
           <img
             src="/logo-horizontal.svg"
             alt="i-Thread Lab"
-            className="h-9 w-auto select-none"
+            className="h-14 w-auto select-none md:h-16"
             draggable={false}
           />
         </a>
