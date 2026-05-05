@@ -2,6 +2,110 @@
 
 All user-facing changes to AinOne Dashboard.
 
+## v1.1.3.x — 2026-04-29 / 2026-05-05 (rolling follow-ups on the v1.1.3 branch)
+
+After v1.1.3 tagged, four rolling improvements landed on the
+`v1.1.3` branch (tag itself unchanged, `main` untouched). Together
+they harden the diary feature's secret handling, lock down provider
+config to prevent silent auth-mixing, and ship a richer theme
+system. No new release tag — these are documented as
+`v1.1.3.x` since the user-visible feature surface is the same as
+v1.1.3 but with safer defaults.
+
+### Added — Theme presets (8 palettes)
+
+- **Settings → Appearance** tab with a 4-column swatch grid covering
+  eight curated colour presets:
+  1. **Archival** (default — preserved verbatim from before the
+     theme system landed; warm charcoal + sienna).
+  2. **Carbon** — high-contrast neutral grey + cyan; best
+     readability for bright rooms and colour-blind users.
+  3. **Nord** — Sven Greb's Polar Night / Snow Storm.
+  4. **Solarized** — Ethan Schoonover's canonical precision palette.
+  5. **Dracula** — Zeno Rocha's classic; light variant derived to
+     match palette character.
+  6. **Tokyo Night** — Enkia's deep navy with cyan/blue accents
+     (paired with Tokyo Night Day light).
+  7. **Catppuccin** — Mocha (dark) + Latte (light), pastel modern.
+  8. **Codex Black** — pure black + neon green-cyan, terminal-grade
+     contrast.
+- Each preset defines BOTH a light and a dark variant for all 13
+  surface/text/accent CSS variables, so the existing light/dark
+  toggle composes orthogonally with theme selection.
+- Every (text on background) pair was checked against WCAG AA —
+  body text ≥ 4.5:1, UI elements ≥ 3:1.
+- Persisted as `localStorage["theme-config"] = {name, mode}`. The
+  legacy `theme-preference` key is migrated transparently on first
+  read.
+
+### Added — Diary main-provider detection + family lock
+
+- New `GET /api/diary/main-provider` endpoint returns the user's
+  Claude main-chat provider (read from `~/.claude/settings.json`
+  via `getUserEnvFromSettings`, with a `process.env` fallback). The
+  response shape is `{ base_url, model, auth_present, env_source }`
+  — values omitted, only presence flags reported.
+- The diary's built-in fallback agent is **no longer hardcoded to
+  Haiku**. It now mirrors the main provider's `ANTHROPIC_BASE_URL`
+  and `ANTHROPIC_MODEL`. If the user's main chat is on DeepSeek,
+  diary's fallback runs on DeepSeek; if main is Anthropic-native,
+  the fallback uses Haiku as the cheapest member of that family.
+- AgentEditor's provider picker is **locked** to the main
+  provider's family in simple mode — every other provider card is
+  disabled with a tooltip pointing the user at
+  `~/.claude/settings.json` to switch. Avoids the silent
+  auth-mixing bug class we hit during MiniMax integration (an
+  Anthropic key from settings.json silently routing to a
+  non-Anthropic endpoint).
+- `POST /api/diary/agents/:id` rejects 409 when the agent's
+  declared `ANTHROPIC_BASE_URL` doesn't match the main provider's,
+  with an explanation message.
+- DiaryPage shows a compact `via <host>` badge next to the title so
+  the active provider is visible at a glance.
+
+### Added — i-Thread Lab branding
+
+- Header now displays the horizontal i-Thread Lab SVG mark
+  (`frontend/public/logo-horizontal.svg`) at h-14 / md:h-16, replacing
+  the prior 📊 emoji + "AinOne Dashboard" text block. Click → home.
+- Browser tab favicon swapped from `vite.svg` to the i-Thread icon
+  (`frontend/public/logo-icon.svg`); tab title changed to
+  "i-Thread Lab Dashboard".
+- Source vector + 2K/3K PNG masters live under `docs/logo/`.
+
+### Fixed — Diary secret-handling hardening
+
+- Backend boot now loads `<repo>/.env` automatically via Node's
+  native `process.loadEnvFile` (no new dep). Search order:
+  `<repo>/.env` → `<repo>/backend/.env` → `<repo>/backend/claude/.env`.
+  First match wins.
+- `agentStore.resolveSecrets` lookup order is now agents.json
+  secrets > `process.env` > literal placeholder kept. UI paste
+  always wins so the editor flow stays predictable; `.env` is the
+  opt-in fallback for users who don't want plaintext keys in
+  `agents.json`.
+- New `redactSecrets()` filter strips `sk-…`, `Bearer …`,
+  `x-api-key: …`, and `Authorization: …` values from CLI stderr
+  before they reach backend logs or
+  `AgentError.stderr_excerpt` (which rides the NDJSON event back to
+  every connected `/diary` tab). Defence-in-depth — the bundled CLI
+  doesn't print Authorization headers today, but we don't control
+  its future versions.
+- `.env.example` template at repo root with the canonical provider
+  variable names (Anthropic / DeepSeek / MiniMax / Zhipu / Moonshot
+  / Qwen / Custom).
+
+### Internal
+
+- `ThemeContext` extended to track two orthogonal axes
+  (`themeName: 8 presets`, `preference: light/dark/system`); applies
+  `<html data-theme="…" class="…">` for CSS-variable resolution.
+- New `frontend/src/components/ThemePicker.tsx` swatch grid +
+  `<html>` mode toggle; rendered inside Settings → Appearance.
+- `backend/claude/diary/mainProvider.ts` consolidates main-provider
+  detection so both the fallback agent and the upsert validator
+  share the same source of truth.
+
 ## v1.1.3 — 2026-04-28
 
 ### Added
