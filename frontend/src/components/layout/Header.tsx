@@ -49,10 +49,12 @@ export function Header() {
           aria-label="i-Thread Lab — Dashboard home"
         >
           <img
-            src="/logo-horizontal.svg"
+            src="/logo-horizontal.png"
             alt="i-Thread Lab"
             className="h-14 w-auto select-none md:h-16"
             draggable={false}
+            width={720}
+            height={240}
           />
         </a>
 
