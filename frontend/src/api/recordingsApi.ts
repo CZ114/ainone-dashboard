@@ -5,6 +5,12 @@
 
 export interface RecordingCsvInfo {
   filename: string;
+  /**
+   * Absolute path on the FastAPI host (Windows or POSIX). Surfaced so
+   * chat attachments can hand Claude a real path to Read instead of a
+   * display label. Field added 2026-05; older servers omit it.
+   */
+  path?: string;
   size_bytes: number;
   rows: number | null;
   channels?: string[] | null;
@@ -12,6 +18,8 @@ export interface RecordingCsvInfo {
 
 export interface RecordingAudioInfo {
   filename: string;
+  /** Absolute path on the FastAPI host. Same rationale as csv.path. */
+  path?: string;
   size_bytes: number;
   duration_seconds: number | null;
 }

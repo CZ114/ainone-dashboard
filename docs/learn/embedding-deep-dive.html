@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Embedding 模型原理与应用 · 深度理解（流程图 + 数学 + 完整场景）</title>
+<style>
+  :root {
+    --bg:        #f6f7fb;
+    --panel:     #ffffff;
+    --panel-2:   #fafbff;
+    --ink:       #1a2238;
+    --ink-2:     #344063;
+    --muted:     #6b7796;
+    --muted-2:   #93a0c0;
+    --line:      #e3e8f4;
+    --code-bg:   #f1f4fb;
+    --code-ink:  #1a2238;
+
+    --s1:        #2563eb;   --s1-soft:   #e0ebff;   /* 蓝   · 动机 */
+    --s2:        #0d9488;   --s2-soft:   #d1fae5;   /* 青   · 文本→向量 */
+    --s3:        #d97706;   --s3-soft:   #fef3c7;   /* 琥珀 · 距离度量 */
+    --s4:        #7c3aed;   --s4-soft:   #ede9fe;   /* 紫   · 对比学习 */
+    --s5:        #15803d;   --s5-soft:   #dcfce7;   /* 绿   · RAG 场景 */
+    --s7:        #0891b2;   --s7-soft:   #cffafe;   /* 蓝绿 · 向量数据库 */
+    --s8:        #c026d3;   --s8-soft:   #fae8ff;   /* 品红 · 混合检索+Rerank */
+    --s9:        #ea580c;   --s9-soft:   #ffedd5;   /* 橙   · 落地实战 */
+    --s6:        #be123c;   --s6-soft:   #ffe4e6;   /* 玫瑰 · 工程实践 */
+    --recap:     #475569;   --recap-soft:#e2e8f0;
+
+    --kw:        #b45309;
+    --num:       #1d4ed8;
+    --str:       #15803d;
+    --com:       #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.65 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+
+  header {
+    padding: 32px 40px 8px;
+    border-bottom: 1px solid var(--line);
+    background: #ffffff;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: .3px; color: var(--ink); }
+  h2 {
+    font-size: 13px; font-weight: 700; margin: 0 0 12px;
+    letter-spacing: 1.2px; text-transform: uppercase;
+  }
+  .sub { color: var(--muted); margin-bottom: 14px; }
+
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    color: var(--muted); font-size: 12px;
+    padding: 14px 40px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--line);
+  }
+  .swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -2px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  main {
+    display: grid; grid-template-columns: 1fr; gap: 22px;
+    padding: 26px 40px 60px;
+    max-width: 1380px; margin: 0 auto;
+  }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px;
+    padding: 22px 24px 20px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(20,30,60,0.04);
+  }
+  .stage::before {
+    content: attr(data-step);
+    position: absolute; top: -11px; left: 22px;
+    background: var(--accent);
+    color: #ffffff;
+    font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+    padding: 4px 12px; border-radius: 999px;
+  }
+  .stage h2 { color: var(--accent); }
+
+  .stage.s1 { --accent: var(--s1); --accent-soft: var(--s1-soft); }
+  .stage.s2 { --accent: var(--s2); --accent-soft: var(--s2-soft); }
+  .stage.s3 { --accent: var(--s3); --accent-soft: var(--s3-soft); }
+  .stage.s4 { --accent: var(--s4); --accent-soft: var(--s4-soft); }
+  .stage.s5 { --accent: var(--s5); --accent-soft: var(--s5-soft); }
+  .stage.s7 { --accent: var(--s7); --accent-soft: var(--s7-soft); }
+  .stage.s8 { --accent: var(--s8); --accent-soft: var(--s8-soft); }
+  .stage.s9 { --accent: var(--s9); --accent-soft: var(--s9-soft); }
+  .stage.s6 { --accent: var(--s6); --accent-soft: var(--s6-soft); }
+  .stage.recap { --accent: var(--recap); --accent-soft: var(--recap-soft); }
+
+  .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 920px) {
+    .row, .row.three { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 13px; color: var(--accent); letter-spacing: .5px; font-weight: 700;
+  }
+  .card p { margin: 6px 0; color: var(--ink-2); }
+  .card ul { margin: 6px 0; padding-left: 20px; color: var(--ink-2); }
+  .card li { margin: 3px 0; }
+  .full { grid-column: 1 / -1; }
+
+  code, pre {
+    background: var(--code-bg);
+    border-radius: 6px;
+    color: var(--code-ink);
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px;
+  }
+  code { padding: 1px 6px; border: 1px solid var(--line); }
+  pre {
+    padding: 12px 14px; overflow-x: auto; line-height: 1.6;
+    border: 1px solid var(--line); margin: 8px 0;
+  }
+  .k { color: var(--kw); }
+  .n { color: var(--num); }
+  .s { color: var(--str); }
+  .c { color: var(--com); font-style: italic; }
+
+  /* CSS-styled math (no MathJax) */
+  .math {
+    background: #fff; border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 12px 16px; margin: 10px 0;
+    font-family: "Cambria Math", "JetBrains Mono", Georgia, serif;
+    font-size: 15px; color: var(--ink); overflow-x: auto;
+    line-height: 2;
+  }
+  .math .lbl { color: var(--muted); font-size: 12px; font-style: italic; }
+  .frac {
+    display: inline-flex; flex-direction: column;
+    vertical-align: middle; text-align: center; margin: 0 4px;
+  }
+  .frac > span:first-child { border-bottom: 1.5px solid var(--ink); padding: 0 6px; }
+  .frac > span:last-child  { padding: 2px 6px 0; }
+  sub, sup { font-size: 75%; }
+  .vec { font-weight: 700; font-style: italic; }
+  .hl { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+
+  .arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted-2); font-size: 18px; line-height: 1;
+  }
+  .arrow::before { content: "▼"; }
+
+  svg.flow { width: 100%; height: auto; display: block; font-family: inherit; }
+  .svgbox {
+    background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+  }
+
+  table.params { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.params th, table.params td {
+    padding: 7px 10px; border-bottom: 1px solid var(--line);
+    text-align: left; vertical-align: top;
+  }
+  table.params th {
+    color: var(--accent); font-weight: 700;
+    background: var(--accent-soft);
+  }
+  table.params td.num {
+    font-family: "JetBrains Mono", Consolas, monospace;
+    color: var(--ink); text-align: right;
+  }
+  table.params tr:hover td { background: #fbfcff; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; letter-spacing: .3px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent);
+    margin-right: 6px;
+  }
+  .pill.note { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .pill.ok   { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+  .pill.warn { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+  .toc {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 22px; margin: 0 0 4px;
+    box-shadow: 0 1px 2px rgba(20,30,60,0.04);
+  }
+  .toc h2 { color: var(--ink-2); }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; columns: 2; color: var(--ink-2); }
+  .toc a { color: var(--s1); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  @media (max-width: 920px) { .toc ol { columns: 1; } }
+
+  footer {
+    text-align: center; color: var(--muted); font-size: 12px;
+    padding: 20px 40px 40px;
+    border-top: 1px solid var(--line);
+    background: #ffffff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Embedding 模型 · 原理与应用 · 深度理解</h1>
+  <div class="sub">面向腾讯「AI 应用开发」JD 的 Embedding + 向量数据库 + 知识召回三句话。<strong>章节顺序</strong>（非运行时管线）：直觉 · 数学管线 · 距离度量（手算）· 训练原理 · 纯向量基线（手算闭环）· 向量库 ANN · 混合检索/Rerank · 工程实践 · 落地实战 playbook · 面试速记。</div>
+</header>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#2563eb"></span>0 · 为什么需要 Embedding</span>
+  <span><span class="swatch" style="background:#0d9488"></span>1 · 文本 → 向量 的管线</span>
+  <span><span class="swatch" style="background:#d97706"></span>2 · 距离 / 相似度（手算）</span>
+  <span><span class="swatch" style="background:#7c3aed"></span>3 · 怎么训练出来的</span>
+  <span><span class="swatch" style="background:#15803d"></span>4 · 纯向量基线（手算闭环）</span>
+  <span><span class="swatch" style="background:#0891b2"></span>5 · 向量数据库 ANN</span>
+  <span><span class="swatch" style="background:#c026d3"></span>6 · 混合检索 + Rerank</span>
+  <span><span class="swatch" style="background:#be123c"></span>7 · 工程实践</span>
+  <span><span class="swatch" style="background:#ea580c"></span>8 · 落地实战 playbook</span>
+  <span><span class="swatch" style="background:#475569"></span>9 · 面试速记</span>
+</div>
+
+<main>
+
+  <nav class="toc">
+    <h2>阅读路径</h2>
+    <ol>
+      <li><a href="#s0">关键词检索为什么不够 → 语义需求</a></li>
+      <li><a href="#s1">一句话怎么变成一个向量（4 步管线 + SVG）</a></li>
+      <li><a href="#s2">cosine / dot / L2 三种度量 + 几何手算</a></li>
+      <li><a href="#s3">对比学习 / InfoNCE：向量空间是怎么"拉开"的</a></li>
+      <li><a href="#s4">纯向量基线：一次查询从 query 到答案的手算闭环</a></li>
+      <li><a href="#s5">向量数据库：记录长什么样 · id 回表找原文 · ANN 怎么变快</a></li>
+      <li><a href="#s6">混合检索 + Rerank：RRF 手算 + 重排翻转</a></li>
+      <li><a href="#s7">模型选型 · 维度 · 归一化 · pooling · 常见坑</a></li>
+      <li><a href="#s8">落地实战：固定 embedding 模型，从 0 搭生产级 RAG</a></li>
+      <li><a href="#s9">面试一页纸：必背公式与高频追问</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ STAGE 0 ============ -->
+  <section class="stage s1" id="s0" data-step="0 · 动机">
+    <h2>为什么需要 Embedding —— 关键词检索的天花板</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>一个具体的失败案例</h3>
+        <p>用户问：<strong>"怎么把路由器恢复初始设置"</strong></p>
+        <p>知识库里正确答案的标题是：<strong>"如何重置路由器密码与还原出厂配置"</strong></p>
+        <p>传统倒排索引 / BM25 靠<strong>词面重叠</strong>。两句话的交集词：</p>
+<pre>query 词: {怎么, 把, 路由器, 恢复, 初始, 设置}
+doc   词: {如何, 重置, 路由器, 密码, 与, 还原, 出厂, 配置}
+<span class="c">交集 = {路由器}  → 命中信号极弱</span>
+<span class="c">"恢复初始设置" ≈ "还原出厂配置"，但 0 个词对得上</span></pre>
+        <p>同义改写、上下位词、跨语言 —— 关键词检索全都<strong>看不见</strong>。</p>
+      </div>
+      <div class="card">
+        <h3>Embedding 的核心主张</h3>
+        <p>把每段文本映射成一个固定长度的实数向量 <span class="vec">v</span> ∈ ℝ<sup>d</sup>（d 常见 384 / 768 / 1024），并使得：</p>
+        <div class="math">
+          语义相近的文本 &nbsp;⟺&nbsp; 向量在空间里<span class="hl">距离近</span>
+        </div>
+        <p>于是"找相关内容"这件事，从<strong>字符串匹配</strong>变成了<strong>几何最近邻搜索</strong>。同义、改写、跨语言都被编码进同一个连续空间里。</p>
+        <p><span class="pill note">注</span>这就是 JD 里"Embedding 原理 + 向量数据库 + 知识召回"三件事的共同地基 —— 后两者都建立在"文本已经是向量"这个前提上。</p>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>JD 三块知识怎么层层依赖（这是知识分层，不是一次请求的运行时顺序）</h3>
+      <svg class="flow" viewBox="0 0 980 178">
+        <defs>
+          <marker id="arr0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+          </marker>
+        </defs>
+        <rect x="20" y="44" width="170" height="58" rx="8" fill="#e0ebff" stroke="#2563eb"/>
+        <text x="105" y="67" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2238">Embedding 模型</text>
+        <text x="105" y="87" text-anchor="middle" font-size="10" fill="#475569">文本 → 向量</text>
+        <line x1="190" y1="73" x2="244" y2="73" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr0)"/>
+        <text x="217" y="64" text-anchor="middle" font-size="8" fill="#94a3b8">产出的向量被…</text>
+
+        <rect x="244" y="44" width="186" height="58" rx="8" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="337" y="67" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2238">向量数据库</text>
+        <text x="337" y="87" text-anchor="middle" font-size="10" fill="#475569">存储 + ANN 近邻索引</text>
+        <line x1="430" y1="73" x2="484" y2="73" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr0)"/>
+        <text x="457" y="64" text-anchor="middle" font-size="8" fill="#94a3b8">…被检索策略调用…</text>
+
+        <rect x="484" y="44" width="206" height="58" rx="8" fill="#fef3c7" stroke="#d97706"/>
+        <text x="587" y="67" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2238">知识召回策略</text>
+        <text x="587" y="87" text-anchor="middle" font-size="10" fill="#475569">混合检索（<tspan font-weight="700" fill="#d97706">内含 ANN</tspan>）+ Rerank</text>
+        <line x1="690" y1="73" x2="744" y2="73" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr0)"/>
+        <text x="717" y="64" text-anchor="middle" font-size="8" fill="#94a3b8">…结果喂给…</text>
+
+        <rect x="744" y="44" width="216" height="58" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="852" y="67" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2238">LLM 带证据回答</text>
+        <text x="852" y="87" text-anchor="middle" font-size="10" fill="#475569">RAG 的最后一步</text>
+
+        <text x="490" y="134" text-anchor="middle" font-size="11" fill="#6b7796">虚线 = 「上层建立在下层之上」的依赖，<tspan font-weight="700">不是</tspan>一次请求的运行时先后；运行时真实流程见 §6 流程图</text>
+        <text x="490" y="158" text-anchor="middle" font-size="11" fill="#6b7796">关键：「向量库 ANN」是<tspan font-weight="700" fill="#d97706"> 被包含在 </tspan>「知识召回策略」里的一条腿，<tspan font-weight="700">不是</tspan>它前面的独立一步</text>
+      </svg>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 1 ============ -->
+  <section class="stage s2" id="s1" data-step="1 · 文本→向量">
+    <h2>一句话是怎么变成一个向量的 —— 4 步管线</h2>
+
+    <div class="card full">
+      <h3>整体管线</h3>
+      <svg class="flow" viewBox="0 0 980 200">
+        <defs>
+          <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0d9488" />
+          </marker>
+        </defs>
+
+        <rect x="14" y="70" width="140" height="64" rx="8" fill="#f1f4fb" stroke="#6b7796"/>
+        <text x="84" y="94" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">原始文本</text>
+        <text x="84" y="112" text-anchor="middle" font-size="10" fill="#475569">"重置路由器密码"</text>
+        <line x1="154" y1="102" x2="190" y2="102" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arr1)"/>
+
+        <rect x="190" y="60" width="150" height="84" rx="8" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="265" y="82" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">① Tokenize</text>
+        <text x="265" y="100" text-anchor="middle" font-size="9.5" fill="#475569">子词切分 + 查表</text>
+        <text x="265" y="116" text-anchor="middle" font-size="9.5" fill="#475569">→ token id 序列</text>
+        <text x="265" y="132" text-anchor="middle" font-size="9.5" fill="#475569">[101, 7028, 5439, …]</text>
+        <line x1="340" y1="102" x2="376" y2="102" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arr1)"/>
+
+        <rect x="376" y="48" width="170" height="108" rx="8" fill="#d1fae5" stroke="#0d9488" stroke-width="2"/>
+        <text x="461" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">② Transformer</text>
+        <text x="461" y="88" text-anchor="middle" font-size="9.5" fill="#475569">N 层 self-attention</text>
+        <text x="461" y="104" text-anchor="middle" font-size="9.5" fill="#475569">每个 token 看全句</text>
+        <text x="461" y="120" text-anchor="middle" font-size="9.5" fill="#475569">→ 一串 contextual</text>
+        <text x="461" y="134" text-anchor="middle" font-size="9.5" fill="#475569">向量 h<tspan font-size="7" dy="2">1..L</tspan> ∈ ℝ<tspan font-size="7" dy="-3">d</tspan></text>
+        <line x1="546" y1="102" x2="582" y2="102" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arr1)"/>
+
+        <rect x="582" y="60" width="160" height="84" rx="8" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="662" y="82" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">③ Pooling</text>
+        <text x="662" y="100" text-anchor="middle" font-size="9.5" fill="#475569">L 个向量 → 1 个</text>
+        <text x="662" y="116" text-anchor="middle" font-size="9.5" fill="#475569">mean / CLS /</text>
+        <text x="662" y="132" text-anchor="middle" font-size="9.5" fill="#475569">last-token</text>
+        <line x1="742" y1="102" x2="778" y2="102" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arr1)"/>
+
+        <rect x="778" y="60" width="186" height="84" rx="8" fill="#0d9488" stroke="#0d9488"/>
+        <text x="871" y="82" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">④ L2 归一化</text>
+        <text x="871" y="100" text-anchor="middle" font-size="9.5" fill="#d1fae5">v / ‖v‖ → 单位球面</text>
+        <text x="871" y="118" text-anchor="middle" font-size="9.5" fill="#d1fae5">最终 embedding</text>
+        <text x="871" y="134" text-anchor="middle" font-size="9.5" fill="#d1fae5">v ∈ ℝ<tspan font-size="7" dy="-3">768</tspan><tspan dy="3">, ‖v‖=1</tspan></text>
+      </svg>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>① Tokenize —— 文本不是 LLM 的输入，token id 才是</h3>
+        <p>用 BPE / WordPiece / SentencePiece 把字符串切成子词，再查词表换成整数 id。中文常按字 + 高频词混合。</p>
+<pre><span class="c">// 概念示意</span>
+"重置路由器密码"
+  → ["重","置","路由","器","密码"]
+  → [ 7028, 9210, 4501, 3322, 5439 ]   <span class="c">// token ids</span>
+  → 前后补 [CLS]/[SEP] 等特殊 token</pre>
+        <p>每个 id 进入一个可训练的查找表 <span class="vec">E</span> ∈ ℝ<sup>|V|×d</sup>，得到初始（<em>静态、无上下文</em>）词向量。</p>
+      </div>
+      <div class="card">
+        <h3>② Transformer —— 让向量"带上下文"</h3>
+        <p>关键：同一个词在不同句子里应当是<strong>不同</strong>的向量。"苹果发布会" vs "吃苹果"里的"苹果"必须分开。</p>
+        <p>self-attention 让每个 token 的表示成为<strong>全句的加权汇总</strong>：</p>
+        <div class="math">
+          Attn(<span class="vec">Q</span>,<span class="vec">K</span>,<span class="vec">V</span>) = softmax<span style="font-size:18px">(</span>
+          <span class="frac"><span><span class="vec">Q K</span><sup>⊤</sup></span><span>√d<sub>k</sub></span></span>
+          <span style="font-size:18px">)</span> <span class="vec">V</span>
+        </div>
+        <p>叠 N 层后，第 i 个位置的输出 <span class="vec">h</span><sub>i</sub> 已经"读过"整句话 —— 这就是 contextual embedding，是语义相似度的来源。</p>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>③ Pooling —— L 个 token 向量压成 1 个句向量</h3>
+        <table class="params">
+          <tr><th>方式</th><th>做法</th><th>谁在用</th></tr>
+          <tr><td>mean</td><td>对所有 token 向量取平均（含 mask）</td><td class="num">BGE / E5 / sentence-transformers 主流</td></tr>
+          <tr><td>CLS</td><td>直接取 [CLS] 位置的向量</td><td class="num">早期 BERT 类</td></tr>
+          <tr><td>last-token</td><td>取最后一个 token（解码器架构）</td><td class="num">LLM 系 embedding（如 gte-Qwen）</td></tr>
+        </table>
+        <p>mean pooling 的公式（m<sub>i</sub> 是 attention mask）：</p>
+        <div class="math">
+          <span class="vec">v</span> =
+          <span class="frac">
+            <span>∑<sub>i=1</sub><sup>L</sup> m<sub>i</sub> · <span class="vec">h</span><sub>i</sub></span>
+            <span>∑<sub>i=1</sub><sup>L</sup> m<sub>i</sub></span>
+          </span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>④ L2 归一化 —— 把向量钉到单位球面</h3>
+        <div class="math">
+          <span class="vec">v̂</span> =
+          <span class="frac"><span><span class="vec">v</span></span><span>‖<span class="vec">v</span>‖<sub>2</sub></span></span>
+          ，&nbsp; ‖<span class="vec">v</span>‖<sub>2</sub> = √(∑ v<sub>i</sub><sup>2</sup>)
+          &nbsp;⟹&nbsp; ‖<span class="vec">v̂</span>‖ = 1
+        </div>
+        <p>归一化后有一个极重要的结论：</p>
+        <div class="math">
+          <span class="vec">a·b</span> （点积）= cos(<span class="vec">a</span>,<span class="vec">b</span>) ，&nbsp;
+          ‖<span class="vec">a−b</span>‖<sup>2</sup> = 2 − 2·cos(<span class="vec">a</span>,<span class="vec">b</span>)
+        </div>
+        <p><span class="pill ok">关键</span>三种度量在归一化后<strong>排序完全等价</strong>。这就是为什么向量库默认存归一化向量、用内积索引 —— 既快又和余弦一致。下一节用真实数字证明。</p>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>实战前置：真实输入不是一句话，是长文档 —— embed 前必须先「分块」</h3>
+      <p>上面那张「整体管线」图从 <em>"重置路由器密码"</em> 这种一句话讲起，是<strong>简化</strong>。真实场景你拿到的是 50 页 PDF / 一篇 wiki。直接整篇 embed 会出两个致命问题：</p>
+      <ul>
+        <li><strong>超长被截断</strong>：embedding 模型有最大输入（BGE-large 512 token、bge-m3 8192 token），超出部分直接丢，尾部内容根本没进向量</li>
+        <li><strong>语义被平均稀释</strong>：整篇 → 1 个向量，等于把几十个主题求平均，检索时什么都沾一点、什么都不精确，召回率暴跌</li>
+      </ul>
+      <p>所以 embed 之前要先把文档切成<strong>段落级 chunk</strong>，<strong>每个 chunk 一个向量</strong>。下面是真实流程图与可手算的参数。</p>
+
+      <svg class="flow" viewBox="0 0 980 150" style="margin-top:6px">
+        <rect x="20" y="24" width="940" height="20" rx="4" fill="#f1f4fb" stroke="#6b7796"/>
+        <text x="490" y="38" text-anchor="middle" font-size="10" fill="#475569">一篇长文档（按 embedding 模型的 tokenizer 数出的 token 序列）</text>
+
+        <rect x="20"  y="74" width="250" height="34" rx="6" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="135" y="95" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">chunk 1</text>
+        <rect x="230" y="74" width="250" height="34" rx="6" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="365" y="95" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">chunk 2</text>
+        <rect x="440" y="74" width="250" height="34" rx="6" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="575" y="95" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">chunk 3</text>
+        <rect x="650" y="74" width="250" height="34" rx="6" fill="#d1fae5" stroke="#0d9488"/>
+        <text x="775" y="95" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">chunk 4</text>
+
+        <rect x="230" y="74" width="40" height="34" fill="#0d9488" fill-opacity="0.3"/>
+        <rect x="440" y="74" width="40" height="34" fill="#0d9488" fill-opacity="0.3"/>
+        <rect x="650" y="74" width="40" height="34" fill="#0d9488" fill-opacity="0.3"/>
+
+        <line x1="20" y1="120" x2="270" y2="120" stroke="#0d9488" stroke-width="1"/>
+        <text x="145" y="134" text-anchor="middle" font-size="9.5" fill="#0d9488">chunk_size（如 512 token）</text>
+        <text x="250" y="64" text-anchor="middle" font-size="9.5" fill="#0d9488">↕ overlap（如 64）</text>
+        <text x="490" y="148" text-anchor="middle" font-size="9.5" fill="#6b7796">深色 = 相邻块刻意重叠的 overlap 区，防止一句话/一个论点正好被切在边界上而语义断裂</text>
+      </svg>
+
+      <div class="row" style="margin-top:14px">
+        <div class="card">
+          <h3>四个核心参数（必须能解释）</h3>
+          <table class="params">
+            <tr><th>参数</th><th>含义 / 典型值</th></tr>
+            <tr><td><code>chunk_size</code></td><td>每块最大长度。<strong>单位是 token，不是字符</strong>，且要用<strong>该 embedding 模型自己的 tokenizer</strong> 数。典型 256–512 token（中文约 400–800 字）</td></tr>
+            <tr><td><code>chunk_overlap</code></td><td>相邻块重叠长度，防边界切断。典型取 <code>chunk_size</code> 的 <strong>10–20%</strong>（512 → 50–100）</td></tr>
+            <tr><td><code>separators</code></td><td>切分优先级：段落 <code>\n\n</code> &gt; 句号 <code>。！？</code> &gt; 逗号 &gt; 空格 &gt; 单字。尽量让边界落在自然停顿</td></tr>
+            <tr><td><code>length_function</code></td><td>量长度的函数。用 <code>tokenizer.encode</code> 数 token；<strong>别用 len(str)</strong>——中文1字≈1–2 token、英文1词≈1.3 token，差很大</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>分块策略（从糙到精）</h3>
+          <table class="params">
+            <tr><th>策略</th><th>说明</th></tr>
+            <tr><td>fixed-size</td><td>定长硬切。最简单，最容易切断语义</td></tr>
+            <tr><td><strong>recursive-character</strong></td><td><strong>工程默认</strong>：按 separators 优先级递归切，块超长才降级用更细的分隔符</td></tr>
+            <tr><td>sentence / 结构感知</td><td>按句子或 Markdown 标题/代码块切，边界更自然</td></tr>
+            <tr><td>semantic</td><td>用 embedding 算相邻句相似度，相似度骤降处断块（最准、最贵）</td></tr>
+            <tr><td>parent-child<br/>(small-to-big)</td><td>小块用于<strong>检索</strong>（精准），命中后回填它所属的<strong>大块/父段</strong>喂给 LLM（上下文全）</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <h3 style="margin-top:14px">伪代码 · recursive-character 切分 + overlap + 入库</h3>
+<pre><span class="k">def</span> split_text(text, chunk_size=<span class="n">512</span>, chunk_overlap=<span class="n">64</span>,
+               separators=[<span class="s">"\n\n"</span>, <span class="s">"\n"</span>, <span class="s">"。"</span>, <span class="s">"！"</span>, <span class="s">"？"</span>, <span class="s">" "</span>, <span class="s">""</span>]):
+    tok = embedding_model.tokenizer            <span class="c"># ← 关键：用 embedding 模型自己的分词器</span>
+    n_tok = <span class="k">lambda</span> s: len(tok.encode(s))
+
+    <span class="c"># 1. 递归切：当前分隔符切完仍超长，就降级到更细的分隔符</span>
+    <span class="k">def</span> recurse(s, seps):
+        <span class="k">if</span> n_tok(s) &lt;= chunk_size:
+            <span class="k">return</span> [s]
+        sep, rest = seps[<span class="n">0</span>], seps[<span class="n">1</span>:]
+        parts = s.split(sep) <span class="k">if</span> sep <span class="k">else</span> list(s)
+        out, buf = [], <span class="s">""</span>
+        <span class="k">for</span> p <span class="k">in</span> parts:
+            cand = (buf + sep + p) <span class="k">if</span> buf <span class="k">else</span> p
+            <span class="k">if</span> n_tok(cand) &lt;= chunk_size:
+                buf = cand
+            <span class="k">else</span>:
+                <span class="k">if</span> buf: out.append(buf)
+                out += recurse(p, rest) <span class="k">if</span> (rest <span class="k">and</span> n_tok(p) &gt; chunk_size) <span class="k">else</span> [p]
+                buf = <span class="s">""</span>
+        <span class="k">if</span> buf: out.append(buf)
+        <span class="k">return</span> out
+
+    raw = recurse(text, separators)
+
+    <span class="c"># 2. 加 overlap：每块前面拼上一块尾部的 chunk_overlap 个 token</span>
+    chunks = []
+    <span class="k">for</span> i, c <span class="k">in</span> enumerate(raw):
+        <span class="k">if</span> i &gt; <span class="n">0</span>:
+            tail = tok.decode(tok.encode(raw[i-<span class="n">1</span>])[-chunk_overlap:])
+            c = tail + c
+        chunks.append(c)
+    <span class="k">return</span> chunks
+
+<span class="c"># 3. 每个 chunk 连同【原文 + 元数据】一起入库 —— 向量只是检索用的“钥匙”</span>
+<span class="k">for</span> i, ch <span class="k">in</span> enumerate(split_text(doc.text)):
+    vec = embedding_model.encode(ch, normalize=<span class="k">True</span>)   <span class="c"># ← §1 ①~④ 那条管线</span>
+    vector_db.upsert(
+        id=<span class="s">f"{doc.id}#{i}"</span>,
+        vector=vec,                                  <span class="c"># 只用来“找”</span>
+        payload={                                    <span class="c"># 真正要回传给 LLM 的东西</span>
+            <span class="s">"text"</span>: ch,                             <span class="c"># ← chunk 原文（关键！见 §6）</span>
+            <span class="s">"doc_id"</span>: doc.id, <span class="s">"title"</span>: doc.title,
+            <span class="s">"source"</span>: doc.url, <span class="s">"chunk_index"</span>: i,
+        })</pre>
+      <p><span class="pill note">承接 §6</span>入库存的是 <code>(向量, payload)</code> 对。<strong>向量只用于"找"，真正喂给 LLM 的是 payload 里的 chunk 原文</strong> —— 这点最容易搞混，§6 末尾用实际调用代码讲透。</p>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 2 ============ -->
+  <section class="stage s3" id="s2" data-step="2 · 距离度量">
+    <h2>cosine / dot / L2 —— 几何直觉 + 完整手算</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>三个公式</h3>
+        <div class="math">
+          <span class="lbl">余弦相似度（关心方向，∈[−1,1]）</span><br/>
+          cos(<span class="vec">a</span>,<span class="vec">b</span>) =
+          <span class="frac">
+            <span><span class="vec">a·b</span></span>
+            <span>‖<span class="vec">a</span>‖·‖<span class="vec">b</span>‖</span>
+          </span>
+          =
+          <span class="frac">
+            <span>∑ a<sub>i</sub>b<sub>i</sub></span>
+            <span>√∑a<sub>i</sub><sup>2</sup> · √∑b<sub>i</sub><sup>2</sup></span>
+          </span>
+        </div>
+        <div class="math">
+          <span class="lbl">点积 / 内积（方向 + 长度）</span><br/>
+          <span class="vec">a·b</span> = ∑<sub>i</sub> a<sub>i</sub> b<sub>i</sub>
+        </div>
+        <div class="math">
+          <span class="lbl">欧氏距离 L2（越小越近）</span><br/>
+          ‖<span class="vec">a−b</span>‖ = √( ∑<sub>i</sub> (a<sub>i</sub>−b<sub>i</sub>)<sup>2</sup> )
+        </div>
+        <p><span class="pill note">选哪个</span>文本检索几乎总是 <strong>cosine</strong>（长度不该影响语义）。向量库里常配合 L2-normalize 后用 <strong>dot</strong>，结果与 cosine 一致但更快。</p>
+      </div>
+
+      <div class="card svgbox">
+        <h3>2D 几何：余弦就是"夹角"</h3>
+        <svg class="flow" viewBox="0 0 460 340">
+          <!-- axes -->
+          <line x1="60" y1="250" x2="430" y2="250" stroke="#cbd5e1" stroke-width="1"/>
+          <line x1="180" y1="320" x2="180" y2="40" stroke="#cbd5e1" stroke-width="1"/>
+          <text x="424" y="244" font-size="10" fill="#94a3b8">x</text>
+          <text x="186" y="48" font-size="10" fill="#94a3b8">y</text>
+          <!-- unit arc -->
+          <path d="M 300 250 A 120 120 0 0 1 60 250" fill="none" stroke="#e3e8f4" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <!-- vectors -->
+          <defs>
+            <marker id="av" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706"/>
+            </marker>
+            <marker id="avb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+            </marker>
+          </defs>
+          <!-- A = (1,0) -->
+          <line x1="180" y1="250" x2="300" y2="250" stroke="#d97706" stroke-width="3" marker-end="url(#av)"/>
+          <text x="305" y="266" font-size="12" font-weight="700" fill="#d97706">A=(1,0)</text>
+          <!-- B = (.707,.707) at 45 -->
+          <line x1="180" y1="250" x2="265" y2="165" stroke="#2563eb" stroke-width="3" marker-end="url(#avb)"/>
+          <text x="270" y="160" font-size="12" font-weight="700" fill="#2563eb">B=(.7,.7)</text>
+          <!-- C = (0,1) -->
+          <line x1="180" y1="250" x2="180" y2="130" stroke="#0d9488" stroke-width="3" marker-end="url(#avb)"/>
+          <text x="150" y="124" font-size="12" font-weight="700" fill="#0d9488">C=(0,1)</text>
+          <!-- D = (-1,0) -->
+          <line x1="180" y1="250" x2="60" y2="250" stroke="#be123c" stroke-width="3" marker-end="url(#avb)"/>
+          <text x="20" y="244" font-size="12" font-weight="700" fill="#be123c">D=(−1,0)</text>
+          <!-- angle arc A-B -->
+          <path d="M 215 250 A 35 35 0 0 0 205 225" fill="none" stroke="#7c3aed" stroke-width="2"/>
+          <text x="222" y="232" font-size="11" fill="#7c3aed">45°</text>
+          <!-- readout -->
+          <text x="60" y="300" font-size="12" fill="#1a2238">cos(A,B)=<tspan font-weight="700" fill="#2563eb">0.707</tspan>　cos(A,C)=<tspan font-weight="700" fill="#0d9488">0</tspan>　cos(A,D)=<tspan font-weight="700" fill="#be123c">−1</tspan></text>
+          <text x="60" y="320" font-size="11" fill="#6b7796">夹角越小 → cos 越接近 1 → 越"语义相近"</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>例 1 · 把上面的图一步步算出来（2 维，便于手验）</h3>
+<pre><span class="c">// A=(1,0)  B=(0.7,0.7)  C=(0,1)  D=(−1,0)</span>
+
+cos(A,B) = (1·0.7 + 0·0.7) / ( √(1²+0²) · √(0.7²+0.7²) )
+         = 0.7 / ( 1 · √0.98 )
+         = 0.7 / 0.98995
+         = <span class="hl">0.7071</span>            <span class="c">→ 夹角 45°（B 在 A 和 C 正中间）</span>
+
+cos(A,C) = (1·0 + 0·1) / (1 · 1) = 0 / 1 = <span class="hl">0</span>          <span class="c">→ 正交，90°，完全无关</span>
+
+cos(A,D) = (1·(−1) + 0·0) / (1 · 1) = −1      <span class="c">→ 反向，180°，语义相反</span></pre>
+      <p><strong>读法</strong>：cos = 1 同义 / 复述；cos ≈ 0.7~0.9 强相关；cos ≈ 0 不相关；cos &lt; 0 在文本检索里基本不出现（好的 embedding 把无关项压到 0 附近而非负）。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>例 2 · 三种度量给出同一个排序（证明"归一化后等价"）</h3>
+      <p>取归一化向量 <span class="vec">a</span>=(0.8,0.6)，<span class="vec">b</span>=(0.6,0.8)，两者都在单位圆上：</p>
+<pre><span class="c">dot</span>  a·b   = 0.8·0.6 + 0.6·0.8 = 0.48 + 0.48 = <span class="hl">0.96</span>
+<span class="c">cos</span>  a·b/(‖a‖‖b‖) = 0.96 / (1·1)        = <span class="hl">0.96</span>   <span class="c">// 归一化后 = dot</span>
+<span class="c">L2</span>   ‖a−b‖² = (0.8−0.6)² + (0.6−0.8)² = 0.04+0.04 = 0.08
+       ‖a−b‖  = √0.08 = <span class="hl">0.283</span>
+       验证恒等式: ‖a−b‖² = 2 − 2cos = 2 − 2·0.96 = 0.08  ✓</pre>
+      <p><span class="pill ok">结论</span>cos 越大 ⟺ dot 越大 ⟺ L2 越小，三者<strong>排序严格一致</strong>。所以向量库选内积索引、存归一化向量，是性能与正确性的双赢，不是近似。</p>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 3 ============ -->
+  <section class="stage s4" id="s3" data-step="3 · 训练原理">
+    <h2>这个空间是怎么"学"出来的 —— 对比学习 / InfoNCE</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>训练信号：拉近正样本，推开负样本</h3>
+        <p>预训练语言模型本身<strong>不天然</strong>产生好的句向量（直接 mean-pool BERT 效果很差）。Embedding 模型靠<strong>对比学习</strong>微调：</p>
+        <ul>
+          <li><strong>anchor</strong> a：一个 query / 句子</li>
+          <li><strong>positive</strong> p：与 a 语义相同（同义改写、问答对、标题-正文）</li>
+          <li><strong>negatives</strong> n<sub>j</sub>：无关文本，尤其是 <em>hard negative</em>（看着像但其实不对）</li>
+        </ul>
+        <p>目标：让 sim(a,p) 远大于所有 sim(a,n<sub>j</sub>)。</p>
+      </div>
+      <div class="card svgbox">
+        <h3>几何上发生了什么</h3>
+        <svg class="flow" viewBox="0 0 440 300">
+          <circle cx="220" cy="150" r="120" fill="none" stroke="#e3e8f4" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <text x="220" y="40" text-anchor="middle" font-size="10" fill="#94a3b8">单位球面（截面）</text>
+          <!-- anchor -->
+          <circle cx="220" cy="150" r="7" fill="#7c3aed"/>
+          <text x="220" y="138" text-anchor="middle" font-size="11" font-weight="700" fill="#7c3aed">anchor a</text>
+          <!-- positive (pulled close) -->
+          <circle cx="300" cy="110" r="7" fill="#15803d"/>
+          <text x="322" y="106" font-size="11" font-weight="700" fill="#15803d">p (正)</text>
+          <path d="M 292 116 C 270 130 250 140 230 148" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#pull)"/>
+          <!-- negatives (pushed away) -->
+          <circle cx="120" cy="210" r="7" fill="#be123c"/>
+          <text x="70" y="214" font-size="11" font-weight="700" fill="#be123c">n₁ (负)</text>
+          <path d="M 128 204 C 150 188 165 178 140 230" fill="none" stroke="#be123c" stroke-width="2" marker-end="url(#push)"/>
+          <circle cx="160" cy="70" r="7" fill="#be123c"/>
+          <text x="120" y="62" font-size="11" font-weight="700" fill="#be123c">n₂ (负)</text>
+          <path d="M 166 76 C 150 95 145 105 130 55" fill="none" stroke="#be123c" stroke-width="2" marker-end="url(#push)"/>
+          <defs>
+            <marker id="pull" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#15803d"/>
+            </marker>
+            <marker id="push" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#be123c"/>
+            </marker>
+          </defs>
+          <text x="220" y="290" text-anchor="middle" font-size="11" fill="#6b7796">绿箭头：把 p 拉向 a　·　红箭头：把 n 推离 a</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>InfoNCE 损失（对比学习的标准损失，必背）</h3>
+      <div class="math">
+        ℒ = − log
+        <span class="frac">
+          <span>exp( s(<span class="vec">a</span>,<span class="vec">p</span>) / τ )</span>
+          <span>exp( s(<span class="vec">a</span>,<span class="vec">p</span>) / τ ) &nbsp;+&nbsp; ∑<sub>j</sub> exp( s(<span class="vec">a</span>,<span class="vec">n<sub>j</sub></span>) / τ )</span>
+        </span>
+      </div>
+      <p>本质就是一个<strong>"正样本对 vs 一堆负样本"的 softmax 分类交叉熵</strong>：把 a 正确"分类"到 p 上。s 是相似度（通常归一化后的点积），τ 是温度系数（典型 0.05 ~ 0.1），τ 越小对"难负例"的惩罚越尖锐。</p>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>例 · 好分离的样本 → loss 极小</h3>
+<pre><span class="c">// s(a,p)=0.9  s(a,n₁)=0.2  s(a,n₂)=0.1  τ=0.1</span>
+exp(0.9/0.1) = exp(9)  = 8103.08   <span class="c">// 分子</span>
+exp(0.2/0.1) = exp(2)  =    7.389
+exp(0.1/0.1) = exp(1)  =    2.718
+
+分母 = 8103.08 + 7.389 + 2.718 = 8113.19
+ratio = 8103.08 / 8113.19      = 0.99875
+ℒ = −ln(0.99875)               = <span class="hl">0.00125</span></pre>
+        <p>正样本相似度远高于负样本 → 概率≈1 → loss≈0 → 几乎没有梯度，模型"已经学会了"。</p>
+      </div>
+      <div class="card">
+        <h3>例 · 难负例混淆 → loss 巨大 → 强梯度</h3>
+<pre><span class="c">// s(a,p)=0.3  s(a,n₁)=0.8  s(a,n₂)=0.7  τ=0.1</span>
+<span class="c">// 负样本反而比正样本还像 —— hard negative</span>
+exp(0.3/0.1) = exp(3) =   20.09    <span class="c">// 分子</span>
+exp(0.8/0.1) = exp(8) = 2980.96
+exp(0.7/0.1) = exp(7) = 1096.63
+
+分母 = 20.09 + 2980.96 + 1096.63 = 4097.68
+ratio = 20.09 / 4097.68          = 0.00490
+ℒ = −ln(0.00490)                 = <span class="hl">5.318</span></pre>
+        <p><span class="pill warn">大梯度</span>loss 从 0.001 飙到 5.3，反向传播会狠狠调整参数，把 p 拉近、把 n₁/n₂ 推远。<strong>hard negative 的质量直接决定 embedding 上限</strong> —— 这是面试高频追问点。</p>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>训练流水线（为什么开源 embedding 模型效果有高下）</h3>
+      <svg class="flow" viewBox="0 0 980 120">
+        <defs>
+          <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <rect x="14" y="36" width="180" height="56" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="104" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">预训练 LLM/BERT</text>
+        <text x="104" y="76" text-anchor="middle" font-size="9.5" fill="#475569">通用语言知识</text>
+        <line x1="194" y1="64" x2="234" y2="64" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+        <rect x="234" y="36" width="200" height="56" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="334" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">弱监督对比预训练</text>
+        <text x="334" y="76" text-anchor="middle" font-size="9.5" fill="#475569">海量 (标题,正文) 等天然对</text>
+        <line x1="434" y1="64" x2="474" y2="64" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+        <rect x="474" y="36" width="220" height="56" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="584" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">有监督微调 + hard neg</text>
+        <text x="584" y="76" text-anchor="middle" font-size="9.5" fill="#475569">人工标注 / 挖掘难负例</text>
+        <line x1="694" y1="64" x2="734" y2="64" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+        <rect x="734" y="36" width="230" height="56" rx="8" fill="#7c3aed" stroke="#7c3aed"/>
+        <text x="849" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">可用的 Embedding 模型</text>
+        <text x="849" y="76" text-anchor="middle" font-size="9.5" fill="#ede9fe">BGE / E5 / gte / OpenAI-emb</text>
+      </svg>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 4 ============ -->
+  <section class="stage s5" id="s4" data-step="4 · 纯向量基线">
+    <h2>纯向量检索基线 —— 一次查询从 query 到答案的手算全过程（无 BM25 / Rerank）</h2>
+
+    <div class="card full">
+      <h3>场景设定</h3>
+      <p>知识库 3 条文档，用户问 <strong>"路由器密码忘了怎么办"</strong>。为了能<strong>手算</strong>，这里用 <span class="hl">4 维可解释维度</span>演示。</p>
+      <p><span class="pill warn">重要免责</span>真实 embedding 是 768/1024 维且<strong>每一维不可解释</strong>（不是"路由器维""金融维"）。这里强行给维度命名只为让你能用笔验证算术 —— 几何与排序逻辑和真实情况完全一致，<strong>不要</strong>对外宣称 embedding 维度有语义。</p>
+      <table class="params">
+        <tr><th>向量</th><th>文本</th><th>维度①路由器</th><th>维度②密码/重置</th><th>维度③出厂设置</th><th>维度④金融</th></tr>
+        <tr><td><span class="vec">q</span></td><td>query：路由器密码忘了怎么办</td><td class="num">0.9</td><td class="num">0.8</td><td class="num">0.5</td><td class="num">0.0</td></tr>
+        <tr><td><span class="vec">d₁</span></td><td>如何重置路由器密码</td><td class="num">0.9</td><td class="num">0.9</td><td class="num">0.2</td><td class="num">0.0</td></tr>
+        <tr><td><span class="vec">d₂</span></td><td>路由器恢复出厂设置步骤</td><td class="num">0.8</td><td class="num">0.3</td><td class="num">0.9</td><td class="num">0.0</td></tr>
+        <tr><td><span class="vec">d₃</span></td><td>今天股市行情怎么样</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">1.0</td></tr>
+      </table>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>步骤 A · 算模长（√平方和）</h3>
+<pre>‖q‖  = √(0.9²+0.8²+0.5²+0²) = √(0.81+0.64+0.25+0)  = √1.70 = <span class="hl">1.3038</span>
+‖d₁‖ = √(0.9²+0.9²+0.2²+0²) = √(0.81+0.81+0.04+0)  = √1.66 = <span class="hl">1.2884</span>
+‖d₂‖ = √(0.8²+0.3²+0.9²+0²) = √(0.64+0.09+0.81+0)  = √1.54 = <span class="hl">1.2410</span>
+‖d₃‖ = √(0²+0²+0²+1²)       = √1.00                       = <span class="hl">1.0000</span></pre>
+
+      <h3 style="margin-top:14px">步骤 B · 算点积（逐维相乘再相加）</h3>
+<pre>q·d₁ = 0.9·0.9 + 0.8·0.9 + 0.5·0.2 + 0·0  = 0.81 + 0.72 + 0.10 + 0 = <span class="hl">1.63</span>
+q·d₂ = 0.9·0.8 + 0.8·0.3 + 0.5·0.9 + 0·0  = 0.72 + 0.24 + 0.45 + 0 = <span class="hl">1.41</span>
+q·d₃ = 0.9·0    + 0.8·0   + 0.5·0   + 0·1  = 0                       = <span class="hl">0.00</span></pre>
+
+      <h3 style="margin-top:14px">步骤 C · 算余弦相似度（点积 / 模长积）</h3>
+<pre>cos(q,d₁) = 1.63 / (1.3038 · 1.2884) = 1.63 / 1.6799 = <span class="hl">0.9703</span>
+cos(q,d₂) = 1.41 / (1.3038 · 1.2410) = 1.41 / 1.6180 = <span class="hl">0.8714</span>
+cos(q,d₃) = 0.00 / (1.3038 · 1.0000) = 0             = <span class="hl">0.0000</span></pre>
+
+      <h3 style="margin-top:14px">步骤 D · 用 L2 距离交叉验证（应给出相同排序）</h3>
+<pre>‖q−d₁‖² = (0.9−0.9)²+(0.8−0.9)²+(0.5−0.2)²+0 = 0+0.01+0.09+0 = 0.10 → ‖·‖=<span class="hl">0.316</span>
+‖q−d₂‖² = (0.9−0.8)²+(0.8−0.3)²+(0.5−0.9)²+0 = 0.01+0.25+0.16 = 0.42 → ‖·‖=<span class="hl">0.648</span>
+‖q−d₃‖² = 0.81+0.64+0.25+1.00                                 = 2.70 → ‖·‖=<span class="hl">1.643</span></pre>
+      <p>cosine 大的 ⟺ L2 小的：两套度量给出<strong>完全一致</strong>的排名，印证了 §2 的结论。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>步骤 E · 排序 → Top-k → 喂给 LLM</h3>
+      <table class="params">
+        <tr><th>排名</th><th>文档</th><th>cosine</th><th>L2</th><th>判定</th></tr>
+        <tr><td>1</td><td>d₁ 如何重置路由器密码</td><td class="num">0.970</td><td class="num">0.316</td><td>最相关，必进上下文</td></tr>
+        <tr><td>2</td><td>d₂ 路由器恢复出厂设置步骤</td><td class="num">0.871</td><td class="num">0.648</td><td>相关，作为补充</td></tr>
+        <tr><td>3</td><td>d₃ 今天股市行情怎么样</td><td class="num">0.000</td><td class="num">1.643</td><td>无关，被阈值/Top-k 截掉</td></tr>
+      </table>
+      <svg class="flow" viewBox="0 0 980 148" style="margin-top:10px">
+        <defs>
+          <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#15803d"/>
+          </marker>
+        </defs>
+        <rect x="16" y="40" width="116" height="56" rx="8" fill="#dcfce7" stroke="#15803d"/>
+        <text x="74" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">query</text>
+        <text x="74" y="80" text-anchor="middle" font-size="9" fill="#475569">用户问题</text>
+        <line x1="132" y1="68" x2="168" y2="68" stroke="#15803d" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+        <rect x="168" y="40" width="150" height="56" rx="8" fill="#dcfce7" stroke="#15803d"/>
+        <text x="243" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">Embedding</text>
+        <text x="243" y="80" text-anchor="middle" font-size="9" fill="#475569">q ∈ ℝ⁷⁶⁸（同一模型）</text>
+        <line x1="318" y1="68" x2="354" y2="68" stroke="#15803d" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+        <rect x="354" y="32" width="212" height="72" rx="8" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+        <text x="460" y="54" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">向量库 · 最近邻检索</text>
+        <text x="460" y="71" text-anchor="middle" font-size="9" fill="#475569">按 §2 的 cosine 排序</text>
+        <text x="460" y="86" text-anchor="middle" font-size="9" fill="#475569">（§5：用 ANN 索引加速这一步）</text>
+        <line x1="566" y1="68" x2="602" y2="68" stroke="#15803d" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+        <rect x="602" y="40" width="150" height="56" rx="8" fill="#dcfce7" stroke="#15803d"/>
+        <text x="677" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">Top-k</text>
+        <text x="677" y="80" text-anchor="middle" font-size="9" fill="#475569">d₁, d₂（cos 截断）</text>
+        <line x1="752" y1="68" x2="788" y2="68" stroke="#15803d" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+        <rect x="788" y="40" width="176" height="56" rx="8" fill="#15803d" stroke="#15803d"/>
+        <text x="876" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">LLM</text>
+        <text x="876" y="80" text-anchor="middle" font-size="9" fill="#dcfce7">带证据回答</text>
+
+        <text x="490" y="128" text-anchor="middle" font-size="10.5" fill="#6b7796">这是<tspan font-weight="700" fill="#15803d">纯向量基线</tspan>：本节例子只用 cosine 排序，<tspan font-weight="700">没有</tspan> BM25、<tspan font-weight="700">没有</tspan> Rerank —— 它们是 §6 的增强，不是这条基线后面的步骤</text>
+      </svg>
+      <p style="margin-top:8px"><strong>这是 §4 的纯向量基线</strong>（只用 §2 的 cosine 排序，未引入 BM25 / Rerank）。后面两节是对它的两种"放大"，<strong>不是</strong>在它后面接新阶段：<strong>§5</strong> 把「向量库 · 最近邻检索」这一格拆开 —— 亿级数据下怎么靠 ANN（HNSW / IVF-PQ）做到毫秒召回；<strong>§6</strong> 说明真实 RAG 不止这一条腿 —— 在 ANN 这条<strong>稠密腿</strong>旁边再<strong>并联</strong>一条 BM25 <strong>稀疏腿</strong>，RRF 融合后再 Rerank、最后缝合进 prompt。<span class="pill warn">务必分清</span><strong>ANN 是「混合检索」内部的一条腿，不是它前面的独立一步</strong>；§6 流程图才是运行时的准确层次，本图只是入门基线。</p>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 5 · 向量数据库 ============ -->
+  <section class="stage s7" id="s5" data-step="5 · 向量数据库">
+    <h2>向量库 —— 句向量存成什么样、检索怎么找回原文、为什么还快</h2>
+
+    <div class="card full">
+      <h3>先回答：句向量存成什么形式？检索时怎么知道对应哪句原文？</h3>
+      <p>这两个问题是同一件事的两面，答案就一句话：</p>
+      <p style="font-size:15px"><span class="pill warn">核心</span><strong>embedding 不可逆</strong>——768 个浮点是语义指纹，<strong>不能像 detokenize 那样还原成文字</strong>。所以"找回原文"<strong>不靠反解向量</strong>，而靠：写入时把<strong>向量</strong>和<strong>原文</strong>塞进<strong>同一条记录、绑同一个 id</strong>；检索时 ANN 只在向量字段上算距离、返回 <strong>id</strong>，再用 id 回表取原文。<strong>向量负责"像不像"，id 负责"是哪条"。</strong></p>
+
+      <svg class="flow" viewBox="0 0 980 250" style="margin-top:6px">
+        <defs>
+          <marker id="arrS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0891b2"/>
+          </marker>
+        </defs>
+        <!-- 一条记录 -->
+        <text x="30" y="28" font-size="11" font-weight="700" fill="#0891b2">向量库里的「一条记录」长这样（向量与原文被同一个 id 绑在一起）</text>
+        <rect x="30" y="38" width="120" height="52" rx="6" fill="#fff" stroke="#0891b2"/>
+        <text x="90" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">id</text>
+        <text x="90" y="78" text-anchor="middle" font-size="9" fill="#475569">"doc42#7"</text>
+        <rect x="150" y="38" width="330" height="52" rx="6" fill="#cffafe" stroke="#0891b2"/>
+        <text x="315" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">vector：float32[768]，‖v‖=1</text>
+        <text x="315" y="78" text-anchor="middle" font-size="9" fill="#475569">[0.0132, −0.0871, … , 0.0095]　← 只用于算距离</text>
+        <rect x="480" y="38" width="470" height="52" rx="6" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="715" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">payload：{ text, title, source, chunk_index }</text>
+        <text x="715" y="78" text-anchor="middle" font-size="9" fill="#475569">text="忘记密码时长按 reset 键约 10 秒…"　← 检索后回传 LLM 的原句</text>
+
+        <!-- 写入 -->
+        <text x="30" y="124" font-size="11" font-weight="700" fill="#15803d">写入：原文 → 同时算出向量 → 打包成一条记录存库</text>
+        <rect x="30" y="134" width="150" height="40" rx="6" fill="#dcfce7" stroke="#15803d"/>
+        <text x="105" y="158" text-anchor="middle" font-size="10" fill="#1a2238">chunk 原文</text>
+        <line x1="180" y1="154" x2="232" y2="154" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrS)"/>
+        <text x="206" y="146" text-anchor="middle" font-size="8" fill="#94a3b8">encode</text>
+        <rect x="232" y="134" width="170" height="40" rx="6" fill="#fff" stroke="#0891b2"/>
+        <text x="317" y="158" text-anchor="middle" font-size="10" fill="#1a2238">{id, vector, payload}</text>
+        <line x1="402" y1="154" x2="454" y2="154" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrS)"/>
+        <text x="428" y="146" text-anchor="middle" font-size="8" fill="#94a3b8">upsert</text>
+        <rect x="454" y="134" width="120" height="40" rx="6" fill="#cffafe" stroke="#0891b2"/>
+        <text x="514" y="158" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">向量库</text>
+
+        <!-- 检索 -->
+        <text x="30" y="208" font-size="11" font-weight="700" fill="#c026d3">检索：ANN 只比向量、返回 id（不是向量、更不是文本）→ 用 id 回表取原文</text>
+        <rect x="30" y="216" width="110" height="34" rx="6" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="85" y="237" text-anchor="middle" font-size="10" fill="#1a2238">qvec</text>
+        <line x1="140" y1="233" x2="188" y2="233" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrS)"/>
+        <rect x="188" y="216" width="170" height="34" rx="6" fill="#cffafe" stroke="#0891b2"/>
+        <text x="273" y="237" text-anchor="middle" font-size="9.5" fill="#1a2238">ANN（只在 vector 段）</text>
+        <line x1="358" y1="233" x2="406" y2="233" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrS)"/>
+        <rect x="406" y="216" width="210" height="34" rx="6" fill="#fff" stroke="#c026d3"/>
+        <text x="511" y="237" text-anchor="middle" font-size="9.5" fill="#1a2238">[(id:"doc42#7", score:.91), …]</text>
+        <line x1="616" y1="233" x2="664" y2="233" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrS)"/>
+        <text x="640" y="226" text-anchor="middle" font-size="8" fill="#94a3b8">按 id 回表</text>
+        <rect x="664" y="216" width="286" height="34" rx="6" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="807" y="237" text-anchor="middle" font-size="9.5" fill="#1a2238">payload.text = 原句 → 进 prompt（§6）</text>
+      </svg>
+
+      <div class="row" style="margin-top:14px">
+        <div class="card">
+          <h3>一条记录的真实样子</h3>
+<pre>{
+  <span class="s">"id"</span>: <span class="s">"doc42#7"</span>,                 <span class="c">// 主键：第 doc42 篇的第 7 个 chunk</span>
+  <span class="s">"vector"</span>: [<span class="n">0.0132</span>, <span class="n">-0.0871</span>,    <span class="c">// 768 个 float32（§1 ①~④ 产出）</span>
+             <span class="n">0.0444</span>, ... ,        <span class="c">// 已 L2 归一化，‖v‖=1</span>
+             <span class="n">0.0095</span>],
+  <span class="s">"payload"</span>: {
+    <span class="s">"text"</span>: <span class="s">"忘记密码时，长按机身 reset 键约 10 秒…"</span>,  <span class="c">// ← 原句</span>
+    <span class="s">"doc_id"</span>: <span class="s">"doc42"</span>,
+    <span class="s">"title"</span>: <span class="s">"TP-Link 路由器手册"</span>,
+    <span class="s">"source"</span>: <span class="s">"https://…/manual.pdf#p12"</span>,
+    <span class="s">"chunk_index"</span>: <span class="n">7</span>
+  }
+}</pre>
+          <p>逻辑上就是一张表的一行：<strong>主键 id 列 + 向量列(float32[d]) + JSON payload 列</strong>。</p>
+        </div>
+        <div class="card">
+          <h3>检索回程（注意 ANN 返回的是 id）</h3>
+<pre>qvec = embedding_model.encode(query, normalize=<span class="k">True</span>)
+res  = vector_db.search(qvec, top_k=<span class="n">5</span>)
+<span class="c"># res 只有 id 和距离，没有向量、没有文本：</span>
+<span class="c">#   [ {id:"doc42#7", score:0.91},</span>
+<span class="c">#     {id:"doc11#2", score:0.87}, … ]</span>
+
+<span class="k">for</span> r <span class="k">in</span> res:
+    rec  = vector_db.get(r.id)      <span class="c"># 用 id 回表取整条记录</span>
+    text = rec.payload[<span class="s">"text"</span>]   <span class="c"># ← 这才拿回原句</span>
+    <span class="c"># text 拼进 prompt（§6）</span></pre>
+          <p>向量做"<strong>像不像</strong>"的排序，<strong>id</strong> 做"<strong>是哪条</strong>"的回表 —— 两者缺一不可。</p>
+        </div>
+      </div>
+
+      <p style="margin-top:12px"><span class="pill note">工程现实</span>"检索怎么知道对应原文" = <strong>有没有人把 id→原文 的映射存好</strong>：
+      <br/>· <strong>裸索引</strong>（FAISS / hnswlib / numpy）：<strong>只存 <code>id ↔ vector</code></strong>，没有 payload 概念 → 你必须<strong>自己另存一份 <code>id → 原文</code> 映射</strong>（dict / SQLite / 一张表），检索回 id 后自己 join。漏了这步，就是"检索到了却不知道是哪句"的根因。
+      <br/>· <strong>托管向量库</strong>（Qdrant / Milvus / Weaviate / pgvector / ES kNN）：原生支持 <strong>payload 与向量同存</strong>，<code>search</code> 直接把原文随 id 一起返回，省掉手动 join。</p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h3>先看暴力检索为什么不行</h3>
+        <p>"找最近邻"最朴素的做法：query 和库里<strong>每一个</strong>向量都算一次距离，排序取 Top-k。这叫 <strong>Flat / brute-force</strong>。</p>
+        <div class="math" style="font-size:14px">
+          代价 = O(N · d) <span class="lbl">每次查询</span>
+        </div>
+<pre><span class="c">// 1 亿条 × 1024 维 float32</span>
+存储 = 1e8 × 1024 × 4 B   ≈ <span class="hl">400 GB</span>
+单次查询乘加 = 1e8 × 1024 ≈ <span class="hl">1e11 次</span>
+<span class="c">// 单机几秒~几十秒一条 query —— 线上不可接受</span></pre>
+        <p>Flat 召回率 100% 但不可扩展。<strong>ANN（近似最近邻）</strong>用极小的召回损失换 100~1000× 加速：recall@10 仍能 ≈ 0.95+。</p>
+      </div>
+      <div class="card">
+        <h3>ANN 的核心权衡三角</h3>
+        <svg class="flow" viewBox="0 0 360 240">
+          <polygon points="180,30 40,210 320,210" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+          <text x="180" y="22" text-anchor="middle" font-size="12" font-weight="700" fill="#0891b2">召回率 ↑</text>
+          <text x="30" y="228" text-anchor="middle" font-size="12" font-weight="700" fill="#0891b2">延迟 ↓</text>
+          <text x="330" y="228" text-anchor="middle" font-size="12" font-weight="700" fill="#0891b2">内存 ↓</text>
+          <circle cx="180" cy="150" r="5" fill="#be123c"/>
+          <text x="180" y="172" text-anchor="middle" font-size="10" fill="#6b7796">三者不可兼得</text>
+          <text x="180" y="188" text-anchor="middle" font-size="10" fill="#6b7796">索引/参数就是在三角内选点</text>
+        </svg>
+        <p>所有向量库（FAISS / Milvus / Qdrant / pgvector / ES kNN）都在这个三角里取舍。两大主流索引：<strong>HNSW</strong>（图）和 <strong>IVF-PQ</strong>（聚类 + 量化）。</p>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>HNSW —— 多层近邻图，"高速公路 + 市区小路"</h3>
+      <svg class="flow" viewBox="0 0 980 230">
+        <defs>
+          <marker id="arrH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0891b2"/>
+          </marker>
+        </defs>
+        <text x="40" y="36" font-size="10" fill="#6b7796">第 2 层（稀疏 · 长边 · 高速）</text>
+        <line x1="120" y1="50" x2="820" y2="50" stroke="#cbd5e1" stroke-dasharray="2 3"/>
+        <circle cx="120" cy="50" r="7" fill="#0891b2"/><circle cx="820" cy="50" r="7" fill="#0891b2"/>
+        <text x="120" y="40" text-anchor="middle" font-size="9" fill="#0891b2">entry</text>
+        <line x1="127" y1="52" x2="813" y2="50" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrH)"/>
+        <text x="40" y="106" font-size="10" fill="#6b7796">第 1 层（中等密度）</text>
+        <line x1="120" y1="120" x2="900" y2="120" stroke="#cbd5e1" stroke-dasharray="2 3"/>
+        <circle cx="120" cy="120" r="6" fill="#22a3bf"/><circle cx="430" cy="120" r="6" fill="#22a3bf"/>
+        <circle cx="660" cy="120" r="6" fill="#22a3bf"/><circle cx="820" cy="120" r="6" fill="#22a3bf"/>
+        <line x1="820" y1="58" x2="668" y2="114" stroke="#0891b2" stroke-width="1.3" marker-end="url(#arrH)"/>
+        <line x1="654" y1="124" x2="437" y2="120" stroke="#0891b2" stroke-width="1.3" marker-end="url(#arrH)"/>
+        <text x="40" y="178" font-size="10" fill="#6b7796">第 0 层（全部点 · 稠密 · 短边）</text>
+        <line x1="120" y1="192" x2="940" y2="192" stroke="#cbd5e1" stroke-dasharray="2 3"/>
+        <circle cx="160" cy="192" r="5" fill="#155e75"/><circle cx="300" cy="192" r="5" fill="#155e75"/>
+        <circle cx="430" cy="192" r="5" fill="#155e75"/><circle cx="500" cy="192" r="5" fill="#155e75"/>
+        <circle cx="600" cy="192" r="5" fill="#155e75"/><circle cx="700" cy="192" r="5" fill="#155e75"/>
+        <circle cx="470" cy="192" r="7" fill="#be123c"/>
+        <text x="470" y="216" text-anchor="middle" font-size="10" fill="#be123c">最近邻 ★</text>
+        <line x1="430" y1="126" x2="455" y2="186" stroke="#0891b2" stroke-width="1.3" marker-end="url(#arrH)"/>
+        <text x="540" y="178" font-size="10" fill="#6b7796">efSearch 邻域内回溯，取 Top-k</text>
+      </svg>
+      <p style="margin-top:6px"><strong>搜索过程</strong>：从顶层唯一入口进 → 在当前层贪心走向离 query 更近的邻居，走不动就<strong>下沉一层</strong> → 到第 0 层用宽度 <code>efSearch</code> 的优先队列做局部最优搜索 → 回溯出 Top-k。每次跳转把候选集缩小一个数量级，复杂度 ≈ <strong>O(log N)</strong>。</p>
+      <table class="params" style="margin-top:8px">
+        <tr><th>参数</th><th>含义</th><th>调大的后果</th></tr>
+        <tr><td><code>M</code></td><td>每个点的邻居（边）数</td><td class="num">图更密 → 召回↑、内存↑、构建慢</td></tr>
+        <tr><td><code>efConstruction</code></td><td>建图时候选队列宽度</td><td class="num">图质量↑、建索引慢</td></tr>
+        <tr><td><code>efSearch</code></td><td>查询时搜索宽度</td><td class="num">召回↑、延迟↑（线上主旋钮）</td></tr>
+      </table>
+      <p><span class="pill note">特点</span>召回高、延迟低，是中小规模（千万级）默认首选；缺点是<strong>内存大</strong>（图结构 + 全精度向量都在内存），删除是软删除需周期重建。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>IVF-PQ —— 倒排分桶（少搜）+ 乘积量化（压小）</h3>
+      <div class="row">
+        <div class="card" style="background:#fff">
+          <h3>IVF：只搜最近的几个簇</h3>
+          <p>先对全库向量跑 k-means 聚成 <code>nlist</code> 个簇（Voronoi 单元）。查询时只在离 query 最近的 <code>nprobe</code> 个簇里找：</p>
+<pre>nlist  = 4096   <span class="c">// 把库切成 4096 桶</span>
+nprobe = 16     <span class="c">// 只搜最近 16 桶</span>
+
+搜索量 ≈ 16 / 4096 ≈ <span class="hl">0.39%</span> 的数据
+<span class="c">→ 理想约 250× 加速（nprobe 越大越准越慢）</span></pre>
+        </div>
+        <div class="card" style="background:#fff">
+          <h3>PQ：把向量压成几十个字节</h3>
+          <p>把 d 维向量切成 m 段，每段用 256 个质心的小码本量化成 <strong>1 字节</strong>：</p>
+<pre>d = 1024, m = 64  <span class="c">// 每段 16 维</span>
+原始 = 1024 × 4 B = 4096 B
+PQ   = 64 × 1 B   =   <span class="hl">64 B</span>   <span class="c">// 压缩 64×</span>
+<span class="c">// 距离用码本查表近似(ADC)，不还原原始向量</span></pre>
+        </div>
+      </div>
+      <p style="margin-top:6px"><span class="pill note">特点</span>内存极省、能上<strong>十亿级</strong>；代价是 PQ 量化引入误差、召回略低于 HNSW，常用 <em>重排（用原始向量对 PQ Top-N 再精算一次）</em> 找回精度。<strong>选型口诀</strong>：千万级求精度 → HNSW；十亿级 / 内存吃紧 → IVF-PQ；要兼顾 → HNSW-PQ / DiskANN。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>用向量库时必须和 Embedding 侧对齐（接 §1、§7）</h3>
+      <ul>
+        <li><strong>度量一致</strong>：embedding 训练用 cosine，库就建 cosine/内积索引；建库存的是否归一化要和查询端一致 —— 不一致 = 检索全是噪声</li>
+        <li><strong>维度一致</strong>：换 embedding 模型必须<strong>全量重建索引</strong>，新旧向量不可混存</li>
+        <li><strong>带过滤的 ANN</strong>：真实业务常要 "category=A 且 时间&gt;X 再做近邻"，注意 pre-filter / post-filter 对召回率的影响</li>
+        <li><strong>增量</strong>：HNSW 支持在线插入、删除是软删；IVF 大批量增量后质心会漂移，需定期重训</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 6 · 混合检索 + Rerank ============ -->
+  <section class="stage s8" id="s6" data-step="6 · 混合检索 + Rerank">
+    <h2>知识召回策略 —— 混合检索（RRF）+ Rerank（精排）</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>为什么纯向量召回还不够</h3>
+        <p>向量检索擅长<strong>语义</strong>，但有结构性盲区：</p>
+        <ul>
+          <li>精确词：型号 "iPhone 15 Pro"、错误码 "ORA-00904"、人名、API 名</li>
+          <li>数字 / 单位 / 罕见专名 —— 语义向量会把它们"抹平"</li>
+        </ul>
+        <p>关键词检索 <strong>BM25</strong> 正好相反：精确匹配强、语义弱。两者<strong>互补</strong> → 混合检索 = 同时跑 dense（向量）+ sparse（BM25），再融合。</p>
+        <div class="math" style="font-size:13px">
+          BM25 ∝ ∑<sub>t∈q</sub> idf(t) ·
+          <span class="frac"><span>tf(t,d)·(k₁+1)</span><span>tf(t,d)+k₁(1−b+b·|d|/avgdl)</span></span>
+          <span class="lbl">tf 饱和 + 长度归一</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>融合用 RRF，不用"加权分数"</h3>
+        <p>向量分（cosine 0~1）和 BM25 分（无上界）<strong>量纲不同</strong>，直接加权很脆。<strong>RRF（Reciprocal Rank Fusion）</strong>只用<strong>名次</strong>，鲁棒、免调参：</p>
+        <div class="math">
+          RRF(d) = ∑<sub>i∈系统</sub>
+          <span class="frac"><span>1</span><span>k + rank<sub>i</sub>(d)</span></span>
+          <span class="lbl">k 常取 60</span>
+        </div>
+        <p>名次越靠前贡献越大；<strong>多路都靠前</strong>的文档被显著抬升。下面用真实数字算一遍。</p>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>例 · RRF 融合手算（k = 60）</h3>
+      <p>query 同时走向量和 BM25 两路，各自 Top-3 名次如下：</p>
+      <table class="params">
+        <tr><th>文档</th><th>向量路名次</th><th>BM25 路名次</th><th>RRF 计算</th><th>RRF 分</th></tr>
+        <tr><td>d_A</td><td class="num">1</td><td class="num">3</td><td>1/(60+1) + 1/(60+3) = 0.01639 + 0.01587</td><td class="num">0.03227</td></tr>
+        <tr><td>d_B</td><td class="num">2</td><td class="num">1</td><td>1/(60+2) + 1/(60+1) = 0.01613 + 0.01639</td><td class="num">0.03252</td></tr>
+        <tr><td>d_C</td><td class="num">3</td><td class="num">—</td><td>1/(60+3) + 0 = 0.01587</td><td class="num">0.01587</td></tr>
+        <tr><td>d_D</td><td class="num">—</td><td class="num">2</td><td>0 + 1/(60+2) = 0.01613</td><td class="num">0.01613</td></tr>
+      </table>
+<pre><span class="c">// 融合后排序（RRF 分从大到小）</span>
+1. d_B  0.03252   <span class="c">// 两路都靠前 → 升到第一</span>
+2. d_A  0.03227   <span class="c">// 一路第一但另一路才第三 → 屈居第二</span>
+3. d_D  0.01613   <span class="c">// 只在 BM25 出现</span>
+4. d_C  0.01587   <span class="c">// 只在向量路出现</span></pre>
+      <p><span class="pill ok">直觉</span>RRF 奖励"<strong>多路共识</strong>"：d_B 没在任何单路拿第一，却因为两路都靠前而综合最优 —— 这正是混合检索想要的鲁棒性，且完全不需要校准两路分数的量纲。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>例 · Rerank 把"召回对但排不对"翻转过来</h3>
+      <p>召回阶段（bi-encoder，§7 工程实践里有 bi vs cross 全对比）给出 Top-5 的粗排；cross-encoder 把每个 <code>(query, doc)</code> 拼一起重新精打分：</p>
+      <table class="params">
+        <tr><th>文档</th><th>召回 cosine（粗排序）</th><th>Rerank 分（精排序）</th><th>名次变化</th></tr>
+        <tr><td>d1</td><td class="num">0.82　（第 1）</td><td class="num">0.91　（第 2）</td><td>1 → 2</td></tr>
+        <tr><td>d2</td><td class="num">0.80　（第 2）</td><td class="num">0.45　（第 4）</td><td>2 → 4 ↓</td></tr>
+        <tr><td>d3</td><td class="num">0.79　（第 3）</td><td class="num">0.88　（第 3）</td><td>3 → 3</td></tr>
+        <tr><td>d4</td><td class="num">0.78　（第 4）</td><td class="num">0.30　（第 5）</td><td>4 → 5 ↓</td></tr>
+        <tr><td>d5</td><td class="num">0.77　（第 5）</td><td class="num">0.95　（第 1）</td><td><strong>5 → 1 ↑↑</strong></td></tr>
+      </table>
+      <p>最佳答案 <strong>d5</strong> 在召回里只排第 5（差点被 Top-k 截掉），cross-encoder 因为能让 query 和 doc <strong>互相 attention</strong>，把它精排到第 1。代价：cross-encoder 每个 pair 都要跑一次前向、<strong>不能预编码</strong>，所以只对召回 Top-50/100 重排，不能当召回用。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>召回侧全链路：从 query 到喂进 LLM（"缝合答案"）</h3>
+      <svg class="flow" viewBox="0 0 980 220">
+        <defs>
+          <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#c026d3"/>
+          </marker>
+        </defs>
+        <rect x="14" y="92" width="110" height="48" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="69" y="112" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">query</text>
+        <text x="69" y="128" text-anchor="middle" font-size="9" fill="#475569">用户问题</text>
+
+        <line x1="124" y1="116" x2="158" y2="78" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+        <line x1="124" y1="116" x2="158" y2="158" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+
+        <rect x="158" y="48" width="170" height="58" rx="8" fill="#cffafe" stroke="#0891b2"/>
+        <text x="243" y="70" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">Dense 向量召回</text>
+        <text x="243" y="86" text-anchor="middle" font-size="9" fill="#475569">Embedding + ANN → Top-100</text>
+
+        <rect x="158" y="130" width="170" height="58" rx="8" fill="#fef3c7" stroke="#d97706"/>
+        <text x="243" y="152" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">BM25 关键词召回</text>
+        <text x="243" y="168" text-anchor="middle" font-size="9" fill="#475569">倒排索引 → Top-100</text>
+
+        <line x1="328" y1="77" x2="372" y2="105" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+        <line x1="328" y1="159" x2="372" y2="131" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+
+        <rect x="372" y="92" width="150" height="52" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="447" y="113" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">RRF 融合</text>
+        <text x="447" y="129" text-anchor="middle" font-size="9" fill="#475569">名次倒数求和 → Top-100</text>
+        <line x1="522" y1="118" x2="558" y2="118" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+
+        <rect x="558" y="92" width="160" height="52" rx="8" fill="#ffe4e6" stroke="#be123c"/>
+        <text x="638" y="113" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">Rerank 精排</text>
+        <text x="638" y="129" text-anchor="middle" font-size="9" fill="#475569">cross-encoder → Top-5</text>
+        <line x1="718" y1="118" x2="754" y2="118" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+
+        <rect x="754" y="84" width="120" height="68" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="814" y="106" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2238">拼上下文</text>
+        <text x="814" y="122" text-anchor="middle" font-size="9" fill="#475569">Top-5 chunk +</text>
+        <text x="814" y="136" text-anchor="middle" font-size="9" fill="#475569">引用 + 指令</text>
+        <line x1="874" y1="118" x2="908" y2="118" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrR)"/>
+
+        <rect x="908" y="92" width="64" height="52" rx="8" fill="#7c3aed" stroke="#7c3aed"/>
+        <text x="940" y="113" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">LLM</text>
+        <text x="940" y="129" text-anchor="middle" font-size="8" fill="#ede9fe">带证据答</text>
+      </svg>
+      <div class="row" style="margin-top:8px">
+        <div class="card" style="background:#fff">
+          <h3>最后一格："喂给 LLM" 不只是塞文本</h3>
+          <ul>
+            <li>每个 chunk 带 <strong>来源标记</strong>（doc id / 标题 / URL），让模型能引用、可溯源</li>
+            <li>放进 system / user prompt，明确指令"<em>只依据下面证据回答，不足就说不知道</em>" → 抑制幻觉</li>
+            <li><strong>lost-in-the-middle</strong>：长上下文里中间内容易被忽略 → 最相关的放<strong>头/尾</strong></li>
+            <li>token 预算：Top-k 与 chunk 大小要乘起来卡住上下文窗口</li>
+          </ul>
+        </div>
+        <div class="card" style="background:#fff">
+          <h3>工程旋钮（面试常问"怎么权衡"）</h3>
+          <ul>
+            <li>召回 Top-N（给 rerank 的候选数）：N↑ 召回率↑、rerank 延迟线性↑（典型 50~100）</li>
+            <li>rerank 后 Top-k（进 prompt）：k↑ 信息全但稀释 + 烧 token（典型 3~8）</li>
+            <li>RRF 的 k：默认 60，调小更偏信头部名次</li>
+            <li>rerank 模型：bge-reranker-v2 / Cohere Rerank / Jina Rerank</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>从"筛出来的向量"到 LLM 读懂 —— 实际代码与参数（破一个常见误解）</h3>
+      <p><span class="pill warn">先纠正</span>你问"<strong>筛选出来的文本向量怎么传给 LLM</strong>"——<strong>向量根本不传给 LLM</strong>。embedding 向量只在<strong>检索阶段</strong>当"地址/钥匙"用：拿它在向量库里定位到对应的 chunk。真正拼进 prompt、送进 LLM 的，是那个 chunk 的<strong>原始文本</strong>（就是 §1 入库时 payload 里存的 <code>text</code>）。LLM 从头到尾<strong>没见过 768 维向量</strong>，它只读文本。</p>
+
+      <svg class="flow" viewBox="0 0 980 96">
+        <defs>
+          <marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#c026d3"/>
+          </marker>
+        </defs>
+        <rect x="20" y="30" width="210" height="44" rx="8" fill="#cffafe" stroke="#0891b2"/>
+        <text x="125" y="49" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a2238">query 向量 q</text>
+        <text x="125" y="65" text-anchor="middle" font-size="9" fill="#475569">只参与向量库检索</text>
+        <line x1="230" y1="52" x2="288" y2="52" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrL)"/>
+        <text x="259" y="44" text-anchor="middle" font-size="8.5" fill="#94a3b8">定位</text>
+
+        <rect x="288" y="30" width="300" height="44" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="438" y="49" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a2238">命中条目的 payload.text（chunk 原文）</text>
+        <text x="438" y="65" text-anchor="middle" font-size="9" fill="#475569">向量在这里"换"回它索引的那段文本</text>
+        <line x1="588" y1="52" x2="646" y2="52" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrL)"/>
+        <text x="617" y="44" text-anchor="middle" font-size="8.5" fill="#94a3b8">拼进 prompt</text>
+
+        <rect x="646" y="30" width="314" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="803" y="49" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a2238">LLM 读到的只有：指令 + chunk 文本 + 问题</text>
+        <text x="803" y="65" text-anchor="middle" font-size="9" fill="#475569">全程纯文本，无任何向量</text>
+      </svg>
+
+      <h3 style="margin-top:14px">完整 RAG 调用伪代码（含真实参数）</h3>
+<pre><span class="k">def</span> rag_answer(question: str) -&gt; str:
+    <span class="c"># 1. query 向量化（必须和入库用同一模型、同样 normalize）</span>
+    qvec = embedding_model.encode(question, normalize=<span class="k">True</span>)
+
+    <span class="c"># 2. 检索：库返回 (score, payload)，payload.text 就是 §1 存的 chunk 原文</span>
+    hits = vector_db.search(qvec, top_k=<span class="n">50</span>, ef_search=<span class="n">128</span>)   <span class="c"># §5 的 HNSW 旋钮</span>
+    <span class="c">#（可选）再跑一路 BM25，RRF 融合 —— 见本节上半部分</span>
+
+    <span class="c"># 3. Rerank：cross-encoder 精排，取前 5（本节中段）</span>
+    pairs  = [(question, h.payload[<span class="s">"text"</span>]) <span class="k">for</span> h <span class="k">in</span> hits]
+    order  = sorted(zip(reranker.predict(pairs), hits), key=<span class="k">lambda</span> x: -x[<span class="n">0</span>])
+    top    = [h <span class="k">for</span> _, h <span class="k">in</span> order][:<span class="n">5</span>]
+
+    <span class="c"># 4. 缝合：把 chunk 原文 + 来源编号拼成 context 字符串</span>
+    context = <span class="s">"\n\n"</span>.join(
+        <span class="s">f"[{i+1}] (来源: {h.payload['title']})\n{h.payload['text']}"</span>
+        <span class="k">for</span> i, h <span class="k">in</span> enumerate(top)
+    )
+    <span class="c"># token 预算：5 × ~500 ≈ 2.5k context，须 ≤ 模型窗 − system − 历史 − max_tokens</span>
+
+    <span class="c"># 5. 组 messages，调 LLM —— 注意：传的是 context 文本，不是向量</span>
+    resp = llm.chat(
+        model=<span class="s">"claude-haiku-4-5"</span>,        <span class="c"># 或 deepseek-chat / gpt-4o-mini</span>
+        messages=[
+            {<span class="s">"role"</span>: <span class="s">"system"</span>, <span class="s">"content"</span>:
+             <span class="s">"你是知识助手。只能依据 &lt;context&gt; 内的资料回答；"</span>
+             <span class="s">"无依据就答『资料中未提及』；每个论点后用 [n] 标注来源。"</span>},
+            {<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>:
+             <span class="s">f"&lt;context&gt;\n{context}\n&lt;/context&gt;\n\n问题：{question}"</span>},
+        ],
+        temperature=<span class="n">0.1</span>,     <span class="c"># RAG 要忠于资料、抑制发挥/幻觉；0 也常见</span>
+        max_tokens=<span class="n">1024</span>,    <span class="c"># 回答长度上限，控成本与啰嗦</span>
+        top_p=<span class="n">1.0</span>,
+    )
+    <span class="k">return</span> resp.content      <span class="c"># 形如 "长按 reset 键 10 秒…[1][3]"</span></pre>
+
+      <div class="row" style="margin-top:14px">
+        <div class="card">
+          <h3>参数为什么这么设（面试会追问）</h3>
+          <table class="params">
+            <tr><th>参数</th><th>取值 / 理由</th></tr>
+            <tr><td>检索 top_k</td><td class="num">50 · 给 rerank 的候选池，小了漏召回、大了 rerank 慢</td></tr>
+            <tr><td>rerank 后取</td><td class="num">5 · 进 prompt 的证据数，权衡信息量 vs token/稀释</td></tr>
+            <tr><td>temperature</td><td class="num">0.1 · 忠于资料不创作；要确定性可设 0</td></tr>
+            <tr><td>max_tokens</td><td class="num">1024 · 防啰嗦控成本，按答案长度调</td></tr>
+            <tr><td>context 顺序</td><td class="num">rerank 第 1 放最前/最后（lost-in-the-middle）</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>context 长度怎么卡（实际算一次）</h3>
+          <div class="math" style="font-size:13px">
+            context 预算 = 窗口 − system − 对话历史 − max_tokens
+          </div>
+<pre><span class="c"># 大窗模型（如 200k）：基本不用担心</span>
+<span class="c"># 小窗模型（如 8k）：</span>
+8000 − 200 − 0 − 1024 ≈ <span class="n">6776</span> token 留给 context
+6776 / 5 chunk ≈ 每块上限 ~<span class="n">1355</span> token
+<span class="c"># → 反推 §1 的 chunk_size 不能设太大！</span></pre>
+          <p><span class="pill ok">闭环</span><strong>chunk_size、top_k、LLM 上下文窗必须一起算账</strong> —— 这就是 §1 分块与 §6 缝合互相牵制的工程闭环。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 7 · 工程实践 ============ -->
+  <section class="stage s6" id="s7" data-step="7 · 工程实践">
+    <h2>工程实践 —— 选型、维度、归一化、pooling、踩坑</h2>
+
+    <div class="card full">
+      <h3>主流 Embedding 模型（中文 RAG 常用）</h3>
+      <table class="params">
+        <tr><th>模型</th><th>维度</th><th>特点</th><th>适用</th></tr>
+        <tr><td>BGE-large-zh / bge-m3</td><td class="num">1024</td><td>中文最常用；bge-m3 同时出 dense+sparse+ColBERT 多向量</td><td>中文 RAG 首选，可单模型做混合检索</td></tr>
+        <tr><td>multilingual-e5-large</td><td class="num">1024</td><td>需要加 "query:" / "passage:" 前缀指令</td><td>多语言、跨语言检索</td></tr>
+        <tr><td>gte-Qwen2 系列</td><td class="num">1536+</td><td>LLM 架构、last-token pooling，效果强但重</td><td>追求精度、算力充足</td></tr>
+        <tr><td>OpenAI text-embedding-3</td><td class="num">1536 / 3072</td><td>API；支持 Matryoshka 截断降维</td><td>不想自托管、快速落地</td></tr>
+      </table>
+      <p><span class="pill note">选型口诀</span>先看语言（中文优先 BGE）→ 看是否要混合检索（bge-m3 一站式）→ 看维度与存储成本 → 用自己业务的真实 query 跑一遍 recall@k 再定，<strong>别只看 MTEB 榜单</strong>。</p>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>维度怎么选</h3>
+        <ul>
+          <li>维度 ↑ → 表达力 ↑、召回 ↑，但存储/内存/检索延迟全部线性 ↑（1 亿条 ×1024 维 ×4B ≈ 400 GB）</li>
+          <li><strong>Matryoshka 表示</strong>：训练时让前 k 维就能用，线上按需截断（如 1024→256）省 4× 存储，召回只掉一点</li>
+          <li>原型期 384/768 足够；上规模再权衡量化（PQ / int8）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>归一化 & pooling 的工程纪律</h3>
+        <ul>
+          <li><strong>入库和查询必须用同一个模型、同一种 pooling、同样是否归一化</strong> —— 不一致是线上检索"全是噪声"的头号原因</li>
+          <li>建议统一 L2-normalize + 内积索引（等价 cosine，且向量库最优化）</li>
+          <li>E5 / instructor 类模型<strong>必须加指令前缀</strong>，漏了会显著掉点</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>高频踩坑（面试 & 实战都问）</h3>
+      <table class="params">
+        <tr><th>坑</th><th>现象</th><th>解法</th></tr>
+        <tr><td>query/doc 模型不一致</td><td>检索结果像随机</td><td>同模型同配置；端到端冒烟测试</td></tr>
+        <tr><td>分块（chunking）太大/太小</td><td>太大稀释语义、太小丢上下文</td><td>按语义/标题切，200–500 token + overlap，实测调</td></tr>
+        <tr><td>纯向量召不回专有名词/数字/型号</td><td>"iPhone 15 Pro" 类精确词丢失</td><td><strong>混合检索</strong>：向量 + BM25，用 RRF 融合</td></tr>
+        <tr><td>Top-k 里有相关但不是最佳</td><td>答案在第 8 名而非第 1</td><td><strong>Rerank</strong>：cross-encoder 对 Top-50 重排取前 5</td></tr>
+        <tr><td>各向异性 / 维度坍缩</td><td>所有句子 cos 都 0.9+，区分度差</td><td>选经对比学习的 embedding 模型，别裸用 BERT mean-pool</td></tr>
+        <tr><td>长文档超出 max length</td><td>尾部内容没进向量</td><td>分块入库；或选长上下文 embedding</td></tr>
+      </table>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>bi-encoder vs cross-encoder —— 为什么需要两段（召回 + 精排）</h3>
+      <svg class="flow" viewBox="0 0 980 150">
+        <rect x="40" y="30" width="400" height="100" rx="10" fill="#fafbff" stroke="#0d9488"/>
+        <text x="240" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#0d9488">Bi-Encoder（Embedding 本体）</text>
+        <text x="240" y="74" text-anchor="middle" font-size="10" fill="#475569">q 和 d 各自独立编码 → 两个向量 → 算距离</text>
+        <text x="240" y="92" text-anchor="middle" font-size="10" fill="#475569">文档可<strong>离线预编码</strong>、建索引</text>
+        <text x="240" y="112" text-anchor="middle" font-size="10" fill="#15803d">✔ 亿级也能毫秒召回　✘ 精度有上限</text>
+
+        <rect x="540" y="30" width="400" height="100" rx="10" fill="#fafbff" stroke="#be123c"/>
+        <text x="740" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#be123c">Cross-Encoder（Rerank）</text>
+        <text x="740" y="74" text-anchor="middle" font-size="10" fill="#475569">(q, d) 拼一起进模型 → 直接出相关性分</text>
+        <text x="740" y="92" text-anchor="middle" font-size="10" fill="#475569">每个 pair 都要跑一次，<strong>无法预编码</strong></text>
+        <text x="740" y="112" text-anchor="middle" font-size="10" fill="#15803d">✔ 精度高　✘ 慢，只能排几十条</text>
+
+        <text x="490" y="78" text-anchor="middle" font-size="22" fill="#94a3b8">→</text>
+      </svg>
+      <p style="margin-top:6px"><strong>结论</strong>：Embedding（bi-encoder）负责从海量里<strong>快速召回 Top-50/100</strong>，Rerank（cross-encoder）负责在这几十条里<strong>精排 Top-5</strong>。两者不是替代关系，是 RAG 检索的两段式标配 —— 这正是 JD"混合检索、Rerank"想考的工程认知。</p>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ STAGE 8: 落地实战 playbook ============ -->
+  <section class="stage s9" id="s8" data-step="8 · 落地实战">
+    <h2>落地实战 —— 给定一个定死的 Embedding 模型，从 0 搭一套生产级 RAG</h2>
+
+    <div class="card full">
+      <h3>场景设定（具体项目）</h3>
+      <p>项目：<strong>企业内部「IT 运维知识库问答助手」</strong>。数据源 = Confluence 导出 + 设备 PDF 手册 + 历史工单。<strong>Embedding 模型已被定死、不可更换、不可微调</strong>：</p>
+      <table class="params">
+        <tr><th>模型属性（定死）</th><th>它强制决定了什么</th><th>你被迫的应对</th></tr>
+        <tr><td>维度 d = 1024</td><td>向量库 schema、存储 / 内存成本、索引参数</td><td>先估容量；规模大再上量化（§5 PQ）</td></tr>
+        <tr><td>max_seq_len = 8192</td><td>chunk_size 的硬上限</td><td>chunk_size 取 256–512 ≪ 8192，留余量</td></tr>
+        <tr><td>自带 tokenizer</td><td>chunk 长度只能用它来数</td><td><code>length_function = 该 tokenizer.encode</code></td></tr>
+        <tr><td>需 instruction 前缀</td><td>query / passage 必须各自加前缀</td><td>入库加 <code>"passage: "</code>、查询加 <code>"query: "</code>，漏了显著掉点</td></tr>
+        <tr><td>相似度 = cosine</td><td>向量库索引度量、是否归一化</td><td>入库&查询都 <code>normalize=True</code>，库用内积/cosine 索引</td></tr>
+        <tr><td><strong>不可 fine-tune</strong></td><td><strong>召回质量的天花板就是这条线</strong></td><td>只能靠 chunking / 混合检索 / Rerank / query 改写来补 —— <strong>这就是为什么后面那些环节都必须做</strong></td></tr>
+      </table>
+      <p><span class="pill warn">工业落地的核心逻辑</span>模型被冻结 → <strong>所有可调的质量杠杆都转移到模型周围的管线</strong>（分块、混合、重排、query 改写、评估迭代）。"定死 embedding"反而简化了一件事：换模型=全量重灌索引，既然不换，索引版本绑定就稳定了。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>工业界一定会拆成两条独立管线</h3>
+      <p><strong>离线索引构建</strong>（文档变更时跑，慢、批量、可重算）与<strong>在线查询</strong>（每次请求跑，毫秒级、只读）必须分开。两者通过<strong>共享的索引存储</strong>连接。</p>
+
+      <svg class="flow" viewBox="0 0 980 132" style="margin-top:6px">
+        <defs>
+          <marker id="arrP1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c"/>
+          </marker>
+        </defs>
+        <text x="14" y="20" font-size="11" font-weight="700" fill="#ea580c">离线 · 索引构建管线（文档变更时批量跑）</text>
+        <rect x="14"  y="34" width="118" height="62" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+        <text x="73" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">数据源</text>
+        <text x="73" y="74" text-anchor="middle" font-size="8.5" fill="#475569">Confluence</text>
+        <text x="73" y="86" text-anchor="middle" font-size="8.5" fill="#475569">/PDF/工单</text>
+        <line x1="132" y1="65" x2="160" y2="65" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrP1)"/>
+        <rect x="160" y="34" width="124" height="62" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+        <text x="222" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">解析+清洗</text>
+        <text x="222" y="74" text-anchor="middle" font-size="8.5" fill="#475569">去页眉/表格</text>
+        <text x="222" y="86" text-anchor="middle" font-size="8.5" fill="#475569">OCR/格式化</text>
+        <line x1="284" y1="65" x2="312" y2="65" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrP1)"/>
+        <rect x="312" y="34" width="124" height="62" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+        <text x="374" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">分块 §1</text>
+        <text x="374" y="74" text-anchor="middle" font-size="8.5" fill="#475569">chunk512</text>
+        <text x="374" y="86" text-anchor="middle" font-size="8.5" fill="#475569">overlap64</text>
+        <line x1="436" y1="65" x2="464" y2="65" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrP1)"/>
+        <rect x="464" y="34" width="132" height="62" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="530" y="56" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">固定 Embedding</text>
+        <text x="530" y="72" text-anchor="middle" font-size="8.5" fill="#475569">"passage: "+ch</text>
+        <text x="530" y="85" text-anchor="middle" font-size="8.5" fill="#475569">normalize</text>
+        <line x1="596" y1="65" x2="624" y2="65" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrP1)"/>
+        <rect x="624" y="34" width="160" height="62" rx="8" fill="#cffafe" stroke="#0891b2"/>
+        <text x="704" y="56" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">写向量库 §5</text>
+        <text x="704" y="72" text-anchor="middle" font-size="8.5" fill="#475569">vector+payload</text>
+        <text x="704" y="85" text-anchor="middle" font-size="8.5" fill="#475569">+ 建 ANN 索引</text>
+        <line x1="784" y1="65" x2="812" y2="65" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrP1)"/>
+        <rect x="812" y="34" width="156" height="62" rx="8" fill="#fef3c7" stroke="#d97706"/>
+        <text x="890" y="56" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">同时建 BM25 倒排</text>
+        <text x="890" y="72" text-anchor="middle" font-size="8.5" fill="#475569">为混合检索备好</text>
+        <text x="890" y="85" text-anchor="middle" font-size="8.5" fill="#475569">+ 版本化/增量</text>
+      </svg>
+
+      <svg class="flow" viewBox="0 0 980 124" style="margin-top:4px">
+        <defs>
+          <marker id="arrP2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#c026d3"/>
+          </marker>
+        </defs>
+        <text x="14" y="18" font-size="11" font-weight="700" fill="#c026d3">在线 · 查询管线（每次请求，读同一套索引）</text>
+        <rect x="14"  y="32" width="104" height="58" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="66" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">用户 query</text>
+        <text x="66" y="71" text-anchor="middle" font-size="8.5" fill="#475569">+ 改写/扩展</text>
+        <line x1="118" y1="61" x2="146" y2="61" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrP2)"/>
+        <rect x="146" y="32" width="128" height="58" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="210" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">固定 Embedding</text>
+        <text x="210" y="71" text-anchor="middle" font-size="8.5" fill="#475569">"query: "+q（同一模型）</text>
+        <line x1="274" y1="61" x2="302" y2="61" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrP2)"/>
+        <rect x="302" y="32" width="150" height="58" rx="8" fill="#fff" stroke="#c026d3"/>
+        <text x="377" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">向量 ANN ∥ BM25</text>
+        <text x="377" y="71" text-anchor="middle" font-size="8.5" fill="#475569">双路各召回 Top-50</text>
+        <line x1="452" y1="61" x2="480" y2="61" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrP2)"/>
+        <rect x="480" y="32" width="150" height="58" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="555" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">RRF → Rerank §6</text>
+        <text x="555" y="71" text-anchor="middle" font-size="8.5" fill="#475569">融合后精排 Top-5</text>
+        <line x1="630" y1="61" x2="658" y2="61" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrP2)"/>
+        <rect x="658" y="32" width="150" height="58" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+        <text x="733" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">拼 context → LLM</text>
+        <text x="733" y="71" text-anchor="middle" font-size="8.5" fill="#475569">§6 带引用回答</text>
+        <line x1="808" y1="61" x2="836" y2="61" stroke="#c026d3" stroke-width="1.5" marker-end="url(#arrP2)"/>
+        <rect x="836" y="32" width="132" height="58" rx="8" fill="#fae8ff" stroke="#c026d3"/>
+        <text x="902" y="55" text-anchor="middle" font-size="10" font-weight="700" fill="#1a2238">引用校验/兜底</text>
+        <text x="902" y="71" text-anchor="middle" font-size="8.5" fill="#475569">→ 返回答案</text>
+        <text x="490" y="112" text-anchor="middle" font-size="9.5" fill="#6b7796">注意「固定 Embedding」在两条管线里是<tspan font-weight="700" fill="#ea580c">同一个模型同一套前缀/归一化</tspan> —— 不一致 = 检索全是噪声（§7 头号坑）</text>
+      </svg>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>落地骨架代码（把 §1 / §5 / §6 串成一个项目）</h3>
+<pre><span class="c"># 全局：模型定死，作为常量注入，离线/在线必须用同一个</span>
+EMB = load_embedding(<span class="s">"bge-m3"</span>)        <span class="c"># 定死、不可换、不可微调</span>
+
+<span class="c"># ---------- 离线：建索引（文档新增/变更时跑）----------</span>
+<span class="k">def</span> ingest(docs):
+    <span class="k">for</span> doc <span class="k">in</span> docs:
+        text = clean(parse(doc))                          <span class="c"># 解析+清洗</span>
+        <span class="k">for</span> i, ch <span class="k">in</span> enumerate(split_text(text,           <span class="c"># §1 分块</span>
+                          chunk_size=<span class="n">512</span>, chunk_overlap=<span class="n">64</span>,
+                          length_function=EMB.tokenizer)):
+            vec = EMB.encode(<span class="s">"passage: "</span> + ch,            <span class="c"># 模型要求的前缀</span>
+                             normalize=<span class="k">True</span>)                 <span class="c"># 度量=cosine 必须归一</span>
+            vstore.upsert(id=<span class="s">f"{doc.id}#{i}"</span>, vector=vec,   <span class="c"># §5 向量+payload 同存</span>
+                          payload={<span class="s">"text"</span>: ch, <span class="s">"title"</span>: doc.title,
+                                   <span class="s">"source"</span>: doc.url})
+            bm25.add(<span class="s">f"{doc.id}#{i}"</span>, ch)                  <span class="c"># 同时进 BM25 倒排</span>
+
+<span class="c"># ---------- 在线：一次查询 ----------</span>
+<span class="k">def</span> query(q):
+    qv     = EMB.encode(<span class="s">"query: "</span> + q, normalize=<span class="k">True</span>)  <span class="c"># 同模型+query 前缀</span>
+    dense  = vstore.search(qv, top_k=<span class="n">50</span>)                  <span class="c"># §5 向量召回</span>
+    sparse = bm25.search(q,   top_k=<span class="n">50</span>)                  <span class="c"># 关键词召回</span>
+    fused  = rrf(dense, sparse, k=<span class="n">60</span>)[:<span class="n">50</span>]                <span class="c"># §6 融合</span>
+    top    = rerank(q, [vstore.get(h.id).payload[<span class="s">"text"</span>]  <span class="c"># §6 精排</span>
+                        <span class="k">for</span> h <span class="k">in</span> fused])[:<span class="n">5</span>]
+    ctx    = build_context(top)                            <span class="c"># §6 拼上下文</span>
+    <span class="k">return</span> llm.chat(system=GROUNDED_PROMPT,
+                    user=<span class="s">f"&lt;context&gt;{ctx}&lt;/context&gt;\n{q}"</span>,
+                    temperature=<span class="n">0.1</span>, max_tokens=<span class="n">1024</span>)</pre>
+      <p><span class="pill ok">关键不变量</span><code>EMB</code> 在 <code>ingest()</code> 和 <code>query()</code> 里是同一个实例、同样的前缀规则、同样 <code>normalize=True</code>。这是整套系统正确性的<strong>第一前提</strong>，比任何调参都重要。</p>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>工业排期：里程碑顺序（先基线跑通，再逐级增强 —— 呼应全文叙事）</h3>
+      <table class="params">
+        <tr><th>阶段</th><th>做什么</th><th>完成标志 / 对应章节</th></tr>
+        <tr><td>P0 选型冻结</td><td>确认 embedding 定死，据此定 chunk_size、向量库、度量、前缀规则</td><td>参数全部写进配置常量（本节首表）</td></tr>
+        <tr><td>P1 离线管线 MVP</td><td>跑通 <code>ingest()</code>：少量文档解析→分块→入库</td><td>能在库里 <code>get(id)</code> 查到 chunk+payload（§1 §5）</td></tr>
+        <tr><td>P2 在线纯向量基线</td><td>query→embedding→ANN→Top-k→LLM，先<strong>不</strong>加混合/rerank</td><td>能出带引用的答案（= §4 基线跑通）</td></tr>
+        <tr><td>P3 加混合 + Rerank</td><td>并上 BM25 腿、RRF、cross-encoder 精排</td><td>专名/数字类 query 召回明显改善（§6）</td></tr>
+        <tr><td>P4 评估集 + 调参</td><td>建 golden set（真实问题→正确文档），离线 recall@k / nDCG，端到端 faithfulness</td><td>有数字可比，调 chunk_size/top_k/rerank 候选数</td></tr>
+        <tr><td>P5 上线 + 监控迭代</td><td>增量索引、版本绑定、P99 延迟、成本、用户反馈回流</td><td>线上指标可观测、可灰度、可回滚</td></tr>
+      </table>
+      <p><span class="pill note">为什么是这个顺序</span>P2 先用<strong>纯向量基线</strong>（§4）打通端到端，能最快验证"数据/分块/前缀/库"没接错；之后每加一层（P3 混合+rerank、P4 评估）都是在<strong>可工作的系统上做增量</strong>，出问题能立刻定位是哪一层引入的 —— 这就是工业落地不一上来就堆全功能的根本原因。<strong>没有 P4 评估集，就不算"落地"，只是"能跑"</strong>。</p>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- ============ RECAP ============ -->
+  <section class="stage recap" id="s9" data-step="9 · 面试速记">
+    <h2>一页纸 —— 必背公式 + 高频追问</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>必背公式（能默写）</h3>
+        <div class="math" style="font-size:14px">
+          cos = <span class="frac"><span>a·b</span><span>‖a‖‖b‖</span></span>
+          &nbsp;|&nbsp; 归一化后 cos = a·b
+          &nbsp;|&nbsp; ‖a−b‖² = 2−2cos
+        </div>
+        <div class="math" style="font-size:14px">
+          ℒ<sub>InfoNCE</sub> = −log
+          <span class="frac"><span>e<sup>s⁺/τ</sup></span><span>e<sup>s⁺/τ</sup>+∑e<sup>sⱼ⁻/τ</sup></span></span>
+        </div>
+        <ul>
+          <li>Embedding = 文本→定长向量，语义近 ⟺ 距离近</li>
+          <li>管线：tokenize → transformer → pooling → L2 norm</li>
+          <li>训练：对比学习，拉正推负，hard negative 是关键</li>
+          <li>检索：bi-encoder 召回 → cross-encoder 精排</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>高频追问 & 标准答法</h3>
+        <ul>
+          <li><strong>为什么不用 BERT 直接 mean-pool？</strong>未经对比学习，空间各向异性、区分度差。</li>
+          <li><strong>cosine 还是 dot？</strong>文本检索用 cosine（长度无关）；归一化后用 dot 等价且更快。</li>
+          <li><strong>向量召回 + 关键词为什么要混合？</strong>向量擅长语义、弱于专名/数字；BM25 反之；RRF 融合互补。</li>
+          <li><strong>Rerank 为什么不直接当召回？</strong>cross-encoder 不能预编码，亿级跑不动，只能精排几十条。</li>
+          <li><strong>temperature τ 的作用？</strong>调节对难负例的惩罚锐度，τ 小→梯度更尖锐。</li>
+          <li><strong>维度越高越好吗？</strong>表达力↑但成本线性↑；Matryoshka 可按需截断。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card full" style="margin-top:14px">
+      <h3>把 JD 那句话翻译成人话（面试可以直接背这段）</h3>
+      <p>"<strong>了解 Embedding 模型原理与应用</strong>" —— 知道它把文本映射到语义向量空间，靠对比学习训练，用余弦度量相似度，是 RAG 的入口。</p>
+      <p>"<strong>熟悉向量数据库使用</strong>" —— 知道它存归一化向量、用 HNSW/IVF-PQ 做近似最近邻，在亿级规模下毫秒召回 Top-k。</p>
+      <p>"<strong>了解知识召回策略（混合检索、Rerank）</strong>" —— 知道纯向量召回有盲区，要用「向量 + BM25 经 RRF 融合」补专名，再用 cross-encoder Rerank 精排，最后把 Top-k 证据喂给 LLM 生成答案。</p>
+      <p style="margin-top:8px"><span class="pill ok">一句话总纲</span>Embedding 把"找相关"变成"找最近邻"；向量库让最近邻在亿级数据上变快；混合检索 + Rerank 让召回结果变准 —— 三者合起来就是 RAG 的检索侧。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  自包含离线学习材料 · 无外部依赖（公式为 CSS 排版，非 MathJax）· 覆盖腾讯「AI 应用开发」JD 的 Embedding + 向量数据库 + 知识召回三句话<br/>
+  所有数值均可用纸笔复算 —— 4 维场景为便于手算的演示，真实 embedding 为 768/1024 维且维度不可解释
+</footer>
+
+</body>
+</html>

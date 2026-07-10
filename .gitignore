@@ -23,6 +23,15 @@ frontend/.pnp
 frontend/.pnp.js
 frontend/dist/
 
+# Pre-recorded demo audio drops (large binary, generated externally
+# via TTS services). Keep the README that explains the convention,
+# ignore the actual MP3/WAV/M4A files. To commit them anyway (so the
+# demo is self-contained for other lab members), delete this block.
+frontend/public/demo-audio/**/*.mp3
+frontend/public/demo-audio/**/*.wav
+frontend/public/demo-audio/**/*.m4a
+frontend/public/demo-audio/**/*.ogg
+
 # Generated / runtime state
 *.db
 *.db-journal
@@ -35,6 +44,11 @@ backend/data/serial_logs/
 # Diary entries, config, agents.json (contains plaintext API keys —
 # never commit). See DIARY_SPEC.md.
 backend/data/diary/
+# agent_service runtime state: session transcripts (AuditLog JSONL) +
+# smoke-test artifacts. See docs/agent-migration-sod/.
+backend/data/agent_service/
+# agent_gateway is the SDK-free copy of backend/claude — same ignore rule.
+backend/agent_gateway/node_modules/
 # "Project" directory for diary-reply chat sessions. Just acts as a cwd
 # anchor so all diary follow-ups group under one label in the chat
 # sidebar. Empty marker file is fine to keep, otherwise nothing here is

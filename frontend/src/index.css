@@ -492,3 +492,44 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--color-card-border)) rgb(var(--color-window-bg));
 }
+
+/* ===========================================================================
+ * Call page animations
+ * ---------------------------------------------------------------------------
+ * Scoped to the /call route only. Kept here (rather than inline in the
+ * component) because @keyframes cannot live in CSSProperties objects.
+ * =========================================================================*/
+@keyframes orb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes orb-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.8); }
+  50%      { opacity: 0.7;  transform: scale(1.1); }
+}
+
+/* Phase glow pulse — used by the morph card's background overlay
+   when the card is expanded and a non-idle phase is active. Soft
+   in-place opacity oscillation so it reads as "still alive, still
+   processing" without distracting from the chat content above. */
+@keyframes call-glow-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+/* Thinking-loader: three soft shadow blobs pulsing out of phase.
+   Each child uses animation-delay to stagger. Reads as "thoughts
+   gathering" without committing to a specific shape. */
+@keyframes call-think-pulse {
+  0%, 100% {
+    transform: translateX(0) scale(0.8);
+    opacity: 0.25;
+    filter: blur(6px);
+  }
+  50% {
+    transform: translateX(0) scale(1.15);
+    opacity: 0.85;
+    filter: blur(3px);
+  }
+}

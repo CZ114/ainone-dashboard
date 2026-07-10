@@ -27,6 +27,7 @@ import { useEffect, useRef } from 'react';
 import { wsClient } from '../api/websocket';
 import { useStore } from '../store';
 import { useDiaryStore } from '../store/diaryStore';
+import { useDemoSensorStream } from '../hooks/useDemoSensorStream';
 import type {
   WSMessage,
   SensorDataMessage,
@@ -48,6 +49,13 @@ export function AppBridge() {
   const pendingAudioRef = useRef<AudioLevelMessage | null>(null);
   const rafIdRef = useRef<number | null>(null);
 
+  // Demo-mode sensor synthesis. Self-gating: the hook checks
+  // isDemoMode() + no live source + no active replay internally and
+  // does nothing otherwise, so it's safe to mount unconditionally here.
+  // Lives at the data-plane root so it survives route changes the
+  // same way the WS subscription above does.
+  useDemoSensorStream();
+
   // ---- WS subscription (app-lifetime) ------------------------------
   useEffect(() => {
     // Apply any buffered high-rate updates on the next animation frame.
@@ -64,7 +72,13 @@ export function AppBridge() {
       const audio = pendingAudioRef.current;
       pendingSensorRef.current = null;
       pendingAudioRef.current = null;
-      if (sensor) {
+      // Replay-active gate: while a CSV recording is being replayed
+      // through the channel grid, drop live ESP32 sensor frames so
+      // they don't fight the rAF that's pushing replay rows. The
+      // gate is cheap (one read) and only affects sensor_data —
+      // audio levels / connection status / recording heartbeats
+      // still flow through unchanged.
+      if (sensor && !useStore.getState().replayActive) {
         updateSensorData(
           sensor.channels,
           sensor.values,

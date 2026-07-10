@@ -98,6 +98,14 @@ export interface ChatRequest {
    * Phase 3 scenarios that may want a working invisible-context knob.
    */
   additionalSystemPrompt?: string;
+  /**
+   * Extra directories to add to Claude's tool-permission allow list
+   * (forwarded to the SDK's `additionalDirectories` option, equivalent
+   * to the CLI's `--add-dir`). Used by the chat handler to expose
+   * attached files that live outside the session cwd, so Claude's
+   * Read tool can actually open them.
+   */
+  additionalDirectories?: string[];
 }
 
 export interface AbortRequest {
@@ -190,6 +198,8 @@ export interface DiaryWeeklySchedule {
   agent_id: string;
 }
 
+export type DiaryLang = "en" | "zh";
+
 export interface DiaryConfig {
   enabled: boolean;
   schedule: {
@@ -204,6 +214,13 @@ export interface DiaryConfig {
     quiet_hours?: [string, string];   // ["22:00", "08:00"]
   };
   daily_quota: number;
+  /**
+   * Language used by the built-in `diary_observer` agent's system
+   * prompt. User-defined agents bring their own prompts and ignore
+   * this. Manual triggers from the UI override per-call via the
+   * trigger body's `lang`. Defaults to 'en' when missing.
+   */
+  lang?: DiaryLang;
   // Persisted next to the config so the scheduler can detect "already ran today"
   // without keeping a sidecar file.
   last_run?: {

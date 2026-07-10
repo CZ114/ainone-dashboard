@@ -12,11 +12,13 @@ import { ThemeToggle } from '../ThemeToggle';
 import { ThemePicker } from '../ThemePicker';
 import { ExtensionCard } from './ExtensionCard';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
+import { useT } from '../../contexts/LanguageContext';
 
 type Tab = 'extensions' | 'diary' | 'appearance' | 'about';
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const t = useT();
   const [searchParams] = useSearchParams();
   const initialTab: Tab = (() => {
     const t = searchParams.get('tab');
@@ -66,9 +68,9 @@ export function SettingsPage() {
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded-lg transition-colors"
             >
               <span>←</span>
-              <span>Back</span>
+              <span>{t.settings.back}</span>
             </button>
-            <h1 className="text-lg font-bold text-text-primary">Settings</h1>
+            <h1 className="text-lg font-bold text-text-primary">{t.settings.title}</h1>
           </div>
           <ThemeToggle />
         </div>
@@ -77,16 +79,16 @@ export function SettingsPage() {
       {/* Tab bar */}
       <nav className="shrink-0 border-b border-card-border bg-card-bg/50 px-6 flex gap-1">
         <TabButton active={activeTab === 'extensions'} onClick={() => setActiveTab('extensions')}>
-          🔌 Extensions
+          🔌 {t.settings.tabs.extensions}
         </TabButton>
         <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
-          📓 Diary
+          📓 {t.settings.tabs.diary}
         </TabButton>
         <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')}>
-          🎨 Appearance
+          🎨 {t.settings.tabs.appearance}
         </TabButton>
         <TabButton active={activeTab === 'about'} onClick={() => setActiveTab('about')}>
-          About
+          {t.settings.tabs.about}
         </TabButton>
       </nav>
 
@@ -144,16 +146,16 @@ function ExtensionsTabBody({
   error: string | null;
   onRefresh: () => void;
 }) {
+  const t = useT();
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-base font-semibold text-text-primary">Extensions</h2>
+          <h2 className="text-base font-semibold text-text-primary">{t.settings.extensions.heading}</h2>
           <p className="text-xs text-text-muted mt-0.5">
-            Install extra backend capabilities. Extensions install into the
-            Python environment that runs the backend ({' '}
+            {t.settings.extensions.descriptionBefore}
             <code className="text-text-secondary">sys.executable -m pip install</code>
-            {' '}).
+            {t.settings.extensions.descriptionAfter}
           </p>
         </div>
         <button
@@ -161,23 +163,23 @@ function ExtensionsTabBody({
           disabled={loading}
           className="px-3 py-1.5 text-xs rounded text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Refreshing…' : '↻ Refresh'}
+          {loading ? t.settings.extensions.refreshing : t.settings.extensions.refresh}
         </button>
       </div>
 
       {error && (
         <div className="mb-4 p-3 text-xs bg-status-danger/10 border border-status-danger/30 rounded text-status-danger">
-          <div className="font-semibold mb-1">Failed to load extensions</div>
+          <div className="font-semibold mb-1">{t.settings.extensions.loadFailed}</div>
           <div className="break-all">{error}</div>
           <div className="mt-2 text-text-muted">
-            Is the Python backend running at <code>127.0.0.1:8080</code>?
+            {t.settings.extensions.backendHint} <code>127.0.0.1:8080</code>?
           </div>
         </div>
       )}
 
       {!error && extensions.length === 0 && !loading && (
         <div className="text-center text-xs text-text-muted py-12">
-          No extensions registered.
+          {t.settings.extensions.empty}
         </div>
       )}
 
@@ -191,27 +193,23 @@ function ExtensionsTabBody({
 }
 
 function AboutTabBody() {
+  const t = useT();
   return (
     <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-      <h2 className="text-base font-semibold text-text-primary">About</h2>
-      <p>
-        AinOne Dashboard — integrated real-time sensor UI, recording
-        library, and AI chat interface powered by the Claude Agent SDK.
-      </p>
+      <h2 className="text-base font-semibold text-text-primary">{t.settings.about.heading}</h2>
+      <p>{t.settings.about.tagline}</p>
       <ul className="mt-2 text-xs list-disc list-inside space-y-1">
         <li>
-          Frontend: React + Vite + Zustand (
+          {t.settings.about.frontendLabel}: React + Vite + Zustand (
           <code className="text-text-muted">localhost:5173</code>)
         </li>
         <li>
-          Python backend: FastAPI on{' '}
-          <code className="text-text-muted">localhost:8080</code> — sensor /
-          audio / recording pipelines + extensions
+          {t.settings.about.pythonBackendLabel}: FastAPI on{' '}
+          <code className="text-text-muted">localhost:8080</code> — {t.settings.about.pythonBackendDesc}
         </li>
         <li>
-          Node backend: Hono on{' '}
-          <code className="text-text-muted">localhost:3000</code> — Claude
-          Agent SDK + embedded terminal
+          {t.settings.about.nodeBackendLabel}: Hono on{' '}
+          <code className="text-text-muted">localhost:3000</code> — {t.settings.about.nodeBackendDesc}
         </li>
       </ul>
     </div>

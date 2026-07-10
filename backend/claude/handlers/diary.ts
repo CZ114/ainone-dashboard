@@ -51,6 +51,7 @@ import { diaryBus } from "../diary/eventBus.ts";
 import type {
   AgentConfig,
   DiaryConfig,
+  DiaryLang,
 } from "../../shared/types.ts";
 
 // Use unused import to silence TS — appendEntry is exported for tests.
@@ -58,6 +59,8 @@ void appendEntry;
 
 interface TriggerBody {
   agent_id?: string;
+  /** Per-call override; falls back to config.lang then 'en'. */
+  lang?: DiaryLang;
 }
 
 // One in-flight manual trigger at a time. Prevents the user from
@@ -152,6 +155,9 @@ export async function handleTrigger(
     /* empty body is fine */
   }
   const agentId = body.agent_id ?? DEFAULT_AGENT_ID;
+  // lang precedence: per-call body > persisted config.lang > 'en'.
+  const cfg = await readConfig();
+  const lang: DiaryLang = body.lang ?? cfg.lang ?? "en";
   const requestId = `diary-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const abortController = new AbortController();
   requestAbortControllers.set(requestId, abortController);
@@ -164,6 +170,7 @@ export async function handleTrigger(
       agentId,
       requestId,
       signal: abortController.signal,
+      lang,
     });
     if (!res.ok) {
       return c.json(
@@ -351,6 +358,11 @@ export async function handlePatchConfig(c: Context) {
       return c.json({ error: "schedule.daily.time must be HH:MM" }, 400);
     }
   }
+  // Accept only the two supported language codes; anything else gets
+  // dropped silently rather than persisted as garbage.
+  if (body.lang !== undefined && body.lang !== "en" && body.lang !== "zh") {
+    return c.json({ error: "lang must be 'en' or 'zh'" }, 400);
+  }
   const config = await patchConfig(body);
   return c.json({ config });
 }
@@ -375,7 +387,14 @@ function maskAgent(agent: AgentConfig): AgentConfig {
 }
 
 export async function handleListAgents(c: Context) {
-  const agents = await listAgents();
+  // The built-in `diary_observer` previews its prompt in the chosen
+  // language so the editor + picker match the rest of the UI. The
+  // ?lang query param is optional and falls back to config.lang.
+  const cfg = await readConfig();
+  const queryLang = c.req.query("lang");
+  const lang: DiaryLang =
+    queryLang === "en" || queryLang === "zh" ? queryLang : cfg.lang ?? "en";
+  const agents = await listAgents(lang);
   const refs = await findSecretReferences();
   return c.json({
     agents: agents.map(({ id, agent }) => ({
@@ -496,10 +515,15 @@ export async function handleTestAgent(c: Context) {
   const t0 = Date.now();
   try {
     // Force a one-token reply so we charge as little as possible.
-    const agent = await getAgent(id);
+    const cfg = await readConfig();
+    const queryLang = c.req.query("lang");
+    const lang: DiaryLang =
+      queryLang === "en" || queryLang === "zh" ? queryLang : cfg.lang ?? "en";
+    const agent = await getAgent(id, lang);
     void agent; // touch agent so we 404 cleanly before spawning
     const run = await runAgent(id, "Reply with the single word: pong", {
       timeoutMs: TEST_TIMEOUT_MS,
+      lang,
     });
     return c.json({
       ok: true,

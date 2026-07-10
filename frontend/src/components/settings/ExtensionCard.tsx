@@ -15,6 +15,7 @@ import {
 } from '../../api/extensionsApi';
 import { ExtensionConfigPanel } from './ExtensionConfigPanel';
 import { ExtensionCachePanel } from './ExtensionCachePanel';
+import { useT } from '../../contexts/LanguageContext';
 
 interface ExtensionCardProps {
   ext: ExtensionStatus;
@@ -26,6 +27,15 @@ interface ExtensionCardProps {
 const LOG_TAIL_SIZE = 200;
 
 export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
+  const t = useT();
+  // Per-extension translation override. We look up by ext.id; if a key
+  // exists for the current language we use it for name + description,
+  // otherwise we fall back to the backend-supplied English values.
+  // This deliberately does NOT translate at the backend — extensions are
+  // declared in Python with English metadata and we layer i18n on top.
+  const meta = t.settings.extensionMeta[ext.id];
+  const displayName = meta?.name ?? ext.name;
+  const displayDescription = meta?.description ?? ext.description;
   const [logLines, setLogLines] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
   const [streaming, setStreaming] = useState(false);
@@ -93,7 +103,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
   const handleInstall = async () => {
     const r = await extensionsApi.install(ext.id);
     if (!r.ok) {
-      window.alert(`Install failed to start: ${r.error}`);
+      window.alert(t.settings.extensions.card.installFailedToStart(r.error ?? ''));
       return;
     }
     openStream();
@@ -102,26 +112,22 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
 
   const handleEnable = async () => {
     const r = await extensionsApi.enable(ext.id);
-    if (!r.ok) window.alert(`Enable failed: ${r.error}`);
+    if (!r.ok) window.alert(t.settings.extensions.card.enableFailed(r.error ?? ''));
     onChanged();
   };
 
   const handleDisable = async () => {
     const r = await extensionsApi.disable(ext.id);
-    if (!r.ok) window.alert(`Disable failed: ${r.error}`);
+    if (!r.ok) window.alert(t.settings.extensions.card.disableFailed(r.error ?? ''));
     onChanged();
   };
 
   const handleUninstall = async () => {
-    if (
-      !window.confirm(
-        `Uninstall ${ext.name}?\nThe Python package stays cached; only the state flag is cleared.`,
-      )
-    ) {
+    if (!window.confirm(t.settings.extensions.card.confirmUninstall(displayName))) {
       return;
     }
     const r = await extensionsApi.uninstall(ext.id);
-    if (!r.ok) window.alert(`Uninstall failed: ${r.error}`);
+    if (!r.ok) window.alert(t.settings.extensions.card.uninstallFailed(r.error ?? ''));
     onChanged();
   };
 
@@ -141,34 +147,34 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
     if (streaming || ext.installing) {
       return (
         <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-soft border border-accent/30">
-          Installing…
+          {t.settings.extensions.card.statusInstalling}
         </span>
       );
     }
     if (!ext.installed) {
       return (
         <span className="text-xs px-2 py-0.5 rounded-full bg-card-border text-text-muted">
-          Not installed
+          {t.settings.extensions.card.statusNotInstalled}
         </span>
       );
     }
     if (ext.last_error) {
       return (
         <span className="text-xs px-2 py-0.5 rounded-full bg-status-danger/20 text-status-danger border border-status-danger/30">
-          Error
+          {t.settings.extensions.card.statusError}
         </span>
       );
     }
     if (ext.enabled) {
       return (
         <span className="text-xs px-2 py-0.5 rounded-full bg-status-success/20 text-status-success border border-status-success/30">
-          Enabled
+          {t.settings.extensions.card.statusEnabled}
         </span>
       );
     }
     return (
       <span className="text-xs px-2 py-0.5 rounded-full bg-status-warning/20 text-status-warning border border-status-warning/30">
-        Disabled
+        {t.settings.extensions.card.statusDisabled}
       </span>
     );
   })();
@@ -181,26 +187,29 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-primary">{ext.name}</h3>
+            <h3 className="text-sm font-semibold text-text-primary">{displayName}</h3>
             <span className="text-[11px] font-mono text-text-muted">
               v{ext.version}
             </span>
             {statusBadge}
           </div>
           <p className="mt-1 text-xs text-text-secondary leading-relaxed">
-            {ext.description}
+            {displayDescription}
           </p>
           <p className="mt-1 text-[11px] text-text-muted font-mono">
-            id: {ext.id}
+            {t.settings.extensions.card.idLabel} {ext.id}
             {ext.installed_at && (
               <>
-                {' · '}installed {new Date(ext.installed_at).toLocaleString()}
+                {' · '}
+                {t.settings.extensions.card.installedAt(
+                  new Date(ext.installed_at).toLocaleString(),
+                )}
               </>
             )}
           </p>
           {ext.last_error && (
             <p className="mt-2 text-xs text-status-danger">
-              Last error: <code className="break-all">{ext.last_error}</code>
+              {t.settings.extensions.card.lastError} <code className="break-all">{ext.last_error}</code>
             </p>
           )}
         </div>
@@ -213,7 +222,9 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               disabled={streaming || ext.installing}
               className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent-hover disabled:bg-card-border disabled:cursor-not-allowed text-white font-medium"
             >
-              {streaming || ext.installing ? 'Installing…' : 'Install'}
+              {streaming || ext.installing
+                ? t.settings.extensions.card.statusInstalling
+                : t.settings.extensions.card.install}
             </button>
           )}
           {ext.installed && !ext.enabled && (
@@ -221,7 +232,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               onClick={handleEnable}
               className="px-3 py-1.5 text-xs rounded bg-accent hover:opacity-90 text-white font-medium"
             >
-              Enable
+              {t.settings.extensions.card.enable}
             </button>
           )}
           {ext.installed && ext.enabled && (
@@ -229,7 +240,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               onClick={handleDisable}
               className="px-3 py-1.5 text-xs rounded bg-card-border hover:bg-card-border/70 text-text-primary"
             >
-              Disable
+              {t.settings.extensions.card.disable}
             </button>
           )}
           {ext.installed && (
@@ -237,7 +248,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               onClick={handleUninstall}
               className="px-3 py-1.5 text-xs rounded text-status-danger hover:bg-status-danger/10 border border-status-danger/30"
             >
-              Uninstall
+              {t.settings.extensions.card.uninstall}
             </button>
           )}
         </div>
@@ -249,7 +260,7 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
           {(streaming || ext.installing) && (
             <div>
               <div className="flex items-center justify-between text-[11px] text-text-muted mb-1">
-                <span>Progress</span>
+                <span>{t.settings.extensions.card.progressLabel}</span>
                 <span>{Math.round(progress * 100)}%</span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-card-border overflow-hidden">
@@ -279,8 +290,10 @@ export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
               }`}
             >
               {lastResult.success
-                ? '✓ Install complete.'
-                : `✗ Install failed: ${lastResult.error || 'unknown error'}`}
+                ? t.settings.extensions.card.installCompleteOk
+                : t.settings.extensions.card.installFailed(
+                    lastResult.error || t.settings.extensions.card.unknownError,
+                  )}
             </div>
           )}
         </div>

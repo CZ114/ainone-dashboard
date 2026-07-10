@@ -193,12 +193,18 @@ export const diaryApi = {
   },
 
   // trigger
-  async trigger(agentId?: string): Promise<{ entry: DiaryEntry }> {
+  async trigger(
+    agentId?: string,
+    lang?: 'en' | 'zh',
+  ): Promise<{ entry: DiaryEntry }> {
+    const body: Record<string, string> = {};
+    if (agentId) body.agent_id = agentId;
+    if (lang) body.lang = lang;
     return asJson(
       await fetch(`${API_BASE}/api/diary/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(agentId ? { agent_id: agentId } : {}),
+        body: JSON.stringify(body),
       }),
     );
   },

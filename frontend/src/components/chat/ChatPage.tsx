@@ -22,6 +22,7 @@ import { RecordingsPanel } from './RecordingsPanel';
 import { EmbeddedTerminal } from '../shell/EmbeddedTerminal';
 import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
+import { useT } from '../../contexts/LanguageContext';
 import {
   buildPromptWithAttachments,
   MAX_TOTAL_ATTACHMENT_BYTES,
@@ -60,6 +61,7 @@ interface DiaryHandoff {
 }
 
 function ChatPage() {
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const { processStreamLine } = useStreamParser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -701,6 +703,31 @@ function ChatPage() {
       },
     });
 
+    // Collect distinct parent directories of every pending
+    // attachment with a real path. Forwarded as `additionalDirectories`
+    // so Claude's tool-permission allow list covers files outside the
+    // session cwd. Without this, Read 404's on any path that isn't a
+    // descendant of cwd — the bug reported by the user on 2026-05.
+    //
+    // Skip non-path "paths" like the recording display labels we used
+    // before the fix; only real absolute paths (with a separator)
+    // are useful for --add-dir.
+    const additionalDirectories = (() => {
+      const dirs = new Set<string>();
+      for (const a of attachments) {
+        const p = a.path;
+        if (!p) continue;
+        // Filter out URLs (http://, https://) — those don't go to --add-dir.
+        if (/^https?:/i.test(p)) continue;
+        // Filter out display labels (must contain a separator).
+        if (!/[\\/]/.test(p)) continue;
+        // Parent dir = everything before the last separator.
+        const lastSep = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+        if (lastSep > 0) dirs.add(p.slice(0, lastSep));
+      }
+      return Array.from(dirs);
+    })();
+
     // Clear pending attachments now (not on success) — if the send
     // fails, the user has already "committed" them to this turn; making
     // them re-pick on a transient failure would be frustrating.
@@ -715,6 +742,9 @@ function ChatPage() {
         permissionMode,
         ...(thinkingWire ? { thinking: thinkingWire } : {}),
         ...(effortWire ? { effort: effortWire } : {}),
+        ...(additionalDirectories.length > 0
+          ? { additionalDirectories }
+          : {}),
       });
 
       // Mark the diary handoff as spent so subsequent sends in this
@@ -739,7 +769,7 @@ function ChatPage() {
         console.error('[DEBUG] Failed to refresh sessions after send:', refreshErr);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      setError(err instanceof Error ? err.message : t.chat.errors.sendFailed);
       setIsLoading(false);
     } finally {
       setCurrentRequestId(null);
@@ -884,7 +914,7 @@ function ChatPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2 shrink-0">
-              💬 Claude Code Chat
+              💬 Agent Chat
               {isThinking && (
                 <span className="flex items-center gap-1 text-xs text-accent-soft font-normal">
                   <span className="w-2 h-2 bg-accent-soft rounded-full animate-pulse" />
@@ -956,7 +986,7 @@ function ChatPage() {
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-card-border/50 rounded transition-colors"
               title={rightCollapsed ? 'Show history / recordings panel' : 'Hide right panel (focus mode)'}
-              aria-label={rightCollapsed ? 'Show right panel' : 'Hide right panel'}
+              aria-label={rightCollapsed ? t.chat.rightPanel.show : t.chat.rightPanel.hide}
             >
               <span>{rightCollapsed ? '◀' : '▶'}</span>
               <span className="hidden sm:inline">
@@ -1018,7 +1048,7 @@ function ChatPage() {
                   // than a tiny spinner adrift at the top.
                   <div className="min-h-[60vh] flex flex-col items-center justify-center text-text-muted">
                     <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin mb-3" />
-                    <div className="text-sm">Loading conversation…</div>
+                    <div className="text-sm">{t.chat.loadingConversation}</div>
                   </div>
                 ) : (
                   <>
@@ -1142,6 +1172,7 @@ function DiaryContextCard({
   consumed: boolean;
   onDismiss: () => void;
 }) {
+  const t = useT();
   let formattedDate = handoff.entry_created_at;
   try {
     formattedDate = new Date(handoff.entry_created_at).toLocaleString(
@@ -1156,7 +1187,7 @@ function DiaryContextCard({
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2 text-text-muted">
           <span aria-hidden>📓</span>
-          <span className="font-medium text-text-secondary">Diary context</span>
+          <span className="font-medium text-text-secondary">{t.chat.diaryCard.label}</span>
           <span aria-hidden>·</span>
           <span>{formattedDate}</span>
           <span aria-hidden>·</span>
@@ -1168,15 +1199,15 @@ function DiaryContextCard({
                 : 'bg-accent/20 text-accent'
             }`}
           >
-            {consumed ? 'in conversation' : 'will be loaded on send'}
+            {consumed ? t.chat.diaryCard.consumed : t.chat.diaryCard.pending}
           </span>
         </div>
         <button
           type="button"
           onClick={onDismiss}
           className="text-text-muted hover:text-text-primary"
-          title="Hide this card (Claude still has the context)"
-          aria-label="Dismiss diary context card"
+          title={t.chat.diaryCard.dismissTitle}
+          aria-label={t.chat.diaryCard.dismissAria}
         >
           ✕
         </button>

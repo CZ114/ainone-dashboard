@@ -11,8 +11,10 @@
 // are created on the receiving side (ChatInput drop handler).
 
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { recordingsApi, type RecordingSession } from '../../api/recordingsApi';
 import { RECORDING_DRAG_MIME, formatSize } from '../../lib/attachments';
+import { useStore } from '../../store';
 
 // Embedded mode: the parent (ChatPage) owns visibility/collapse via
 // a resizable Panel. We just render fluid content that fills its
@@ -65,6 +67,14 @@ export interface RecordingDragPayload {
   csvRows?: number | null;
   audioSizeBytes?: number;
   audioDurationSeconds?: number | null;
+  /**
+   * Absolute paths from the FastAPI host. Threaded through the drop
+   * payload so ChatInput's attachment builder can put a real path in
+   * att.path — Claude needs a real path to Read the file beyond the
+   * inline preview.
+   */
+  csvPath?: string;
+  audioPath?: string;
 }
 
 function payloadFromSession(
@@ -75,9 +85,11 @@ function payloadFromSession(
     id: s.id,
     mode,
     csvFilename: mode !== 'audio' ? s.csv?.filename : undefined,
+    csvPath: mode !== 'audio' ? s.csv?.path : undefined,
     csvSizeBytes: mode !== 'audio' ? s.csv?.size_bytes : undefined,
     csvRows: mode !== 'audio' ? s.csv?.rows : undefined,
     audioFilename: mode !== 'csv' ? s.audio?.filename : undefined,
+    audioPath: mode !== 'csv' ? s.audio?.path : undefined,
     audioSizeBytes: mode !== 'csv' ? s.audio?.size_bytes : undefined,
     audioDurationSeconds:
       mode !== 'csv' ? s.audio?.duration_seconds : undefined,
@@ -98,11 +110,28 @@ interface TranscriptEntry {
 }
 
 export function RecordingsPanel(_: RecordingsPanelProps) {
+  const navigate = useNavigate();
+  const requestReplay = useStore((s) => s.requestReplay);
+
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Map<string, TranscriptEntry>>(
     new Map(),
+  );
+
+  // Cross-page Play: stash a replayRequest in the store and route to
+  // the dashboard. ReplayPanel watches the store and consumes the
+  // request on mount / nonce change. Two-step (request + navigate)
+  // because ReplayPanel only mounts on /dashboard.
+  const handlePlay = useCallback(
+    (s: RecordingSession) => {
+      const csv = s.csv?.filename;
+      if (!csv) return;
+      requestReplay(s.id, csv);
+      navigate('/dashboard');
+    },
+    [navigate, requestReplay],
   );
 
   const refresh = useCallback(async () => {
@@ -277,12 +306,28 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
                         className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-card-bg border border-card-border/60 hover:border-accent/60 cursor-grab active:cursor-grabbing transition-colors"
                         title="Drag CSV into chat"
                       >
-                        <span className="text-[11px] text-text-secondary truncate">
+                        <span className="text-[11px] text-text-secondary truncate flex-1 min-w-0">
                           📊 {s.csv.rows ?? '?'} rows · {formatSize(s.csv.size_bytes)}
                         </span>
-                        <span className="text-[10px] text-text-muted shrink-0">
-                          drag CSV
-                        </span>
+                        <button
+                          // Stop the click from triggering the drag
+                          // source's onDragStart on browsers that fire
+                          // both. Same defensive pattern as AudioRow's
+                          // Transcribe button.
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlay(s);
+                          }}
+                          draggable={false}
+                          onDragStart={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-accent/40 text-accent-soft hover:bg-accent/10"
+                          title="Replay this CSV on the dashboard"
+                        >
+                          ▶ Play
+                        </button>
                       </div>
                     )}
                     {s.audio && (

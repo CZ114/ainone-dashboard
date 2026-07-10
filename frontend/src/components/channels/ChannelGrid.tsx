@@ -2,8 +2,10 @@
 
 import { useStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
+import { useT } from '../../contexts/LanguageContext';
 
 export function ChannelGrid() {
+  const t = useT();
   const channels = useStore((state) => state.channels);
   const settings = useStore((state) => state.settings);
   const toggleChannel = useStore((state) => state.toggleChannel);
@@ -22,8 +24,8 @@ export function ChannelGrid() {
       <div className="min-h-[70vh] flex items-center justify-center text-text-muted">
         <div className="text-center">
           <div className="text-4xl mb-4">📊</div>
-          <p className="text-lg">Waiting for sensor data...</p>
-          <p className="text-sm mt-2">Connect via Serial or BLE to receive data</p>
+          <p className="text-lg">{t.dashboard.grid.waiting}</p>
+          <p className="text-sm mt-2">{t.dashboard.grid.waitingHint}</p>
         </div>
       </div>
     );

@@ -29,6 +29,14 @@ export interface ChatRequest {
   // Was the diary-Reply injection knob; SDK's claude_code preset
   // doesn't surface it to the model, so no caller sets it now.
   additionalSystemPrompt?: string;
+  /**
+   * Extra directories to expose to Claude's tool-permission allow
+   * list (forwarded to SDK `additionalDirectories`, equivalent to
+   * the CLI's `--add-dir`). ChatPage.handleSend collects the parent
+   * dirs of pending attachments so Claude's Read can open files
+   * outside the session cwd.
+   */
+  additionalDirectories?: string[];
 }
 
 // Response from POST /api/system/pick-file — matches backend handler.

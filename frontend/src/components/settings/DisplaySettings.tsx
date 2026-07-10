@@ -7,6 +7,7 @@
 // giving a "detent" feel without forcing discrete stepping.
 
 import { useStore } from '../../store';
+import { useT } from '../../contexts/LanguageContext';
 
 // Snap positions for Card Scale. `0.7–2.0` covers "small but readable"
 // → "mobile-style large". Closely-spaced low-end, wider at the high end
@@ -31,6 +32,7 @@ function snapTo(raw: number, snaps: number[], tolerance: number): number {
 }
 
 export function DisplaySettings() {
+  const t = useT();
   const settings = useStore((state) => state.settings);
   const setSettings = useStore((state) => state.setSettings);
 
@@ -38,14 +40,14 @@ export function DisplaySettings() {
     <div className="bg-card-bg rounded-xl p-4 border border-card-border">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-lg">⚙️</span>
-        <span className="font-semibold text-text-primary">Display Settings</span>
+        <span className="font-semibold text-text-primary">{t.dashboard.display.title}</span>
       </div>
 
       <div className="space-y-4">
         {/* Points per channel */}
         <div>
           <label className="text-sm text-text-secondary block mb-1">
-            Waveform Points:{' '}
+            {t.dashboard.display.points}{' '}
             <span className="text-text-primary font-mono">
               {settings.points_per_channel}
             </span>
@@ -66,7 +68,7 @@ export function DisplaySettings() {
         {/* Cards per row */}
         <div>
           <label className="text-sm text-text-secondary block mb-1">
-            Cards Per Row:{' '}
+            {t.dashboard.display.cardsPerRow}{' '}
             <span className="text-text-primary font-mono">
               {settings.cards_per_row}
             </span>
@@ -98,7 +100,7 @@ export function DisplaySettings() {
         {/* Card scale — magnetic snap at useful sizes */}
         <div>
           <label className="text-sm text-text-secondary block mb-1">
-            Card Size:{' '}
+            {t.dashboard.display.cardSize}{' '}
             <span className="text-text-primary font-mono">
               {settings.card_scale.toFixed(2)}×
             </span>
@@ -135,7 +137,7 @@ export function DisplaySettings() {
             percentage for readability (raw multiplier under the hood). */}
         <div>
           <label className="text-sm text-text-secondary block mb-1">
-            Wheel Zoom Step:{' '}
+            {t.dashboard.display.wheelZoomStep}{' '}
             <span className="text-text-primary font-mono">
               {((settings.wheel_zoom_sensitivity - 1) * 100).toFixed(0)}%
             </span>
@@ -169,8 +171,8 @@ export function DisplaySettings() {
         {/* Mini hint — tells users what they can do inside each chart
             without cluttering the main card UI. */}
         <div className="text-[11px] text-text-muted pt-1 border-t border-card-border/50 space-y-0.5">
-          <div>🖱️ <span className="font-medium">Scroll</span> inside a chart → zoom Y-axis</div>
-          <div>🖱️ <span className="font-medium">Double-click</span> chart → reset zoom</div>
+          <div>🖱️ <span className="font-medium">{t.dashboard.display.hintScrollVerb}</span>{t.dashboard.display.hintScroll}</div>
+          <div>🖱️ <span className="font-medium">{t.dashboard.display.hintDoubleClickVerb}</span>{t.dashboard.display.hintDoubleClick}</div>
         </div>
       </div>
     </div>

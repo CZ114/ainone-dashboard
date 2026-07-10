@@ -24,6 +24,7 @@ import { recordingsApi } from '../../api/recordingsApi';
 import { AttachmentPills } from './AttachmentPills';
 import { ChatInputTools } from './ChatInputTools';
 import { SlashCommandMenu } from './SlashCommandMenu';
+import { useT } from '../../contexts/LanguageContext';
 import {
   getMenuMatches,
   resolveCommand,
@@ -79,6 +80,7 @@ export function ChatInput({
   onSlashDispatch,
   onModeChangeAnnounce,
 }: ChatInputProps) {
+  const t = useT();
   const input = useChatStore((s) => s.input);
   const setInput = useChatStore((s) => s.setInput);
   const pendingAttachments = useChatStore((s) => s.pendingAttachments);
@@ -212,7 +214,13 @@ export function ChatInput({
 
       out.push({
         id: newAttId(),
-        path: `(ESP32 session ${payload.id} · CSV)`,
+        // Real absolute path so Claude's Read tool can fetch the
+        // full CSV beyond the inline head preview. Prior behaviour
+        // used a display label here ("(ESP32 session X · CSV)"),
+        // which produced "file not found" when Claude guessed
+        // CWD + filename instead. Falls back to the bare filename
+        // when the FastAPI host hasn't been upgraded yet.
+        path: payload.csvPath ?? payload.csvFilename,
         filename: payload.csvFilename,
         sizeBytes: payload.csvSizeBytes ?? 0,
         mimeType: 'text/csv',
@@ -227,11 +235,14 @@ export function ChatInput({
     }
 
     if (payload.audioFilename) {
+      // Audio: prefer the absolute path (Claude's Read can take it),
+      // but ALSO surface the served HTTP URL via recording.audioUrl
+      // (rendered separately) for Bash/curl scenarios.
+      const audioPath =
+        payload.audioPath ?? recordingsApi.audioUrl(payload.audioFilename);
       out.push({
         id: newAttId(),
-        // Use the served audio URL as the path — gives Claude
-        // something it can curl from a Bash tool call.
-        path: recordingsApi.audioUrl(payload.audioFilename),
+        path: audioPath,
         filename: payload.audioFilename,
         sizeBytes: payload.audioSizeBytes ?? 0,
         mimeType: 'audio/wav',
@@ -716,7 +727,7 @@ export function ChatInput({
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="Type your message to Claude... (`/` for commands, drag a recording to attach)"
+              placeholder={t.chat.input.placeholder}
               disabled={isLoading}
               rows={1}
               className={`w-full bg-window-bg border rounded-lg px-4 py-3 text-text-primary placeholder-text-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all ${

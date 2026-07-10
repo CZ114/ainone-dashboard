@@ -108,6 +108,41 @@ interface AppState {
   ) => void;
 
   setSettings: (settings: Partial<DisplaySettings>) => void;
+
+  // Replay coordination — see ReplayPanel + AppBridge.
+  //
+  //   `replayActive`     — true while a recording is loaded into the
+  //                        replay engine. AppBridge gates incoming
+  //                        WS sensor_data on this so live ESP32 frames
+  //                        don't race the rAF that's pushing replay
+  //                        rows. Audio_level / connection_status / etc.
+  //                        still flow through unconstrained.
+  //   `replayRequest`    — cross-page command channel. RecordingsPanel
+  //                        (lives in /chat) sets this when its inline
+  //                        Play button is clicked, then navigates to
+  //                        /dashboard. ReplayPanel (in /dashboard)
+  //                        watches the field and consumes it on mount
+  //                        / change. `nonce` lets the same session id
+  //                        be re-requested without state diffing fooling
+  //                        the watcher into thinking nothing changed.
+  replayActive: boolean;
+  replayRequest: {
+    sessionId: string;
+    csvFilename: string;
+    nonce: number;
+  } | null;
+  setReplayActive: (active: boolean) => void;
+  requestReplay: (sessionId: string, csvFilename: string) => void;
+  clearReplayRequest: () => void;
+
+  // Demo mode synthetic stream — only meaningful when VITE_DEMO_MODE=1.
+  //   `demoStreamRunning` is the user-controlled play flag for the
+  //   useDemoSensorStream hook. Stays false on cold boot so the
+  //   dashboard sits idle until the user clicks the header's
+  //   ▶ Play data button. Outside demo mode the flag is never
+  //   inspected — the hook self-gates on isDemoMode() first.
+  demoStreamRunning: boolean;
+  setDemoStreamRunning: (running: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -146,6 +181,10 @@ export const useStore = create<AppState>((set) => ({
     card_scale: 1.0,
     wheel_zoom_sensitivity: 1.15,
   },
+
+  replayActive: false,
+  replayRequest: null,
+  demoStreamRunning: false,
 
   // Actions
   setSerialConnected: (connected, port) =>
@@ -310,4 +349,19 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       settings: { ...state.settings, ...newSettings },
     })),
+
+  setReplayActive: (active) => set({ replayActive: active }),
+  requestReplay: (sessionId, csvFilename) =>
+    set({
+      replayRequest: {
+        sessionId,
+        csvFilename,
+        // Date.now() is fine as a nonce — humans don't click the Play
+        // button at sub-millisecond intervals. The watcher only needs
+        // to detect that the request has changed since it last saw it.
+        nonce: Date.now(),
+      },
+    }),
+  clearReplayRequest: () => set({ replayRequest: null }),
+  setDemoStreamRunning: (running) => set({ demoStreamRunning: running }),
 }));

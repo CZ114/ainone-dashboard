@@ -261,6 +261,25 @@ class WhisperLocalExtension(Extension):
         self._ws_clients: Set[Any] = set()
         self._transcribe_inflight = False
 
+        # Voice-clip recording: separate buffer that captures the *whole*
+        # turn end-to-end (rather than the live overlapping-chunk path).
+        # Used by the call page's record-then-transcribe ESP32 mode —
+        # accuracy beats latency since the user is OK with a 1-2s wait
+        # after release. None = not recording.
+        self._clip_buf: Optional[bytearray] = None
+        # Pre-roll ring buffer — always kept fresh with the most recent
+        # ~PREROLL_MS of incoming UDP audio. When `start_voice_clip()`
+        # fires we seed `_clip_buf` with this so audio from the brief
+        # window BEFORE the start request reached us still ends up in
+        # the transcription. Without this the first ~200 ms of every
+        # turn (HTTP round-trip from PTT-down to clip start) is lost
+        # — and that's where most "first word missing" reports come from.
+        self.PREROLL_MS = 800
+        self._preroll_max = int(
+            self.PREROLL_MS / 1000 * self.SAMPLE_RATE * self.BYTES_PER_SAMPLE
+        )
+        self._preroll_buf = bytearray()
+
         # Pinned transcription language (ISO 639-1). Set per ws-client
         # via `/ws/transcribe?lang=<BCP-47>` — frontend passes the
         # user's selected voiceLang. None = auto-detect (old behavior,
@@ -944,8 +963,23 @@ class WhisperLocalExtension(Extension):
 
     def _on_frame(self, frame: bytes) -> None:
         """UDP reader-thread callback. Keep cheap — no transcribe here."""
+        # Pre-roll ring: always keep the most recent PREROLL_MS of
+        # audio so `start_voice_clip()` can splice it in. Bounded
+        # delete keeps memory tiny (~25 KB at 800 ms / 16 kHz mono).
+        self._preroll_buf.extend(frame)
+        if len(self._preroll_buf) > self._preroll_max:
+            del self._preroll_buf[: len(self._preroll_buf) - self._preroll_max]
+
+        # Voice-clip path: append the raw frame regardless of WS-client
+        # state. The clip buffer is for the call page's record-then-
+        # transcribe flow and must capture audio even when no live WS
+        # consumer is connected.
+        if self._clip_buf is not None:
+            self._clip_buf.extend(frame)
+
         # Drop audio when nobody's listening (saves CPU when chat is
-        # open but the user hasn't started the ESP32 mic).
+        # open but the user hasn't started the ESP32 mic). Live
+        # streaming path only.
         if not self._ws_clients:
             return
         self._buffer.extend(frame)
@@ -1135,6 +1169,155 @@ class WhisperLocalExtension(Extension):
             _log("no clients left — cleared buffer, stopping chunking")
 
     # -------- Public helpers -----------------------------------------------
+
+    # -------- Voice-clip path (record-then-transcribe) --------------------
+    #
+    # The live path (transcribe_pcm16, /ws/transcribe) optimises for
+    # latency: chunks the audio every ~3 s and pushes partial transcripts
+    # immediately. Faster but less accurate, and the partials drift in
+    # noisy environments.
+    #
+    # The clip path is what the /call page uses now: buffer the WHOLE
+    # turn (PTT down → up), then transcribe in one shot with
+    # vad_filter=True. Higher quality, ~1-2 s of latency at the end.
+
+    def start_voice_clip(self) -> None:
+        """Begin buffering raw UDP audio for a one-shot transcribe.
+        Idempotent: calling while already active just resets the buffer
+        so the user gets a fresh clip each turn.
+
+        Seeds the buffer with the most recent ~PREROLL_MS of audio
+        from the rolling pre-roll buffer. That way the ~200 ms HTTP
+        round-trip between the user pressing PTT and this method
+        firing doesn't eat their first word. The pre-roll size is
+        tuned conservative-large; trimming silence at the front is
+        whisper's job (vad_filter=True does it) so a generous lookback
+        only helps."""
+        seed = bytes(self._preroll_buf)
+        self._clip_buf = bytearray(seed)
+        _log(f"voice clip: started (preroll seed: {len(seed)} B)")
+
+    def stop_voice_clip(self) -> bytes:
+        """Stop buffering and return the accumulated PCM16 bytes.
+        Returns empty bytes if the clip wasn't active."""
+        if self._clip_buf is None:
+            return b""
+        data = bytes(self._clip_buf)
+        self._clip_buf = None
+        _log(f"voice clip: stopped — {len(data)} B")
+        return data
+
+    def transcribe_pcm_clip(
+        self, data: bytes, lang: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Transcribe a raw PCM16 mono 16 kHz blob (no container header).
+
+        Differs from transcribe_pcm16 in that we lean on faster-whisper's
+        own vad_filter and skip the silence gate / pre-amp the live
+        chunked path uses. For end-to-end clips the model's VAD is
+        better than our hand-rolled RMS thresholds.
+
+        Returns the same dict shape as transcribe_audio_file so the API
+        layer can use a single response schema.
+        """
+        import numpy as np  # type: ignore
+
+        if self._model is None:
+            raise RuntimeError(
+                "Whisper model not loaded yet — try again in a few seconds."
+            )
+        if not data:
+            return {
+                "text": "",
+                "language": None,
+                "language_probability": 0.0,
+                "duration_seconds": 0.0,
+                "transcribe_ms": 0.0,
+            }
+
+        chosen_lang = lang if lang is not None else self._active_lang
+        audio = np.frombuffer(data, dtype=np.int16).astype("float32") / 32768.0
+        duration_seconds = len(audio) / float(self.SAMPLE_RATE)
+        _log(
+            f"transcribe_pcm_clip: {len(data)} B "
+            f"({duration_seconds:.1f} s, lang={chosen_lang or 'auto'})"
+        )
+
+        t0 = time.perf_counter()
+        segments, info = self._model.transcribe(
+            audio,
+            beam_size=self._beam_size,
+            language=chosen_lang,
+            vad_filter=True,
+        )
+        text = "".join(s.text for s in segments).strip()
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        _log(
+            f"transcribe_pcm_clip done in {elapsed_ms:.0f} ms → "
+            f"chars={len(text)}"
+        )
+        return {
+            "text": text,
+            "language": getattr(info, "language", None),
+            "language_probability": float(
+                getattr(info, "language_probability", 0.0)
+            ),
+            "duration_seconds": duration_seconds,
+            "transcribe_ms": round(elapsed_ms, 1),
+        }
+
+    def transcribe_blob(self, data: bytes, lang: Optional[str] = None) -> Dict[str, Any]:
+        """Batch-transcribe an arbitrary audio blob (WebM/Opus, WAV, MP3,
+        etc.) — used by the Call page when the user records via the
+        browser MediaRecorder.
+
+        Why a separate method from `transcribe_audio_file`: that one
+        opens a `wave.Wave_read` and demands 16 kHz mono PCM16. Browser
+        MediaRecorder emits WebM/Opus by default, which `wave` can't
+        parse. faster-whisper's `transcribe()`, however, accepts any
+        BinaryIO — it shells out to pyav internally to decode whatever
+        codec ffmpeg understands. So we pass the bytes through and let
+        the library do the work.
+
+        `lang` is a Whisper code (e.g. "en", "zh") or None for auto.
+        Defaults to the extension's currently-active lang.
+
+        Returns the same shape as `transcribe_audio_file` so the API
+        layer can use a single response schema.
+        """
+        import io
+
+        if self._model is None:
+            raise RuntimeError(
+                "Whisper model not loaded yet — try again in a few seconds."
+            )
+
+        chosen_lang = lang if lang is not None else self._active_lang
+        size = len(data)
+        _log(f"transcribe_blob: {size} bytes, lang={chosen_lang or 'auto'}")
+
+        t0 = time.perf_counter()
+        segments, info = self._model.transcribe(
+            io.BytesIO(data),
+            beam_size=self._beam_size,
+            language=chosen_lang,
+            vad_filter=True,
+        )
+        text = "".join(s.text for s in segments).strip()
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        _log(
+            f"transcribe_blob done in {elapsed_ms:.0f} ms → "
+            f"lang={getattr(info, 'language', '?')}, chars={len(text)}"
+        )
+        return {
+            "text": text,
+            "language": getattr(info, "language", None),
+            "language_probability": float(
+                getattr(info, "language_probability", 0.0)
+            ),
+            "duration_seconds": float(getattr(info, "duration", 0.0)),
+            "transcribe_ms": round(elapsed_ms, 1),
+        }
 
     def transcribe_audio_file(self, path: Path) -> Dict[str, Any]:
         """Batch-transcribe one already-saved WAV (NOT for streaming).

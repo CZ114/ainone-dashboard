@@ -1,8 +1,10 @@
 // AudioLevelMeter - displays audio level
 
 import { useStore } from '../../store';
+import { useT } from '../../contexts/LanguageContext';
 
 export function AudioLevelMeter() {
+  const t = useT();
   const audio = useStore((state) => state.audio);
 
   // Convert dB to percentage (assuming -60dB to 0dB range)
@@ -20,12 +22,14 @@ export function AudioLevelMeter() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-ch-audio text-lg">🎤</span>
-          <span className="font-semibold text-text-primary">Audio</span>
+          <span className="font-semibold text-text-primary">{t.dashboard.audioMeter.title}</span>
         </div>
         <span
           className={`text-sm ${audio.connected ? 'text-status-connected' : 'text-text-muted'}`}
         >
-          {audio.connected ? '● Connected' : '○ Disconnected'}
+          {audio.connected
+            ? t.dashboard.connectionPanel.connectedDot
+            : t.dashboard.connectionPanel.disconnectedDot}
         </span>
       </div>
 

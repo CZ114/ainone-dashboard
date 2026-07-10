@@ -16,6 +16,7 @@ import { handleProjectsRequest } from "./handlers/projects.ts";
 import { handleHistoriesRequest } from "./handlers/histories.ts";
 import { handleConversationRequest } from "./handlers/conversations.ts";
 import { handleChatRequest } from "./handlers/chat.ts";
+import { handleVoiceChat } from "./handlers/voice_chat.ts";
 import { handlePermissionResponse } from "./handlers/permission.ts";
 import { handleAbortRequest } from "./handlers/abort.ts";
 import {
@@ -104,6 +105,10 @@ export function createApp(
   );
 
   app.post("/api/chat", (c) => handleChatRequest(c, requestAbortControllers));
+  // Direct-streaming endpoint for the /call voice page. Bypasses the
+  // Claude CLI subprocess and the agent SDK entirely — see comment in
+  // handlers/voice_chat.ts for the latency rationale.
+  app.post("/api/voice-chat", (c) => handleVoiceChat(c));
   app.post("/api/chat/permission", (c) => handlePermissionResponse(c));
 
   app.get("/api/sessions", (c) => handleSessionList(c));

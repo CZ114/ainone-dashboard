@@ -338,6 +338,7 @@ async function* executeClaudeCommand(
   thinking?: ThinkingConfig,
   // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
   additionalSystemPrompt?: string,
+  additionalDirectories?: string[],
 ): AsyncGenerator<StreamResponse> {
   // Acquire lock - reject if another command is running
   const lock = acquireLock();
@@ -495,6 +496,17 @@ async function* executeClaudeCommand(
         // additionalSystemPrompt. Kept so Phase 3 can probe a working
         // path (e.g. via a different preset) without rebuilding wire.
         ...(additionalSystemPrompt ? { appendSystemPrompt: additionalSystemPrompt } : {}),
+        // Extra directories to expose to Claude's tool-permission
+        // allow list (mirrors --add-dir on the CLI). The frontend
+        // collects parent dirs of pending attachments so a CSV
+        // dragged in from outside the session cwd can still be Read.
+        // Without this, Claude's Read tool 404's on any path that
+        // isn't a descendant of cwd, and the user sees the bug
+        // reported on 2026-05: drop a recording → Claude only
+        // sees the inline head preview, never the full file.
+        ...(additionalDirectories && additionalDirectories.length > 0
+          ? { additionalDirectories }
+          : {}),
       },
     };
 
@@ -673,6 +685,8 @@ export async function handleChatRequest(
     allowedTools: chatRequest.allowedTools?.length ?? 0,
     // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
     hasAdditionalSystemPrompt: typeof chatRequest.additionalSystemPrompt === "string",
+    additionalDirectories:
+      chatRequest.additionalDirectories?.length ?? 0,
   });
 
   const stream = new ReadableStream({
@@ -690,6 +704,7 @@ export async function handleChatRequest(
           chatRequest.effort,
           chatRequest.thinking,
           chatRequest.additionalSystemPrompt,
+          chatRequest.additionalDirectories,
         )) {
           const data = JSON.stringify(chunk) + "\n";
           controller.enqueue(new TextEncoder().encode(data));

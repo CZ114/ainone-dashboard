@@ -118,7 +118,7 @@ export function BackendGate({ children }: BackendGateProps) {
             status={pythonStatus}
           />
           <StatusRow
-            label="Claude backend (Hono)"
+            label="Agent backend (Hono)"
             port={3000}
             status={honoStatus}
           />

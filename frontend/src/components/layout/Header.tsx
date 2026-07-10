@@ -5,6 +5,9 @@ import { useStore } from '../../store';
 import { useDiaryStore } from '../../store/diaryStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../ThemeToggle';
+import { LanguageToggle } from '../LanguageToggle';
+import { useT } from '../../contexts/LanguageContext';
+import { isDemoMode } from '../../lib/demoMode';
 
 export function Header() {
   const serial = useStore((state) => state.serial);
@@ -15,6 +18,8 @@ export function Header() {
   const diaryUnread = useDiaryStore((s) => s.unread);
   const location = useLocation();
   const navigate = useNavigate();
+  const demo = isDemoMode();
+  const t = useT();
 
   // Wrap route changes in startTransition so React 18 treats the
   // unmount/mount work as a non-urgent update — meaning sensor-data
@@ -49,17 +54,31 @@ export function Header() {
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 shrink-0"
-          aria-label="i-Thread Lab — Imperial Hamlyn Centre (opens in a new tab)"
-          title="Open i-Thread Lab homepage at imperial.ac.uk in a new tab"
+          aria-label={t.header.logoAria}
+          title={t.header.logoTitle}
         >
           <img
             src="/logo-horizontal.svg"
             alt="i-Thread Lab"
-            className="h-14 w-auto select-none md:h-16"
+            className="h-20 w-auto select-none md:h-24"
             draggable={false}
             width={720}
             height={240}
           />
+          {/* DEMO badge — visible only when start.bat picked the demo
+              entry (VITE_DEMO_MODE=1). Sits next to the logo so it's
+              obvious which entry the user came in through. The actual
+              data wiring is unchanged for now; this is the entry-point
+              marker, not a data-source indicator. */}
+          {demo && (
+            <span
+              className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-accent/15 text-accent border border-accent/40 select-none"
+              title={t.header.demoBadgeTitle}
+              aria-label={t.header.demoBadge}
+            >
+              {t.header.demoBadge}
+            </span>
+          )}
         </a>
 
         {/* Navigation — buttons (not <Link>) so we can wrap navigate
@@ -74,7 +93,7 @@ export function Header() {
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
           >
-            Dashboard
+            {t.header.nav.dashboard}
           </button>
           <button
             type="button"
@@ -85,7 +104,18 @@ export function Header() {
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
           >
-            Claude Chat
+            {t.header.nav.chat}
+          </button>
+          <button
+            type="button"
+            onClick={() => goTo('/call')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              location.pathname === '/call'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
+            }`}
+          >
+            {t.header.nav.call}
           </button>
           <button
             type="button"
@@ -96,11 +126,11 @@ export function Header() {
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
           >
-            Diary
+            {t.header.nav.diary}
             {diaryUnread > 0 && (
               <span
                 className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-status-disconnected text-white text-[10px] font-bold flex items-center justify-center"
-                aria-label={`${diaryUnread} unread diary entries`}
+                aria-label={t.header.diaryUnreadAria(diaryUnread)}
               >
                 {diaryUnread > 99 ? '99+' : diaryUnread}
               </span>
@@ -114,9 +144,9 @@ export function Header() {
                 ? 'bg-accent text-white'
                 : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
             }`}
-            aria-label="Open settings"
+            aria-label={t.header.settingsAria}
           >
-            Settings
+            {t.header.nav.settings}
           </button>
         </nav>
 
@@ -131,7 +161,8 @@ export function Header() {
                 }`}
               />
               <span className="text-text-secondary">
-                Serial {serial.connected ? serial.port : 'Disconnected'}
+                {t.header.status.serial}{' '}
+                {serial.connected ? serial.port : t.header.status.disconnected}
               </span>
             </div>
 
@@ -142,7 +173,8 @@ export function Header() {
                 }`}
               />
               <span className="text-text-secondary">
-                BLE {ble.connected ? ble.deviceName : 'Disconnected'}
+                {t.header.status.ble}{' '}
+                {ble.connected ? ble.deviceName : t.header.status.disconnected}
               </span>
             </div>
 
@@ -153,7 +185,8 @@ export function Header() {
                 }`}
               />
               <span className="text-text-secondary">
-                Audio {audio.connected ? 'Active' : 'Inactive'}
+                {t.header.status.audio}{' '}
+                {audio.connected ? t.header.status.active : t.header.status.inactive}
               </span>
             </div>
           </div>
@@ -162,15 +195,16 @@ export function Header() {
           {isRecording && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-status-disconnected/20 rounded-lg">
               <span className="w-2 h-2 rounded-full bg-status-disconnected animate-pulse" />
-              <span className="text-status-disconnected text-sm font-medium">Recording</span>
+              <span className="text-status-disconnected text-sm font-medium">{t.header.status.recording}</span>
             </div>
           )}
 
           {/* Channel count */}
           <div className="text-sm text-text-secondary">
-            <span className="font-mono">{channelCount}</span> channels
+            <span className="font-mono">{channelCount}</span> {t.header.status.channels}
           </div>
 
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </div>

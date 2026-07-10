@@ -12,6 +12,10 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      '/api/voice-chat': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       '/api/projects': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -66,6 +70,14 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/extensions': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/api/voice': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/api/tts': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

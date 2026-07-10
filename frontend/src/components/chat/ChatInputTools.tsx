@@ -94,14 +94,14 @@ const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
   default: {
     value: 'Ask before edit',
     detail:
-      'Ask before edit — Claude asks before running anything that could ' +
+      'Ask before edit — the agent asks before running anything that could ' +
       'modify your machine (edits, shell, network). Safest for exploratory work.',
     dot: 'bg-gray-400',
   },
   plan: {
     value: 'Plan',
     detail:
-      'Plan — Claude drafts a plan with read-only tools and stops to ask ' +
+      'Plan — the agent drafts a plan with read-only tools and stops to ask ' +
       'for approval before executing anything. Best for review-first workflows.',
     dot: 'bg-accent-soft',
   },
@@ -115,7 +115,7 @@ const PERMISSION_META: Record<PermissionModeValue, ModeMeta> = {
   bypassPermissions: {
     value: 'Bypass',
     detail:
-      'Bypass — every permission check is skipped; Claude runs fully ' +
+      'Bypass — every permission check is skipped; the agent runs fully ' +
       'autonomously. Use only in a trusted sandbox / project.',
     dot: 'bg-orange-400',
   },

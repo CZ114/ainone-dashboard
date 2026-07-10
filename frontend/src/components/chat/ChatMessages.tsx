@@ -15,6 +15,7 @@ import type {
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
 import { MessageMarkdown } from './MessageMarkdown';
+import { useT } from '../../contexts/LanguageContext';
 
 interface ChatMessagesProps {
   messages: AllMessage[];
@@ -79,7 +80,7 @@ function ChatMessageComponent({ message }: { message: ChatMessage }) {
         }`}
       >
         <div className={`text-xs font-semibold mb-1 ${isUser ? 'text-white' : 'text-text-muted'}`}>
-          {isUser ? 'You' : 'Claude'}
+          {isUser ? 'You' : 'Agent'}
         </div>
         {/* Markdown body — renders headings / lists / tables / code
             fences / **bold** / links the way Claude actually writes
@@ -100,6 +101,7 @@ function ChatMessageComponent({ message }: { message: ChatMessage }) {
 
 // System message (init, result, error)
 function SystemMessageComponent({ message }: { message: SystemMessage }) {
+  const t = useT();
   if (message.subtype === 'init') {
     return (
       <div className="mb-3">
@@ -131,7 +133,7 @@ function SystemMessageComponent({ message }: { message: SystemMessage }) {
   if (message.subtype === 'error') {
     return (
       <div className="mb-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
-        <div className="text-red-400 text-sm font-medium">Error</div>
+        <div className="text-red-400 text-sm font-medium">{t.chat.errors.label}</div>
         <div className="text-red-300 text-xs mt-1">{message.content}</div>
       </div>
     );
@@ -739,9 +741,9 @@ function PermissionRequestComponent({
   // Header copy — prefer the SDK's pre-rendered title when present.
   const isAsk = askQuestions !== null;
   const headerTitle = isAsk
-    ? 'Claude is asking you a question'
+    ? 'The agent is asking you a question'
     : message.title ||
-      `Claude wants to run ${message.displayName || message.toolName}`;
+      `The agent wants to run ${message.displayName || message.toolName}`;
 
   // Visual: neutral card with a thin colored left rule — the amber/blue
   // accent is just a hint of intent (warning for permission, info for
@@ -849,7 +851,7 @@ function PermissionRequestComponent({
                 Deny
               </button>
               <span className={`text-[11px] ml-auto ${mutedBodyCls}`}>
-                {submitting ? 'Sending…' : 'Claude is waiting…'}
+                {submitting ? 'Sending…' : 'Agent is waiting…'}
               </span>
             </div>
             {submitError && (
@@ -863,7 +865,7 @@ function PermissionRequestComponent({
         {isPending && !isAsk && denying && (
           <div className={`px-4 py-3 space-y-2 ${stripCls}`}>
             <label className={`text-xs block ${bodyCls}`}>
-              Reply to Claude (sent back as the deny reason — leave blank for the default):
+              Reply to the agent (sent back as the deny reason — leave blank for the default):
             </label>
             <textarea
               value={denyReason}
@@ -986,12 +988,13 @@ function TodoMessageComponent({ message }: { message: TodoMessage }) {
 
 // Loading indicator
 export function LoadingIndicator() {
+  const t = useT();
   return (
     <div className="flex justify-start mb-3">
       <div className="rounded-lg px-4 py-3 bg-card-bg border border-card-border">
         <div className="flex items-center gap-2 text-sm text-text-secondary">
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          <span className="animate-pulse">Claude is thinking...</span>
+          <span className="animate-pulse">{t.chat.thinking}</span>
         </div>
       </div>
     </div>
@@ -1000,6 +1003,7 @@ export function LoadingIndicator() {
 
 // Main ChatMessages component
 export function ChatMessages({ messages }: ChatMessagesProps) {
+  const t = useT();
   if (messages.length === 0) {
     return (
       // Self-contained vertical centering — min-h-[60vh] gives the
@@ -1009,12 +1013,9 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
       <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
         <div className="text-6xl mb-4">💬</div>
         <h2 className="text-xl font-semibold text-text-primary mb-2">
-          Start a conversation
+          {t.chat.empty.title}
         </h2>
-        <p className="text-text-muted max-w-md">
-          Send a message to Claude Code. You can ask questions, request code reviews,
-          or get help with your ESP32 sensor project.
-        </p>
+        <p className="text-text-muted max-w-md">{t.chat.empty.body}</p>
       </div>
     );
   }

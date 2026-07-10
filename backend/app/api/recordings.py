@@ -72,10 +72,15 @@ def _session_entry(ts: str) -> dict:
     csv_path = CSV_DIR / f"sensor_{ts}.csv"
     audio_path = AUDIO_DIR / f"audio_{ts}.wav"
 
+    # `path` is the absolute path on disk. Surfaced so the chat-side
+    # attachment flow can hand Claude a real path to Read instead of a
+    # display label (the prior behaviour produced "file not found" when
+    # Claude's CWD differed from <repo>/backend/data/csv/).
     csv_info = None
     if csv_path.is_file():
         csv_info = {
             "filename": csv_path.name,
+            "path": str(csv_path.resolve()),
             "size_bytes": csv_path.stat().st_size,
             "rows": _count_csv_rows(csv_path),
         }
@@ -84,6 +89,7 @@ def _session_entry(ts: str) -> dict:
     if audio_path.is_file():
         audio_info = {
             "filename": audio_path.name,
+            "path": str(audio_path.resolve()),
             "size_bytes": audio_path.stat().st_size,
             "duration_seconds": _wav_duration_seconds(audio_path),
         }

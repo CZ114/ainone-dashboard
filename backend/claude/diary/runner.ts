@@ -25,6 +25,7 @@ import {
   getSecrets,
   resolveSecrets,
 } from "./agentStore.ts";
+import type { DiaryLang } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 
 export interface RunResult {
@@ -50,6 +51,12 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Optional abort signal so callers can cancel a run. */
   signal?: AbortSignal;
+  /**
+   * UI language — only consumed by the built-in `diary_observer`
+   * fallback to pick its system prompt. User-defined agents bring
+   * their own prompt and ignore this. Defaults to 'en'.
+   */
+  lang?: DiaryLang;
 }
 
 // 180s is generous — most providers (Anthropic / DeepSeek / MiniMax)
@@ -158,7 +165,7 @@ async function runAgentImpl(
   userPrompt: string,
   opts: RunOptions = {},
 ): Promise<RunResult> {
-  const agent = await getAgent(agentId);
+  const agent = await getAgent(agentId, opts.lang ?? "en");
   const secrets = await getSecrets();
   const userEnv = await getUserEnvFromSettings();
   const agentEnv = resolveSecrets(agent.env, secrets);

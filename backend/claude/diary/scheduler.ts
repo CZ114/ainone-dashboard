@@ -89,6 +89,7 @@ async function tick(opts: { boot?: boolean } = {}): Promise<void> {
       agentId: cfg.schedule.daily.agent_id,
       delayed,
       signal: inFlight.signal,
+      lang: cfg.lang ?? "en",
     });
     if (res.ok && res.entry) {
       await patchConfig({

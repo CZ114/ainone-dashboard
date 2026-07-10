@@ -1,10 +1,12 @@
 // ConnectionPanel - serial and BLE connection controls
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { serialApi, bleApi, audioApi } from '../../api/client';
+import { useT } from '../../contexts/LanguageContext';
 
 export function ConnectionPanel() {
+  const t = useT();
   const serial = useStore((state) => state.serial);
   const ble = useStore((state) => state.ble);
   const audio = useStore((state) => state.audio);
@@ -61,22 +63,33 @@ export function ConnectionPanel() {
   const [bleAction, setBleAction] = useState<Action>(null);
   const [audioAction, setAudioAction] = useState<Action>(null);
 
-  // Fetch available ports on mount
-  useEffect(() => {
-    const fetchPorts = async () => {
-      try {
-        const result = await serialApi.listPorts();
-        setAvailablePorts(result.ports || []);
-        if (result.ports?.length > 0) {
-          setSelectedPort(result.ports[0].port);
-        }
-      } catch (e) {
-        console.error('Failed to list ports:', e);
-      }
-    };
-
-    fetchPorts();
+  // Fetch available serial ports — once on mount, plus on demand via
+  // the ↻ button next to the dropdown. We don't poll; plugging in a
+  // USB-serial device after page load is rare enough that a manual
+  // refresh is cleaner than a 2-second background fetch loop.
+  // Selecting the first port only auto-fires when nothing is selected
+  // yet, so a refresh that returns the same set won't move the user's
+  // selection out from under them.
+  const [portsRefreshing, setPortsRefreshing] = useState(false);
+  const fetchPorts = useCallback(async () => {
+    setPortsRefreshing(true);
+    try {
+      const result = await serialApi.listPorts();
+      const ports: Array<{ port: string; desc?: string }> = result.ports || [];
+      setAvailablePorts(ports);
+      setSelectedPort((prev) => {
+        if (prev && ports.some((p) => p.port === prev)) return prev;
+        return ports[0]?.port ?? '';
+      });
+    } catch (e) {
+      console.error('Failed to list ports:', e);
+    } finally {
+      setPortsRefreshing(false);
+    }
   }, [setAvailablePorts]);
+  useEffect(() => {
+    void fetchPorts();
+  }, [fetchPorts]);
 
   const handleSerialConnect = async () => {
     if (serial.connected) {
@@ -194,11 +207,13 @@ export function ConnectionPanel() {
       {/* Serial Connection */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-text-primary">Serial Port</span>
+          <span className="text-sm font-semibold text-text-primary">{t.dashboard.connectionPanel.serialTitle}</span>
           <span
             className={`text-xs ${serial.connected ? 'text-status-connected' : 'text-text-muted'}`}
           >
-            {serial.connected ? '● Connected' : '○ Disconnected'}
+            {serial.connected
+              ? t.dashboard.connectionPanel.connectedDot
+              : t.dashboard.connectionPanel.disconnectedDot}
           </span>
         </div>
 
@@ -208,6 +223,15 @@ export function ConnectionPanel() {
               text can't be CSS-truncated across browsers, so we also
               clip the label string and surface the full value via
               title + the currently-selected port shown below. */}
+          <button
+            type="button"
+            onClick={() => void fetchPorts()}
+            disabled={serial.connected || serialAction !== null || portsRefreshing}
+            title="Refresh port list"
+            className="shrink-0 px-2 py-1.5 rounded border border-card-border text-text-muted hover:text-text-primary hover:bg-card-border/40 disabled:opacity-50"
+          >
+            {portsRefreshing ? '⏳' : '↻'}
+          </button>
           <select
             value={selectedPort}
             onChange={(e) => setSelectedPort(e.target.value)}
@@ -257,10 +281,10 @@ export function ConnectionPanel() {
             {labelFor(
               serialAction,
               serial.connected,
-              'Connect',
-              'Disconnect',
-              'Connecting…',
-              'Disconnecting…',
+              t.dashboard.connectionPanel.btn.connect,
+              t.dashboard.connectionPanel.btn.disconnect,
+              t.dashboard.connectionPanel.btn.connecting,
+              t.dashboard.connectionPanel.btn.disconnecting,
             )}
           </button>
         </div>
@@ -269,11 +293,13 @@ export function ConnectionPanel() {
       {/* BLE Connection */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-text-primary">BLE</span>
+          <span className="text-sm font-semibold text-text-primary">{t.dashboard.connectionPanel.bleTitle}</span>
           <span
             className={`text-xs ${ble.connected ? 'text-status-connected' : 'text-text-muted'}`}
           >
-            {ble.connected ? '● Connected' : '○ Disconnected'}
+            {ble.connected
+              ? t.dashboard.connectionPanel.connectedDot
+              : t.dashboard.connectionPanel.disconnectedDot}
           </span>
         </div>
 
@@ -283,9 +309,9 @@ export function ConnectionPanel() {
             value={ble.connected && ble.deviceName ? ble.deviceName : bleDeviceName}
             onChange={(e) => setBleDeviceName(e.target.value)}
             disabled={ble.connected || bleAction !== null}
-            placeholder="ESP32-S3-MultiSensor"
+            placeholder={t.dashboard.connectionPanel.bleNamePlaceholder}
             spellCheck={false}
-            title="BLE advertised name to scan for"
+            title={t.dashboard.connectionPanel.bleNameTitle}
             className="flex-1 min-w-0 bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm font-mono disabled:opacity-50"
           />
 
@@ -301,10 +327,10 @@ export function ConnectionPanel() {
             {labelFor(
               bleAction,
               ble.connected,
-              'Scan',
-              'Disconnect',
-              'Connecting…',
-              'Disconnecting…',
+              t.dashboard.connectionPanel.btn.scan,
+              t.dashboard.connectionPanel.btn.disconnect,
+              t.dashboard.connectionPanel.btn.connecting,
+              t.dashboard.connectionPanel.btn.disconnecting,
             )}
           </button>
         </div>
@@ -313,17 +339,19 @@ export function ConnectionPanel() {
       {/* Audio Connection */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-text-primary">Audio (UDP)</span>
+          <span className="text-sm font-semibold text-text-primary">{t.dashboard.connectionPanel.audioTitle}</span>
           <span
             className={`text-xs ${audio.connected ? 'text-status-connected' : 'text-text-muted'}`}
           >
-            {audio.connected ? '● Connected' : '○ Disconnected'}
+            {audio.connected
+              ? t.dashboard.connectionPanel.connectedDot
+              : t.dashboard.connectionPanel.disconnectedDot}
           </span>
         </div>
 
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 bg-window-bg border border-card-border rounded px-3 py-1.5">
-            <span className="text-xs text-text-muted shrink-0">Port</span>
+            <span className="text-xs text-text-muted shrink-0">{t.dashboard.connectionPanel.portLabel}</span>
             <input
               type="number"
               min={1}
@@ -332,8 +360,8 @@ export function ConnectionPanel() {
               value={audioPort}
               onChange={(e) => setAudioPort(e.target.value)}
               disabled={audio.connected || audioAction !== null}
-              placeholder="8888"
-              title="UDP port the ESP32 sends audio frames to (1 – 65535)"
+              placeholder={t.dashboard.connectionPanel.audioPortPlaceholder}
+              title={t.dashboard.connectionPanel.audioPortTitle}
               className="w-full bg-transparent text-text-primary text-sm font-mono outline-none disabled:opacity-50"
             />
           </div>
@@ -350,10 +378,10 @@ export function ConnectionPanel() {
             {labelFor(
               audioAction,
               audio.connected,
-              'Start',
-              'Stop',
-              'Starting…',
-              'Stopping…',
+              t.dashboard.connectionPanel.btn.start,
+              t.dashboard.connectionPanel.btn.stop,
+              t.dashboard.connectionPanel.btn.starting,
+              t.dashboard.connectionPanel.btn.stopping,
             )}
           </button>
         </div>

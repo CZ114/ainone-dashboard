@@ -11,6 +11,7 @@ import { logger } from "../utils/logger.ts";
 import type {
   DiaryEntry,
   DiaryEntryType,
+  DiaryLang,
   DiaryTrigger,
 } from "../../shared/types.ts";
 import { build as buildContext } from "./contextBuilder.ts";
@@ -28,6 +29,12 @@ export interface OrchestrateOptions {
   signal?: AbortSignal;
   /** Distinct id for matching events on the bus to the calling stream. */
   requestId?: string;
+  /**
+   * UI language for the built-in `diary_observer` system prompt.
+   * Manual triggers pass the user's current ui-lang; scheduled runs
+   * pass `config.lang ?? 'en'`.
+   */
+  lang?: DiaryLang;
 }
 
 export interface OrchestrateResult {
@@ -65,6 +72,7 @@ export async function runAndPersist(
 
     const run = await runAgent(opts.agentId, ctx.prompt, {
       signal: opts.signal,
+      lang: opts.lang,
       onChunk: (delta) =>
         diaryBus.emit({ type: "chunk", request_id: requestId, delta }),
     });

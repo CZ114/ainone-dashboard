@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
 import { recordingApi } from '../../api/client';
+import { useT } from '../../contexts/LanguageContext';
 
 const PRESETS_S = [30, 60, 120, 300, 600];
 const MIN_DURATION_S = 1;
@@ -32,6 +33,7 @@ const presetLabel = (s: number): string => {
 };
 
 export function RecordingControls() {
+  const t = useT();
   const recording = useStore((state) => state.recording);
   const recordingStart = useStore((state) => state.recordingStart);
   const recordingStop = useStore((state) => state.recordingStop);
@@ -76,9 +78,7 @@ export function RecordingControls() {
   const handleStart = async () => {
     const d = parseDuration();
     if (d === null) {
-      setErrorMsg(
-        `Enter a duration between ${MIN_DURATION_S} and ${MAX_DURATION_S} seconds.`,
-      );
+      setErrorMsg(t.dashboard.recording.durationError(MIN_DURATION_S, MAX_DURATION_S));
       return;
     }
     // Normalise the input to the clamped value so the user sees what
@@ -93,7 +93,7 @@ export function RecordingControls() {
       recordingStart(d);
     } catch (e) {
       console.error('[Recording] start failed:', e);
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to start');
+      setErrorMsg(e instanceof Error ? e.message : t.dashboard.recording.startFailed);
     } finally {
       setBusy(null);
     }
@@ -125,7 +125,7 @@ export function RecordingControls() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-status-disconnected text-lg">⏺</span>
-          <span className="font-semibold text-text-primary">Recording</span>
+          <span className="font-semibold text-text-primary">{t.dashboard.recording.title}</span>
         </div>
         {recording.active && (
           <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export function RecordingControls() {
           {/* Duration input */}
           <div>
             <label className="block text-xs text-text-secondary mb-1">
-              Duration (seconds)
+              {t.dashboard.recording.durationLabel}
             </label>
             <input
               type="text"
@@ -164,7 +164,7 @@ export function RecordingControls() {
               }}
               disabled={busy !== null}
               className="w-full bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm font-mono disabled:opacity-50"
-              title={`Any value from ${MIN_DURATION_S} to ${MAX_DURATION_S} seconds`}
+              title={t.dashboard.recording.durationTitle(MIN_DURATION_S, MAX_DURATION_S)}
               placeholder={String(DEFAULT_DURATION_S)}
             />
           </div>
@@ -197,7 +197,7 @@ export function RecordingControls() {
               disabled={busy !== null}
               className="w-4 h-4 accent-accent"
             />
-            <span className="text-sm text-text-secondary">Include audio</span>
+            <span className="text-sm text-text-secondary">{t.dashboard.recording.includeAudio}</span>
           </label>
 
           {/* Start button — disabled when the typed duration parses
@@ -207,7 +207,7 @@ export function RecordingControls() {
             disabled={busy !== null || !isValidDuration}
             className="w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
-            {busy === 'starting' ? 'Starting…' : 'Start Recording'}
+            {busy === 'starting' ? t.dashboard.recording.starting : t.dashboard.recording.start}
           </button>
 
           {errorMsg && (
@@ -221,8 +221,8 @@ export function RecordingControls() {
           {/* Progress bar */}
           <div>
             <div className="flex justify-between text-xs text-text-muted mb-1 font-mono">
-              <span>{formatTime(recording.elapsedSec)} elapsed</span>
-              <span>{formatTime(recording.duration)} total</span>
+              <span>{formatTime(recording.elapsedSec)} {t.dashboard.recording.elapsed}</span>
+              <span>{formatTime(recording.duration)} {t.dashboard.recording.total}</span>
             </div>
             <div className="h-2 bg-window-bg border border-card-border rounded overflow-hidden">
               <div
@@ -238,7 +238,7 @@ export function RecordingControls() {
             disabled={busy !== null}
             className="w-full bg-status-danger hover:opacity-90 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
-            {busy === 'stopping' ? 'Stopping…' : 'Stop Recording'}
+            {busy === 'stopping' ? t.dashboard.recording.stopping : t.dashboard.recording.stop}
           </button>
 
           {errorMsg && (

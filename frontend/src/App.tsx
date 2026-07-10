@@ -5,12 +5,15 @@ import Dashboard from './components/Dashboard';
 import ChatPage from './components/chat/ChatPage';
 import SettingsPage from './components/settings/SettingsPage';
 import DiaryPage from './components/diary/DiaryPage';
+import CallPage from './components/call/CallPage';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 import { AppBridge } from './components/AppBridge';
 import { BackendGate } from './components/BackendGate';
 
 function App() {
   return (
+    <LanguageProvider>
     <ThemeProvider>
       {/* BackendGate covers everything until /api/health (Python) and
           /api/projects (Hono) both respond. Without it, Vite is up
@@ -30,11 +33,13 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/diary" element={<DiaryPage />} />
+            <Route path="/call" element={<CallPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </BrowserRouter>
       </BackendGate>
     </ThemeProvider>
+    </LanguageProvider>
   );
 }
 

@@ -6,3 +6,8 @@ pyserial>=3.5
 bleak>=0.21.0
 numpy>=1.26.0
 python-multipart>=0.0.6
+# TTS via Microsoft Edge's free voice API. Pure-python, no model
+# download — just hits Microsoft's cloud endpoint with a websocket
+# request. Used by /api/tts/synthesize for the call page's voice
+# replies; default voices: en-US-AriaNeural, zh-CN-XiaoxiaoNeural.
+edge-tts>=6.1.0

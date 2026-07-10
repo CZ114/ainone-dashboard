@@ -9,7 +9,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentConfig, AgentsFile } from "../../shared/types.ts";
+import type { AgentConfig, AgentsFile, DiaryLang } from "../../shared/types.ts";
 import {
   readAgentsFile,
   writeAgentsFile,
@@ -20,21 +20,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROMPTS_DIR = path.join(__dirname, "prompts");
 
-const DAILY_OBSERVATION_PROMPT_PATH = path.join(
-  PROMPTS_DIR,
-  "daily_observation.md",
-);
+// One prompt file per supported language. The runtime picks the file
+// based on the lang the trigger handler / scheduler hands in.
+const PROMPT_FILES: Record<DiaryLang, string> = {
+  en: path.join(PROMPTS_DIR, "daily_observation.md"),
+  zh: path.join(PROMPTS_DIR, "daily_observation.zh.md"),
+};
 
 export const DEFAULT_AGENT_ID = "diary_observer";
 
-let cachedDailyPrompt: string | null = null;
-async function loadDailyPrompt(): Promise<string> {
-  if (cachedDailyPrompt !== null) return cachedDailyPrompt;
-  cachedDailyPrompt = await fs.readFile(
-    DAILY_OBSERVATION_PROMPT_PATH,
-    "utf-8",
-  );
-  return cachedDailyPrompt;
+const cachedDailyPrompt: Partial<Record<DiaryLang, string>> = {};
+async function loadDailyPrompt(lang: DiaryLang = "en"): Promise<string> {
+  const cached = cachedDailyPrompt[lang];
+  if (cached !== undefined) return cached;
+  const text = await fs.readFile(PROMPT_FILES[lang], "utf-8");
+  cachedDailyPrompt[lang] = text;
+  return text;
 }
 
 /**
@@ -53,7 +54,7 @@ async function loadDailyPrompt(): Promise<string> {
  * which produced an auth conflict + retry storm. This change keeps
  * diary on the same API family by default.
  */
-async function fallbackAgent(): Promise<AgentConfig> {
+async function fallbackAgent(lang: DiaryLang = "en"): Promise<AgentConfig> {
   const main = await getMainProviderInfo();
   const env: Record<string, string> = {};
   if (main.base_url) {
@@ -73,7 +74,7 @@ async function fallbackAgent(): Promise<AgentConfig> {
         : "Mirrors your main chat — Anthropic native.",
     model,
     env,
-    system_prompt: await loadDailyPrompt(),
+    system_prompt: await loadDailyPrompt(lang),
     sampling: { max_tokens: 800, temperature: 0.5 },
   };
 }
@@ -114,13 +115,16 @@ export function resolveSecrets(
   return out;
 }
 
-export async function getAgent(id: string): Promise<AgentConfig> {
+export async function getAgent(
+  id: string,
+  lang: DiaryLang = "en",
+): Promise<AgentConfig> {
   const file = await readAgentsFile();
   const agent = file.agents[id];
   if (agent) return agent;
   // Phase 1 convenience: any unknown id falls back to the daily observer
   // so the manual-trigger path can't 404 on an empty agents.json.
-  if (id === DEFAULT_AGENT_ID) return fallbackAgent();
+  if (id === DEFAULT_AGENT_ID) return fallbackAgent(lang);
   throw new Error(`Unknown agent: ${id}`);
 }
 
@@ -129,7 +133,9 @@ export async function getSecrets(): Promise<Record<string, string>> {
   return file.secrets;
 }
 
-export async function listAgents(): Promise<Array<{ id: string; agent: AgentConfig }>> {
+export async function listAgents(
+  lang: DiaryLang = "en",
+): Promise<Array<{ id: string; agent: AgentConfig }>> {
   const file = await readAgentsFile();
   const explicit = Object.entries(file.agents).map(([id, agent]) => ({ id, agent }));
   // Always surface the built-in Anthropic Haiku as an option so the
@@ -139,7 +145,7 @@ export async function listAgents(): Promise<Array<{ id: string; agent: AgentConf
   // prepend the fallback.
   if (!file.agents[DEFAULT_AGENT_ID]) {
     return [
-      { id: DEFAULT_AGENT_ID, agent: await fallbackAgent() },
+      { id: DEFAULT_AGENT_ID, agent: await fallbackAgent(lang) },
       ...explicit,
     ];
   }

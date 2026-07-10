@@ -6,22 +6,22 @@
 // button in the header.
 
 import { THEMES, THEME_NAMES, useTheme, type ThemeName } from '../contexts/ThemeContext';
+import { useT } from '../contexts/LanguageContext';
 
 export function ThemePicker() {
   const { themeName, setThemeName, resolvedTheme, preference, setPreference } =
     useTheme();
+  const t = useT();
 
   return (
     <div className="space-y-5">
       {/* Theme grid */}
       <div>
         <h3 className="text-sm font-semibold text-text-primary mb-1">
-          Color preset
+          {t.settings.appearance.colorPreset}
         </h3>
         <p className="text-[11px] text-text-muted mb-3">
-          Each preset has a paired light + dark variant — switch
-          between them with the mode picker below or the sun/moon
-          button in the header.
+          {t.settings.appearance.colorPresetDesc}
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {THEME_NAMES.map((name) => (
@@ -38,11 +38,10 @@ export function ThemePicker() {
       {/* Light / Dark / System mode */}
       <div>
         <h3 className="text-sm font-semibold text-text-primary mb-1">
-          Mode
+          {t.settings.appearance.mode}
         </h3>
         <p className="text-[11px] text-text-muted mb-3">
-          Choose which side of the current preset to render. "System"
-          follows your OS preference.
+          {t.settings.appearance.modeDesc}
         </p>
         <div className="inline-flex rounded-lg border border-card-border bg-window-bg p-0.5">
           {(['light', 'dark', 'system'] as const).map((m) => {
@@ -58,14 +57,17 @@ export function ThemePicker() {
                     : 'text-text-secondary hover:text-text-primary hover:bg-card-border/40'
                 }`}
               >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
+                {t.settings.appearance.modes[m]}
               </button>
             );
           })}
         </div>
         <p className="text-[11px] text-text-muted mt-2">
-          Currently rendering: <span className="font-medium text-text-secondary">{resolvedTheme}</span>
-          {preference === 'system' && ' (from OS preference)'}
+          {t.settings.appearance.currentlyRendering}{' '}
+          <span className="font-medium text-text-secondary">
+            {t.settings.appearance.modes[resolvedTheme]}
+          </span>
+          {preference === 'system' && t.settings.appearance.fromOsPreference}
         </p>
       </div>
     </div>
@@ -82,6 +84,7 @@ function ThemeCard({
   onSelect: () => void;
 }) {
   const theme = THEMES[name];
+  const t = useT();
   return (
     <button
       type="button"
@@ -123,7 +126,7 @@ function ThemeCard({
       {isActive && (
         <span
           className="absolute top-1.5 right-1.5 rounded-full bg-accent text-white w-5 h-5 flex items-center justify-center text-[11px] font-bold"
-          aria-label="Active"
+          aria-label={t.settings.appearance.activeBadge}
         >
           ✓
         </span>

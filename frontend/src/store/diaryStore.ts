@@ -16,6 +16,8 @@ import {
   type SecretSummary,
   type TestAgentResponse,
 } from '../api/diaryApi';
+import { isDemoMode } from '../lib/demoMode';
+import { getDemoDiaryEntries } from '../lib/demoDiary';
 
 export interface ToastSignal {
   id: number;
@@ -121,7 +123,30 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { entries, unread } = await diaryApi.listEntries();
-      set({ entries, unread, loading: false });
+      // Demo mode: prepend a pre-baked entry that narratively follows
+      // the call demo (see lib/demoDiary.ts). Skipped if a real entry
+      // with the same id already exists, so a user who triggers the
+      // real diary writer doesn't get a duplicate.
+      let finalEntries = entries;
+      let finalUnread = unread;
+      if (isDemoMode()) {
+        const rawLang = (() => {
+          try {
+            return localStorage.getItem('ui-lang');
+          } catch {
+            return null;
+          }
+        })();
+        const lang: 'en' | 'zh' = rawLang === 'zh' ? 'zh' : 'en';
+        const demos = getDemoDiaryEntries(lang);
+        const existingIds = new Set(entries.map((e) => e.id));
+        const fresh = demos.filter((d) => !existingIds.has(d.id));
+        if (fresh.length > 0) {
+          finalEntries = [...fresh, ...entries];
+          finalUnread = unread + fresh.filter((e) => !e.read).length;
+        }
+      }
+      set({ entries: finalEntries, unread: finalUnread, loading: false });
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : String(err) });
     }
@@ -131,7 +156,19 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     if (get().generating) return null;
     set({ generating: true, error: null });
     try {
-      const { entry } = await diaryApi.trigger(agentId);
+      // Read the user's UI language directly from localStorage (the
+      // store deliberately doesn't depend on React context — running
+      // store code outside of a Provider tree must still work). Falls
+      // back to 'en' which matches the server default.
+      const stored = (() => {
+        try {
+          const raw = localStorage.getItem('ui-lang');
+          return raw === 'zh' ? 'zh' : 'en';
+        } catch {
+          return 'en' as const;
+        }
+      })();
+      const { entry } = await diaryApi.trigger(agentId, stored);
       // Stream's "new" event already added it; this guards the case where
       // the stream isn't connected (eg. backend didn't emit yet).
       const next = applyEntry(get().entries, entry);
