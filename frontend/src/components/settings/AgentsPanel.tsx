@@ -710,80 +710,6 @@ export function AgentsPanel() {
         </section>
       )}
 
-      {/* Secrets */}
-      <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
-        <h3 className="text-sm font-semibold text-text-primary">
-          {t.settings.agents.secrets.heading}{' '}
-          <span className="text-[11px] font-normal text-text-muted">
-            ({secrets.length})
-          </span>
-        </h3>
-        <p className="mt-1 mb-3 text-[11px] text-text-muted leading-relaxed">
-          {t.settings.agents.secrets.hint}
-        </p>
-        <div className="mb-3 space-y-1">
-          {secrets.length === 0 && (
-            <div className="text-xs text-text-muted">
-              {t.settings.agents.secrets.empty}
-            </div>
-          )}
-          {secrets.map((s) => (
-            <div
-              key={s.name}
-              className="flex items-center justify-between rounded border border-card-border p-2 text-sm"
-            >
-              <span className="font-mono text-xs text-text-primary">
-                {s.name} <span className="text-text-muted">••••</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => void handleSecretDelete(s.name)}
-                className="rounded border border-card-border px-2 py-1 text-xs text-text-muted hover:text-status-danger"
-              >
-                {t.settings.agents.delete}
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label={t.settings.agents.secrets.fieldName} className="w-44">
-            <input
-              value={secretDraft.name}
-              onChange={(e) =>
-                setSecretDraft((s) => ({ ...s, name: e.target.value.toUpperCase() }))
-              }
-              placeholder="DEEPSEEK_API_KEY"
-              className={inputClass + ' font-mono text-xs'}
-            />
-          </Field>
-          <Field
-            label={t.settings.agents.secrets.fieldValue}
-            className="flex-1 min-w-[220px]"
-          >
-            <input
-              type="password"
-              value={secretDraft.value}
-              onChange={(e) =>
-                setSecretDraft((s) => ({ ...s, value: e.target.value }))
-              }
-              placeholder="sk-…"
-              className={inputClass + ' font-mono text-xs'}
-            />
-          </Field>
-          <button
-            type="button"
-            onClick={() => void handleSecretSave()}
-            disabled={secretSaving || !secretDraft.name.trim() || !secretDraft.value}
-            className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-          >
-            {t.settings.agents.secrets.save}
-          </button>
-        </div>
-        {secretError && (
-          <p className="mt-2 text-xs text-status-danger break-all">{secretError}</p>
-        )}
-      </section>
-
       {/* MCP servers */}
       <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -1001,6 +927,80 @@ export function AgentsPanel() {
               </button>
             </div>
           </div>
+        )}
+      </section>
+
+      {/* Secrets */}
+      <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
+        <h3 className="text-sm font-semibold text-text-primary">
+          {t.settings.agents.secrets.heading}{' '}
+          <span className="text-[11px] font-normal text-text-muted">
+            ({secrets.length})
+          </span>
+        </h3>
+        <p className="mt-1 mb-3 text-[11px] text-text-muted leading-relaxed">
+          {t.settings.agents.secrets.hint}
+        </p>
+        <div className="mb-3 space-y-1">
+          {secrets.length === 0 && (
+            <div className="text-xs text-text-muted">
+              {t.settings.agents.secrets.empty}
+            </div>
+          )}
+          {secrets.map((s) => (
+            <div
+              key={s.name}
+              className="flex items-center justify-between rounded border border-card-border p-2 text-sm"
+            >
+              <span className="font-mono text-xs text-text-primary">
+                {s.name} <span className="text-text-muted">••••</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleSecretDelete(s.name)}
+                className="rounded border border-card-border px-2 py-1 text-xs text-text-muted hover:text-status-danger"
+              >
+                {t.settings.agents.delete}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label={t.settings.agents.secrets.fieldName} className="w-44">
+            <input
+              value={secretDraft.name}
+              onChange={(e) =>
+                setSecretDraft((s) => ({ ...s, name: e.target.value.toUpperCase() }))
+              }
+              placeholder="DEEPSEEK_API_KEY"
+              className={inputClass + ' font-mono text-xs'}
+            />
+          </Field>
+          <Field
+            label={t.settings.agents.secrets.fieldValue}
+            className="flex-1 min-w-[220px]"
+          >
+            <input
+              type="password"
+              value={secretDraft.value}
+              onChange={(e) =>
+                setSecretDraft((s) => ({ ...s, value: e.target.value }))
+              }
+              placeholder="sk-…"
+              className={inputClass + ' font-mono text-xs'}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => void handleSecretSave()}
+            disabled={secretSaving || !secretDraft.name.trim() || !secretDraft.value}
+            className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          >
+            {t.settings.agents.secrets.save}
+          </button>
+        </div>
+        {secretError && (
+          <p className="mt-2 text-xs text-status-danger break-all">{secretError}</p>
         )}
       </section>
     </div>
