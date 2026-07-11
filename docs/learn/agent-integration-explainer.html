@@ -156,11 +156,88 @@
   <span class="kbd-hint" id="progText"></span>
 </div>
 
-<h2>③ 术语速查 — 以后再看到这些词就不慌了</h2>
+<h2>③ 系统怎么"看见"主厨在干嘛？— 零改动观测的秘密</h2>
+<p class="sub">一个常见疑惑：<b>没往你的框架里加一行代码，前端凭什么能实时显示"正在调工具"？</b> 答案：不是外面有眼睛盯着主厨，而是<b>主厨自己会一路留便条</b>——这个"便条口"（<code>stream()</code> 生成器）是你自己在 Phase 5 设计好的。下面逐拍看一遍。</p>
+
+<style>
+  .ob-grid { display: grid; grid-template-columns: 1.15fr .85fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 950px) { .ob-grid { grid-template-columns: 1fr; } }
+  .chef-status { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 999px; margin-bottom: 8px; transition: all .25s; }
+  .chef-status.cook { background: var(--green-bg); color: var(--green); border: 1px solid #cfe0d4; }
+  .chef-status.pause { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-soft); }
+  .chef-status.bell { background: var(--red-bg); color: var(--red); border: 1px solid #e3c0b8; animation: bellpulse 1.1s infinite; }
+  @keyframes bellpulse { 50% { box-shadow: 0 0 0 5px rgba(184,80,61,.12); } }
+  .chef-code { font-family: var(--mono); font-size: 12px; line-height: 1.9; }
+  .chef-code .ln { display: block; padding: 0 8px; border-radius: 6px; white-space: pre; }
+  .chef-code .ln.cm { color: var(--muted); }
+  .chef-code .ln.yl { color: var(--accent); }
+  .chef-code .ln.on { background: linear-gradient(90deg, #ffe9c9, #ffdba8); outline: 2px solid var(--accent-soft); font-weight: 700; }
+  .svc-code { margin-top: 10px; font-family: var(--mono); font-size: 11.5px; background: #2e2a24; color: #e8ddc8; border-radius: 8px; padding: 8px 12px; line-height: 1.7; white-space: pre; overflow-x: auto; }
+  .svc-code b { color: #ffca85; }
+  .notes { display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+  .note { font-family: var(--mono); font-size: 11.5px; background: #fdf6dd; border: 1px solid #e8d9a0; border-left: 4px solid #d8b74e; border-radius: 6px; padding: 5px 9px; box-shadow: 1px 2px 4px rgba(120,100,40,.12); transform: rotate(-.4deg); }
+  .note.new { animation: notein .5s ease-out; outline: 2px solid var(--accent-soft); }
+  @keyframes notein { 0% { transform: translateX(-40px) rotate(-6deg); opacity: 0; } 100% { transform: rotate(-.4deg); opacity: 1; } }
+  .note.perm { background: var(--red-bg); border-color: #e3c0b8; border-left-color: var(--red); }
+  .screen { background: #35302a; border-radius: 12px; padding: 12px; min-height: 200px; display: flex; flex-direction: column; gap: 7px; }
+  .bub { max-width: 95%; font-size: 12px; border-radius: 10px; padding: 7px 11px; animation: notein .4s ease-out; }
+  .bub.txt { background: #fffdf9; color: var(--text); align-self: flex-start; }
+  .bub.tool { background: #2c3a2f; color: #a8d8b4; border: 1px solid #47614d; font-family: var(--mono); font-size: 11.5px; }
+  .bub.result { background: #3a3428; color: #e8ddc8; border: 1px solid #5c5240; font-family: var(--mono); font-size: 11.5px; }
+  .bub.perm { background: #4a2f28; color: #f0c0b0; border: 1.5px solid var(--red); }
+  .bub.perm .btns { margin-top: 5px; } .bub.perm .btns span { display: inline-block; background: #6a4038; padding: 2px 10px; border-radius: 6px; margin-right: 6px; font-size: 11px; }
+  .bub.done { background: transparent; color: #8fa596; font-size: 11px; align-self: center; }
+</style>
+
+<div class="ob-grid">
+  <div class="panel">
+    <h3>👨‍🍳 主厨 — 你的框架（一行没改）</h3>
+    <span class="chef-status cook" id="obStatus">准备开工</span>
+    <div class="chef-code" id="obCode">
+      <span class="ln" data-l="0">def stream(user_text):        <i style="color:#8a7d68"># agent/core/agent.py</i></span>
+      <span class="ln cm" data-l="1">    …调用 LLM, 流式生成…</span>
+      <span class="ln yl" data-l="2">    yield ("text", 文字片段)      ← 播报①</span>
+      <span class="ln yl" data-l="3">    yield ("tool_call", 调用详情) ← 播报②</span>
+      <span class="ln cm" data-l="4">    结果 = dispatch_all(工具)     # 帮厨干活 (审批钩子在这里面)</span>
+      <span class="ln yl" data-l="5">    yield ("tool_result", 结果)   ← 播报③</span>
+      <span class="ln cm" data-l="6">    …再问一次 LLM, 得到最终回答…</span>
+      <span class="ln yl" data-l="7">    yield ("done", 最终回答)      ← 播报④</span>
+    </div>
+    <div class="svc-code"># 我加的全部"捕捉"代码, 在框架外面 (厨房侧) ↓
+<b>for</b> kind, payload <b>in</b> agent.stream(msg):
+    转发给前端(kind, payload)   <b># 取一张便条, 转一圈</b></div>
+  </div>
+  <div class="panel">
+    <h3>🪟 传菜窗 — yield 交出来的便条</h3>
+    <div class="notes" id="obNotes"><span class="empty-hint" style="color:var(--muted);font-size:12px">还没有便条</span></div>
+  </div>
+  <div class="panel">
+    <h3>🪑 大堂屏幕 — 前端把便条画成气泡</h3>
+    <div class="screen" id="obScreen"></div>
+  </div>
+</div>
+
+<div class="journey" style="margin-top:12px">
+  <div class="panel explain" style="border-left-color: var(--blue)">
+    <div class="step-no" id="obNo"></div>
+    <div class="step-title" id="obTitle"></div>
+    <div class="step-desc" id="obDesc"></div>
+    <div class="fx" id="obFx"></div>
+    <details id="obJargonWrap"><summary>▶ 术语版（给想深入的你）</summary><div class="jargon" id="obJargon"></div></details>
+  </div>
+</div>
+<div class="controls">
+  <button class="primary" id="obNext">下一步 ▸</button>
+  <button id="obReset">↺ 重置</button>
+  <div class="progress"><i id="obProg" style="width:0%"></i></div>
+  <span class="kbd-hint" id="obProgText"></span>
+</div>
+
+<h2>④ 术语速查 — 以后再看到这些词就不慌了</h2>
 <p class="sub">点卡片展开：一句人话 + 比方 + 它在你项目里具体是哪个东西。</p>
 <div class="term-grid" id="termGrid"></div>
 
-<h2>④ 为什么要隔这么多层？不能让网页直接找主厨吗？</h2>
+<h2>⑤ 为什么要隔这么多层？不能让网页直接找主厨吗？</h2>
 <div class="three">
   <div class="panel"><b>1 · 前台没换人 → 随时能回退</b><br>
     迁移时的约定是"不动原版代码"。老前台（原来对接 Claude 的 :3000）原样留着，我们复制了一个新前台改成"只转单"。哪天想换回旧厨房，换个启动脚本就行，大堂完全无感。
@@ -389,6 +466,85 @@ tg.addEventListener("click", e => {
 });
 
 reset();
+
+// ═══════════ ③ 零改动观测模拟器 ═══════════
+const OB = [
+  { no:"第 1 拍", title:"取件员就位 — 我加的全部代码就这一个 for 循环", st:["cook","准备开工"], line:0, notes:0, screen:0,
+    desc:"大堂的单子到了厨房。厨房派一个「取件员」站到传菜窗口——它就是左下角那三行 for 循环，也是整个「捕捉」机制里唯一由我编写的部分。你的框架（上面那段代码）保持原样。",
+    fx:"店里没装监控摄像头，只是在传菜窗外安排了个人：主厨递什么，他拿什么。",
+    jargon:"agent_service/main.py 的 worker 线程执行 <code>for kind, payload in agent.stream(message)</code>。生成器是「拉取式」的——不取，主厨根本不往下跑。" },
+  { no:"第 2 拍", title:"第一处 yield — 主厨交便条并【原地暂停】", st:["pause","⏸ 暂停, 等便条被取走"], line:2, notes:1, screen:0,
+    desc:"主厨开始回答，跑到 yield (\"text\", …) 这一行。yield 的含义是：把这条数据交出去，然后整个函数【停在这一行】。看左边状态：主厨此刻真的站着不动——「当前情况」不用捕捉，他自己举着牌子呢。",
+    fx:"主厨写好便条「我先查下录音」放到窗台上，然后抱臂等着——窗外的人不取走，他绝不做下一步。",
+    jargon:"Python 生成器协议：<code>yield</code> 挂起函数帧、把值交给调用方的 <code>next()</code>；帧里的局部变量原封不动地冻结，等下一次 next() 恢复。" },
+  { no:"第 3 拍", title:"便条被取走 → 立刻变成大堂里的气泡, 主厨恢复", st:["cook","继续做菜"], line:1, notes:1, screen:1,
+    desc:"取件员拿走便条（for 循环转了一圈），塞进队列 → 序列化成一行文字（NDJSON）→ 顺着保持打开的 HTTP 连接推到大堂 → 前端画出气泡。同一瞬间主厨恢复干活。你看到的每次「实时」，都是这套接力在毫秒级跑完。",
+    fx:"便条一被拿走，主厨立刻转身继续颠勺——接力棒传出去了。",
+    jargon:"wire.py 把 (kind, payload) 序列化成 <code>{\"type\":\"delta\",\"text\":\"…\"}</code> 一行；StreamingResponse 逐行 flush；前端 useStreamParser 逐行 JSON.parse 后更新界面。" },
+  { no:"第 4 拍", title:"播报②: 要调工具了 — 前端蹦出 🔧 卡片", st:["pause","⏸ 交便条中"], line:3, notes:2, screen:2,
+    desc:"智囊回信说「先查录音」，主厨走到播报②：yield (\"tool_call\", 详情)。这张便条经同一条流水线到大堂，前端认出类型是 tool_call，画的不是文字气泡而是绿色工具卡——这就是你聊天时看到「正在调用 list_recordings」的完整来历。",
+    fx:"便条内容不同，大堂的呈现就不同：报菜名用喇叭，上菜用托盘。",
+    jargon:"前端按事件的 type 字段分发渲染组件：delta→文字气泡 / tool_call→工具卡 / tool_result→结果卡 / permission_request→审批卡。" },
+  { no:"第 5 拍", title:"帮厨干活 + 播报③: 工具结果", st:["cook","帮厨取货中→交便条"], line:5, notes:3, screen:3,
+    desc:"dispatch_all 派帮厨去 :8080 取录音清单（这期间没有 yield，所以大堂安静了一两秒）。货一到手，主厨立刻 yield (\"tool_result\", 结果)——↩️ 结果卡蹦出来。",
+    fx:"帮厨跑腿的那一小会儿窗台是空的；他一回来，便条马上补上。",
+    jargon:"工具执行是普通函数调用（内部就是 HTTP GET :8080）；executor 把返回值包成 role:\"tool\" 消息，stream() 逐个 yield 出来。" },
+  { no:"第 6 拍", title:"播报④: done — 菜齐", st:["cook","本轮完成 ✓"], line:7, notes:4, screen:4,
+    desc:"主厨带着工具结果再问一次智囊，拿到最终回答，yield 完整文本和 (\"done\")。for 循环发现生成器走完了，自然退出——不需要任何「结束通知机制」，生成器耗尽本身就是信号。",
+    fx:"最后一张便条写着「菜齐」，取件员收工，窗口关灯。",
+    jargon:"生成器 return 后 for 循环收到 StopIteration 自动结束；服务端随后补发 done 事件行、写档案（AuditLog）、释放会话锁。" },
+  { no:"第 7 拍", title:"支线: 危险菜 — 框架没播报, 但你留了第二个出口", st:["bell","🔔 按铃等签字, 全线静止"], line:4, notes:5, screen:5,
+    desc:"如果工具是「写文件」这种危险操作：框架不会 yield（这不是播报，是要【等答案】）。它走的是你 Phase 1 留的另一个口子——构造参数 approval_callback：调这个回调、拿到 {approved: true/false} 才继续。我注入的回调做两件事：往同一条流塞一张「求签字」便条（前端弹出审批卡），然后原地睡觉等铃响。",
+    fx:"切河豚前主厨按响客席铃，然后抱臂站定。他不知道铃线连到哪（其实连到你屏幕上的按钮），他只认约定：铃响了、答案回来了，才动刀。",
+    jargon:"依赖注入：<code>Agent(approval_callback=我的函数)</code>。我的函数 = <code>q.put(permission_request 事件)</code> + <code>threading.Event.wait(120s)</code>；前端 POST /permission → <code>Event.set()</code> 唤醒。框架全程不知道 HTTP 的存在。" },
+  { no:"第 8 拍", title:"总结: 三个出口, 一行未改", st:["cook","👏 收工"], line:-1, notes:5, screen:6,
+    desc:"系统能「看见」你的 agent，不是外面有眼睛，而是你当初把可观测性设计成了接口：stream() 交事件、approval_callback 收决定、audit_log 落档案——三个口子都是构造时从外面注入或消费的。假如框架只有 send()（闷头跑完只回最终答案），前端就只能显示转圈圈。留好事件出口的库，接进任何系统都不用动自己——后来 Workflow 引擎的事件流，就是照你 stream() 的约定抄的作业。",
+    fx:"好主厨的定义：手艺自成一体，但便条口、客席铃、档案柜的接口都留好了——换哪家餐厅都能直接上岗。",
+    jargon:"这套模式的学名：观察者友好的<b>生成器事件流</b> + <b>回调依赖注入</b> + <b>可插拔持久化</b>。三者共同构成库的「可集成性 (integrability)」。" },
+];
+const OB_NOTES = [
+  '("text", "我先查下录音…")',
+  '("tool_call", list_recordings)',
+  '("tool_result", 3 条录音)',
+  '("done", 最终回答)',
+  '🔔 permission_request (write_file)',
+];
+const OB_BUBS = [
+  { c: "txt",  h: "我先查下最近的录音…" },
+  { c: "tool", h: "🔧 list_recordings — 正在调用…" },
+  { c: "result", h: "↩️ 返回: 3 条录音 (5月7日 501行 / …)" },
+  { c: "txt",  h: "最近有 3 条录音：5月7日这条有 501 行传感器数据…" },
+  { c: "done", h: "— ✓ 本轮完成 (done) —" },
+  { c: "perm", h: '⚠️ Agent 请求执行 write_file<div class="btns"><span>允许</span><span>拒绝</span></div>' },
+  { c: "done", h: "— 你点了允许 → 铃响 → 主厨继续 —" },
+];
+let obCur = -1;
+function obRender() {
+  const s = OB[obCur];
+  $("obNo").textContent = s.no + " / 共 " + OB.length + " 拍";
+  $("obTitle").textContent = s.title;
+  $("obDesc").textContent = s.desc;
+  $("obFx").textContent = s.fx;
+  $("obJargon").innerHTML = s.jargon;
+  $("obJargonWrap").open = false;
+  const st = $("obStatus");
+  st.className = "chef-status " + s.st[0];
+  st.textContent = s.st[1];
+  document.querySelectorAll("#obCode .ln").forEach(ln =>
+    ln.classList.toggle("on", +ln.dataset.l === s.line));
+  $("obNotes").innerHTML = s.notes
+    ? OB_NOTES.slice(0, s.notes).map((n, i) =>
+        `<div class="note ${i === s.notes - 1 ? "new" : ""} ${n.startsWith("🔔") ? "perm" : ""}">${n}</div>`).join("")
+    : '<span style="color:var(--muted);font-size:12px;font-style:italic">还没有便条</span>';
+  $("obScreen").innerHTML = OB_BUBS.slice(0, s.screen).map(b =>
+    `<div class="bub ${b.c}">${b.h}</div>`).join("");
+  $("obProg").style.width = ((obCur + 1) / OB.length * 100) + "%";
+  $("obProgText").textContent = "这一节独立步进, 不影响上面的旅程";
+  $("obNext").disabled = obCur >= OB.length - 1;
+}
+$("obNext").onclick = () => { if (obCur < OB.length - 1) { obCur++; obRender(); } };
+$("obReset").onclick = () => { obCur = 0; obRender(); };
+obCur = 0; obRender();
 </script>
 </body>
 </html>
