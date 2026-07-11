@@ -27,7 +27,7 @@ from . import agents_admin, config_store, mcp_admin, rag, skills_admin, workflow
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, HumanInputBroker, PermissionBroker
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
-from .factory import build_oneshot_agent
+from .factory import build_client, build_oneshot_agent, resolve_agent_config
 from .sessions import SessionManager, repair_history
 from .wire import new_stream_ctx, serialize
 
@@ -137,6 +137,12 @@ class McpUpsertBody(BaseModel):
 class SkillUpsertBody(BaseModel):
     description: str = ""
     body: str
+
+
+class VoiceBody(BaseModel):
+    message: str
+    history: list[dict] = []
+    system: str | None = None
 
 
 # ─── chat 流核心 (neutral 与 compat 共用) ────────────────────────────
@@ -402,6 +408,44 @@ def agents_test(agent_id: str, body: AgentTestBody):
         "provider": agent.client.provider,
         "sample": (text or "")[:300],
     }
+
+
+# ─── 语音通话 (call 页, SOD M4) ──────────────────────────────────────
+# 延迟敏感: AgentDeploy.think() 纯文本流式、无工具、无会话 (历史由前端每轮带上,
+# 对齐原 voice_chat 的直连语义)。线协议: {type: delta|done|error(message)}。
+
+DEFAULT_VOICE_PROMPT = (
+    "You are talking with the user over a voice interface. Speak naturally — "
+    "like a person, not a search engine. Match the depth of the question: a "
+    "casual greeting deserves a casual reply; a technical question deserves a "
+    "thorough answer. Use markdown structure (lists, tables) only when it "
+    "materially helps clarity. Reply in the user's language (中文用户用中文)."
+)
+
+
+@app.post("/api/agent/voice")
+def agent_voice(body: VoiceBody):
+    cfg = resolve_agent_config(None)   # 跟随设置页的模型路由
+    client = build_client(cfg)
+    messages = [{"role": "system", "content": body.system or DEFAULT_VOICE_PROMPT}]
+    for m in body.history:
+        if (m.get("role") in ("user", "assistant")
+                and isinstance(m.get("content"), str) and m["content"]):
+            messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": body.message})
+
+    def gen():
+        try:
+            for piece in client.think(messages, max_tokens=1024):
+                yield json.dumps({"type": "delta", "text": piece},
+                                 ensure_ascii=False) + "\n"
+            yield json.dumps({"type": "done"}) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error",
+                              "message": f"{type(e).__name__}: {e}"},
+                             ensure_ascii=False) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
 # ─── multi-agent 工作流 (声明式编排, agent.orchestration) ────────────

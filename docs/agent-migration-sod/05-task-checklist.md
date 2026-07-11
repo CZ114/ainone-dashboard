@@ -75,6 +75,10 @@
       修复 agentStore.findSecretReferences 对无 env agent 的 500
 - [ ] multi-agent：orchestrator + delegate 工具实现（占位依旧）
 - [ ] memory：给 default agent 挂 `memory_root` 试运行
-- [ ] M4 语音：`/api/agent/voice` + `AgentDeploy.think()`
+- [x] （2026-07-11）**M4 语音**：agent_service `/api/agent/voice`（`AgentDeploy.think()`
+      纯文本流式、无工具、历史客户端携带，跟随模型路由配置）+ 网关 voice_chat.ts
+      改纯透传（原直连 Anthropic 路径删除，不再依赖 ANTHROPIC key）。
+      管道实测打通（请求穿透网关→服务→provider，错误事件按线协议回传）；
+      ⚠ 完整回答验证被 venice 余额耗尽 (402) 挡住——充值或换 provider 后即用
 - [ ] 新依赖（chromadb/sentence-transformers/pymupdf4llm）已装入 backend/.venv，
       清单见 backend/agent_service/requirements.txt
