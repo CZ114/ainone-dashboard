@@ -34,11 +34,12 @@ interface AgentEditorProps {
    *  per-provider secret so the user never has to touch the Secrets UI. */
   onUpsertSecret: (name: string, value: string) => Promise<void>;
   /**
-   * Main-agent provider info from `~/.claude/settings.json`. When set,
-   * the editor LOCKS the provider picker to the matching family — diary
-   * agents cannot use a different API than the main chat. Prevents
-   * silent auth conflicts (e.g. Anthropic key reaching MiniMax). When
-   * null (loading or detection failed), the picker is unlocked.
+   * Main-agent provider info resolved from the agent backend's model
+   * routing (Settings → Model routing). When set, the editor LOCKS the
+   * provider picker to the matching family — diary agents cannot use a
+   * different API than the main chat. Prevents silent auth conflicts
+   * (e.g. Anthropic key reaching MiniMax). When null (loading or
+   * detection failed), the picker is unlocked.
    */
   mainProvider: MainProviderInfo | null;
 }
@@ -48,7 +49,9 @@ interface AgentEditorProps {
 // provider id, or null if we can't match (rare custom router etc).
 function lockedProviderIdFor(main: MainProviderInfo | null): string | null {
   if (!main) return null;
-  // Anthropic native (no BASE_URL)
+  // Agent backend offline — nothing reliable to lock to.
+  if (main.env_source === 'default') return null;
+  // No BASE_URL reported → backend default endpoint (api.anthropic.com)
   if (!main.base_url) return 'anthropic';
   // Reuse providers.ts's reverse-lookup logic
   const detected = detectProvider({ ANTHROPIC_BASE_URL: main.base_url });
@@ -335,7 +338,7 @@ export function AgentEditor({
             {lockedProviderId && (
               <span
                 className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-normal text-accent"
-                title="Diary is locked to your main chat's provider family. Change ~/.claude/settings.json's ANTHROPIC_BASE_URL to switch."
+                title="Diary is locked to your main chat's provider family. Managed by the agent backend — switch it in Settings → Model routing."
               >
                 🔒 locked to {findProvider(lockedProviderId)?.label}
               </span>
@@ -345,9 +348,9 @@ export function AgentEditor({
             <p className="mb-2 text-[11px] text-text-muted leading-snug">
               Locked to your main chat's provider so diary runs share
               the same API family. Switching would mix credentials and
-              produce silent auth failures. To change: edit{' '}
-              <code className="rounded bg-card-border/40 px-1">~/.claude/settings.json</code>{' '}
-              and restart the backend.
+              produce silent auth failures. To change: open{' '}
+              <code className="rounded bg-card-border/40 px-1">Settings → Model routing</code>{' '}
+              (the agent backend's default provider).
             </p>
           )}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -367,7 +370,7 @@ export function AgentEditor({
                   title={
                     allowed
                       ? p.shortNote
-                      : `Locked: main chat is on ${findProvider(lockedProviderId)?.label}. Edit ~/.claude/settings.json to switch.`
+                      : `Locked: main chat is on ${findProvider(lockedProviderId)?.label}. Switch it in Settings → Model routing.`
                   }
                   className={`rounded border p-2 text-left text-xs transition-colors ${
                     active

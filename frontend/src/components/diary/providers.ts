@@ -1,10 +1,11 @@
 // Provider registry — every entry is a vendor that exposes a native
-// Anthropic-protocol endpoint. With these, Claude CLI talks directly
-// to the provider via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`,
-// no claude-code-router / LiteLLM in front.
+// Anthropic-protocol endpoint. Diary agents are env-var based presets
+// (stored in the same agents.json the Settings → Agents tab manages):
+// the agent backend routes each run via the agent's
+// `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` env block.
 //
-// Confirmed Apr 2026:
-//   - Anthropic native:        api.anthropic.com (no BASE_URL)
+// Endpoints confirmed Apr 2026:
+//   - Anthropic:               api.anthropic.com (no BASE_URL override)
 //   - DeepSeek:                api.deepseek.com/anthropic
 //   - MiniMax (intl/cn):       api.minimax.io / api.minimaxi.com  /anthropic
 //   - Zhipu Z.ai (intl/cn):    api.z.ai/api/anthropic | open.bigmodel.cn/api/anthropic
@@ -16,7 +17,7 @@
 // a router or any other compatible endpoint.
 
 export interface ProviderModel {
-  id: string;        // exact string sent as `--model`
+  id: string;        // exact model id the agent backend sends to the provider
   label: string;     // human display name
   hint?: string;     // tooltip / one-liner
 }
@@ -27,15 +28,15 @@ export interface Provider {
   /** One-line description shown under the provider name in the picker. */
   shortNote: string;
   /**
-   * Value for `ANTHROPIC_BASE_URL`. `null` means leave it unset
-   * (Anthropic native uses the default). `'custom'` means the user
-   * fills it in manually.
+   * Value for `ANTHROPIC_BASE_URL`. `null` means leave it unset (the
+   * agent backend's default endpoint — api.anthropic.com — applies).
+   * `'custom'` means the user fills it in manually.
    */
   baseUrl: string | null | 'custom';
   /**
    * Most third-party endpoints prefer `ANTHROPIC_AUTH_TOKEN` over
-   * `ANTHROPIC_API_KEY`. Anthropic native accepts either. We use
-   * whichever the provider documents.
+   * `ANTHROPIC_API_KEY`. Anthropic's own endpoint accepts either. We
+   * use whichever the provider documents.
    */
   authTokenEnvKey: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
   /** Where the user gets the key. Surfaced as a help link in the form. */
@@ -51,7 +52,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: 'anthropic',
     label: 'Anthropic',
-    shortNote: 'Native — Claude direct from anthropic.com',
+    shortNote: 'Claude models · api.anthropic.com (no BASE_URL override)',
     baseUrl: null,
     authTokenEnvKey: 'ANTHROPIC_API_KEY',
     apiKeyDashboard: 'https://console.anthropic.com/settings/keys',

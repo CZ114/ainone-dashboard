@@ -268,6 +268,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
         plan: 'Plan (propose only, no execution)',
         acceptEdits: 'Auto-Edit (silent file edits)',
         bypassPermissions: 'Bypass (fully autonomous)',
+        auto: 'Auto (classifier decides per tool)',
       };
       const tmMap: Record<ThinkingModeValue, string> = {
         default: 'Auto (model decides)',

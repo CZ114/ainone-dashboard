@@ -105,7 +105,13 @@ export interface MainProviderInfo {
   base_url: string | null;
   model: string | null;
   auth_present: boolean;
-  env_source: 'settings_json' | 'process_env' | 'default';
+  /**
+   * 'agent_service' — resolved live from the agent backend's model
+   * routing (Settings → Model routing). 'default' — the agent service
+   * was unreachable, so the gateway fell back to empty defaults
+   * (treat as "agent backend offline" in the UI).
+   */
+  env_source: 'agent_service' | 'default';
 }
 
 export interface ReplyResponse {
@@ -157,8 +163,8 @@ async function asJson<T>(res: Response): Promise<T> {
         stderr_excerpt?: string;
       };
       if (body?.error) detail = body.error;
-      // Tail of claude-cli stderr is a goldmine when the runner
-      // times out or claude exits non-zero on a third-party endpoint.
+      // Tail of the agent run's stderr/diagnostics is a goldmine when
+      // the runner times out or the agent backend errors out.
       // Append it so the toast/error banner shows the actual reason.
       if (body?.stderr_excerpt) {
         detail += `\n— stderr —\n${body.stderr_excerpt.slice(-500)}`;

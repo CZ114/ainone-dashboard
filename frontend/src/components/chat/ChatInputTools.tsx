@@ -1,9 +1,9 @@
 // Chat input toolbar — the strip directly below the textarea.
 //
 // Layout:
-//   [ + ] [ / ]    📁 <cwd display>    [ Mode ] [ Thinking ] [ Effort ]
-//         attach    current project        cycling pills each persist
-//         slash
+//   [ + ] [ / ]    📁 <cwd display>    [ 🤖 Agent ] [ Mode ] [ Thinking ] [ Effort ]
+//         attach    current project     new-convo    cycling pills each persist
+//         slash                         agent preset
 //
 // Each pill is a cycling button: click cycles through the enum; the
 // visible label + colored dot reflect the current choice. Modes that
@@ -13,9 +13,11 @@
 // Token-budget & thinking defaults are kept inside chatStore; we just
 // read and write via setters here.
 
+import { useEffect, useState } from 'react';
 import { useChatStore, VOICE_LANGS } from '../../store/chatStore';
 import { getDisplayName } from './ChatSidebar';
 import { ChatAudioStatus } from './ChatAudioStatus';
+import { agentAdminApi, type AgentDef } from '../../api/agentAdminApi';
 import type {
   PermissionModeValue,
   ThinkingModeValue,
@@ -217,6 +219,93 @@ function VoiceLangPicker() {
   );
 }
 
+// --- Agent picker -----------------------------------------------------
+//
+// Compact select over the agent presets defined on the agent backend
+// (Settings → Agents). Mirrors VoiceLangPicker's chip-over-native-select
+// pattern so it visually matches the rest of the strip.
+//
+// IMPORTANT semantic: the selection only applies to NEW conversations.
+// The backend pins an agent when it creates a session and ignores
+// agentId on resumed sessions — so while a session is active the picker
+// is rendered de-emphasized (reduced opacity) with a tooltip explaining
+// that the change takes effect on the next new chat.
+//
+// If the agent list can't be fetched (agent service down), we render
+// nothing at all — chat must keep working without the picker.
+
+function AgentPicker() {
+  const agentId = useChatStore((s) => s.agentId);
+  const setAgentId = useChatStore((s) => s.setAgentId);
+  const sessionId = useChatStore((s) => s.sessionId);
+  const [agents, setAgents] = useState<AgentDef[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    agentAdminApi
+      .listAgents()
+      .then(({ agents }) => {
+        if (!cancelled) setAgents(agents);
+      })
+      .catch(() => {
+        // Agent service unreachable — leave agents null so we render
+        // nothing. Chat still works via the backend's default agent.
+        if (!cancelled) setAgents(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!agents || agents.length === 0) return null;
+
+  // A "real" session is active once the server has assigned an id
+  // (temporary `new-session-*` ids from an in-flight first send don't
+  // count — that send is still the one that creates the session).
+  const sessionActive = !!sessionId && !sessionId.startsWith('new-session-');
+
+  const active = agents.find((a) => a.id === agentId);
+  const activeLabel = active ? active.name || active.id : agentId;
+  const title = sessionActive
+    ? `Agent: ${activeLabel} — applies to NEW conversations only. ` +
+      'This conversation keeps the agent it started with; changing the ' +
+      'selection takes effect on your next new chat.'
+    : `Agent: ${activeLabel} — the agent preset new conversations start ` +
+      'with (an existing session keeps its agent). Click to change.';
+
+  return (
+    <div
+      className={`relative flex items-center transition-opacity ${
+        sessionActive ? 'opacity-50' : ''
+      }`}
+    >
+      <div
+        className="flex items-center gap-1 h-7 px-1.5 rounded text-[11px] text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors pointer-events-none select-none max-w-[9rem]"
+        title={title}
+      >
+        <span className="truncate">🤖 {activeLabel}</span>
+      </div>
+      <select
+        value={agentId}
+        onChange={(e) => setAgentId(e.target.value)}
+        aria-label="Agent for new conversations"
+        title={title}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      >
+        {/* Keep the select consistent even if the stored id no longer
+            exists on the backend (deleted agent): surface it as-is so
+            the user can see and move off it. */}
+        {!active && <option value={agentId}>{agentId} (missing)</option>}
+        {agents.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name ? `${a.name} (${a.id})` : a.id}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // --- Pill subcomponent ------------------------------------------------
 
 interface PillProps {
@@ -409,10 +498,11 @@ export function ChatInputTools({
         )}
       </div>
 
-      {/* Right — mode pills. Each pill cycles through its enum; the
-          colored dot + category prefix + value keep the current
-          selection self-explanatory without hovering. */}
+      {/* Right — agent picker + mode pills. Each pill cycles through
+          its enum; the colored dot + category prefix + value keep the
+          current selection self-explanatory without hovering. */}
       <div className="flex items-center gap-0.5 shrink-0">
+        <AgentPicker />
         <Pill
           icon="🛡️"
           category="Perm"

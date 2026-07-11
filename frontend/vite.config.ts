@@ -8,6 +8,12 @@ export default defineConfig({
     host: true,
     open: true,
     proxy: {
+      // Python agent service (:8100) — model routing config, multi-agent
+      // CRUD, RAG management. Chat/diary still go through the gateway (:3000).
+      '/api/agent': {
+        target: 'http://localhost:8100',
+        changeOrigin: true,
+      },
       '/api/chat': {
         target: 'http://localhost:3000',
         changeOrigin: true,

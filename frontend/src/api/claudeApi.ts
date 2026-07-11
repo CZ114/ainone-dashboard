@@ -25,6 +25,13 @@ export interface ChatRequest {
   // to let the SDK/model apply native defaults.
   effort?: EffortLevelWire;
   thinking?: ThinkingConfigWire;
+  /**
+   * Agent preset id on the agent backend (:8100). Sent on every
+   * request ('default' is harmless); the server only honors it when
+   * CREATING a session — resumed sessions keep the agent they started
+   * with and the field is ignored.
+   */
+  agentId?: string;
   // DEAD CODE — see docs/specs/diary.md "Dead code / debt".
   // Was the diary-Reply injection knob; SDK's claude_code preset
   // doesn't surface it to the model, so no caller sets it now.

@@ -681,6 +681,10 @@ function ChatPage() {
     }
     const effortWire: EffortLevelWire | undefined =
       storeSnapshot.effortMode === 'default' ? undefined : storeSnapshot.effortMode;
+    // Agent preset — sent on every request ('default' included). Only
+    // affects NEW sessions: the backend pins the agent at session
+    // creation and ignores agentId on resumes.
+    const agentId = storeSnapshot.agentId || 'default';
 
     // Wire-level request log so bugs between "pill click" and
     // "backend log" can be localized. If this shows permissionMode
@@ -694,6 +698,7 @@ function ChatPage() {
       permissionMode,
       thinking: thinkingWire,
       effort: effortWire,
+      agentId,
       diaryFirstSend: inDiaryFirstSend,
       promptCharsAfterPreface: wirePrompt.length,
       storeSnapshotModes: {
@@ -740,6 +745,7 @@ function ChatPage() {
         sessionId: sidToSend,
         workingDirectory: workingDir,
         permissionMode,
+        agentId,
         ...(thinkingWire ? { thinking: thinkingWire } : {}),
         ...(effortWire ? { effort: effortWire } : {}),
         ...(additionalDirectories.length > 0

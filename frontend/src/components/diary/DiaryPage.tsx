@@ -136,13 +136,25 @@ export default function DiaryPage() {
               📓 {t.diary.page.heading}
               {mainProvider && (
                 <span
-                  className="rounded bg-card-border/40 px-2 py-0.5 text-[10px] font-normal text-text-secondary"
+                  className={`rounded px-2 py-0.5 text-[10px] font-normal ${
+                    mainProvider.env_source === 'default'
+                      ? 'bg-amber-500/15 text-amber-400'
+                      : 'bg-card-border/40 text-text-secondary'
+                  }`}
                   title={t.diary.page.providerBadgeTitle(mainProvider.env_source)}
                 >
-                  via{' '}
-                  {mainProvider.base_url
-                    ? new URL(mainProvider.base_url).host
-                    : t.diary.page.anthropicNative}
+                  {/* env_source 'default' = the gateway couldn't reach the
+                      agent service — no provider to show, say so instead. */}
+                  {mainProvider.env_source === 'default' ? (
+                    t.diary.page.agentBackendOffline
+                  ) : (
+                    <>
+                      via{' '}
+                      {mainProvider.base_url
+                        ? new URL(mainProvider.base_url).host
+                        : t.diary.page.agentBackend}
+                    </>
+                  )}
                 </span>
               )}
             </h1>

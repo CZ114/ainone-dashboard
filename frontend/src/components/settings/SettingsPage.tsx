@@ -11,10 +11,30 @@ import {
 import { ThemeToggle } from '../ThemeToggle';
 import { ThemePicker } from '../ThemePicker';
 import { ExtensionCard } from './ExtensionCard';
+import { ModelRoutingPanel } from './ModelRoutingPanel';
+import { AgentsPanel } from './AgentsPanel';
+import { KnowledgePanel } from './KnowledgePanel';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 import { useT } from '../../contexts/LanguageContext';
 
-type Tab = 'extensions' | 'diary' | 'appearance' | 'about';
+type Tab =
+  | 'extensions'
+  | 'model'
+  | 'agents'
+  | 'knowledge'
+  | 'diary'
+  | 'appearance'
+  | 'about';
+
+const TAB_IDS: readonly Tab[] = [
+  'extensions',
+  'model',
+  'agents',
+  'knowledge',
+  'diary',
+  'appearance',
+  'about',
+];
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -22,7 +42,7 @@ export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const initialTab: Tab = (() => {
     const t = searchParams.get('tab');
-    if (t === 'diary' || t === 'extensions' || t === 'appearance' || t === 'about') return t;
+    if (t && (TAB_IDS as readonly string[]).includes(t)) return t as Tab;
     return 'extensions';
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -81,6 +101,15 @@ export function SettingsPage() {
         <TabButton active={activeTab === 'extensions'} onClick={() => setActiveTab('extensions')}>
           🔌 {t.settings.tabs.extensions}
         </TabButton>
+        <TabButton active={activeTab === 'model'} onClick={() => setActiveTab('model')}>
+          🧠 {t.settings.tabs.model}
+        </TabButton>
+        <TabButton active={activeTab === 'agents'} onClick={() => setActiveTab('agents')}>
+          🤖 {t.settings.tabs.agents}
+        </TabButton>
+        <TabButton active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')}>
+          📚 {t.settings.tabs.knowledge}
+        </TabButton>
         <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
           📓 {t.settings.tabs.diary}
         </TabButton>
@@ -103,6 +132,9 @@ export function SettingsPage() {
               onRefresh={refresh}
             />
           )}
+          {activeTab === 'model' && <ModelRoutingPanel />}
+          {activeTab === 'agents' && <AgentsPanel />}
+          {activeTab === 'knowledge' && <KnowledgePanel />}
           {activeTab === 'diary' && <DiarySettingsPanel />}
           {activeTab === 'appearance' && <ThemePicker />}
           {activeTab === 'about' && <AboutTabBody />}

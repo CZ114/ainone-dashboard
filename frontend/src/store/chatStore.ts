@@ -188,6 +188,7 @@ const LS_PERMISSION = 'chat-permission-mode';
 const LS_THINKING = 'chat-thinking-mode';
 const LS_EFFORT = 'chat-effort-level';
 const LS_VOICE_LANG = 'chat-voice-lang';
+const LS_AGENT_ID = 'chat-agent-id';
 export const THINKING_BUDGET_TOKENS = 10_000;
 
 // Supported BCP-47 codes for browser SpeechRecognition + backend
@@ -248,6 +249,18 @@ function loadEffortMode(): EffortModeValue {
   }
   return 'default';
 }
+function loadAgentId(): string {
+  try {
+    const v = localStorage.getItem(LS_AGENT_ID);
+    // Agent ids are dynamic (user-defined on the agent backend) so any
+    // non-empty string is acceptable; the picker reconciles against the
+    // live list at render time and 'default' always exists server-side.
+    if (v && v.trim().length > 0) return v;
+  } catch {
+    /* ignore */
+  }
+  return 'default';
+}
 function loadVoiceLang(): string {
   try {
     const v = localStorage.getItem(LS_VOICE_LANG);
@@ -303,6 +316,12 @@ interface ChatState {
   permissionMode: PermissionModeValue;
   thinkingMode: ThinkingModeValue;
   effortMode: EffortModeValue;
+  // Agent preset on the agent backend that NEW conversations start
+  // with. Sent on every /api/chat request; the server ignores it when
+  // resuming an existing session (a session keeps the agent it was
+  // created with), so mid-conversation changes only affect the next
+  // new chat. 'default' = the backend's builtin default agent.
+  agentId: string;
   // BCP-47 code driving both browser SpeechRecognition and the optional
   // Whisper-local lang hint (passed via /ws/transcribe?lang=...).
   voiceLang: string;
@@ -342,6 +361,7 @@ interface ChatState {
   setPermissionMode: (mode: PermissionModeValue) => void;
   setThinkingMode: (mode: ThinkingModeValue) => void;
   setEffortMode: (mode: EffortModeValue) => void;
+  setAgentId: (id: string) => void;
   setVoiceLang: (code: string) => void;
   addPendingAttachments: (attachments: PendingAttachment[]) => void;
   removePendingAttachment: (id: string) => void;
@@ -370,6 +390,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   permissionMode: loadPermissionMode(),
   thinkingMode: loadThinkingMode(),
   effortMode: loadEffortMode(),
+  agentId: loadAgentId(),
   voiceLang: loadVoiceLang(),
   pendingAttachments: [],
 
@@ -478,6 +499,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setEffortMode: (effortMode) => {
     savePersist(LS_EFFORT, effortMode);
     set({ effortMode });
+  },
+
+  setAgentId: (agentId) => {
+    savePersist(LS_AGENT_ID, agentId);
+    set({ agentId });
   },
 
   setVoiceLang: (voiceLang) => {
