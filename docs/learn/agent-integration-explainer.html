@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>你的 Agent 是怎么接进前后端系统的 — 零术语交互讲解</title>
+<style>
+  :root {
+    --bg: #f7f2ea; --card: #fffdf9; --border: #e6dccc; --border-strong: #d4c5ab;
+    --text: #3d3629; --muted: #8a7d68; --accent: #b0713f; --accent-soft: #c4854f;
+    --accent-bg: #f5e6d3; --green: #3d8b5f; --green-bg: #e8f3ec;
+    --red: #b8503d; --red-bg: #f7e8e4; --blue: #4a6fa5; --blue-bg: #e8eef7;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 32px 20px 80px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
+  code, .mono { font-family: var(--mono); font-size: .92em; background: var(--accent-bg); padding: 1px 5px; border-radius: 4px; }
+
+  .fx { display: block; margin-top: 8px; padding: 8px 12px; background: var(--accent-bg); border-left: 3px solid var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 13px; }
+  .fx::before { content: "🏷️ 打个比方 — "; font-weight: 700; color: var(--accent); }
+
+  .intro { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+  .intro .panel { font-size: 13.5px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .panel h3 { font-size: 14px; margin-bottom: 6px; }
+  .panel h3 .em { font-size: 17px; margin-right: 4px; }
+
+  /* ── 系统地图 ─────────────────────────── */
+  .map-outer { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px 18px 16px; margin-top: 12px; }
+  .map { position: relative; }
+  .lane { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .lane + .lane { margin-top: 26px; }
+  .station { flex: 1; min-width: 170px; background: var(--bg); border: 2px solid var(--border-strong); border-radius: 12px; padding: 10px 12px; position: relative; transition: all .3s; cursor: pointer; }
+  .station .em { font-size: 22px; }
+  .station .nm { font-weight: 800; font-size: 14px; }
+  .station .role { font-size: 12px; color: var(--muted); }
+  .station .addr { position: absolute; top: -10px; right: 10px; font-family: var(--mono); font-size: 10.5px; background: var(--text); color: #fff; padding: 1px 8px; border-radius: 8px; }
+  .station.lit { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 4px var(--accent-bg), 0 4px 14px rgba(176,113,63,.25); transform: translateY(-2px); }
+  .station.yours { border-style: dashed; border-color: var(--green); }
+  .station.yours .addr { background: var(--green); }
+  #ticket { position: absolute; z-index: 5; font-size: 26px; transition: left .55s cubic-bezier(.5,1.4,.4,1), top .55s cubic-bezier(.5,1.4,.4,1); filter: drop-shadow(0 3px 5px rgba(0,0,0,.25)); pointer-events: none; }
+  #ticket .tag { position: absolute; left: 26px; top: 2px; white-space: nowrap; font-size: 10.5px; background: var(--text); color: #fff; padding: 1px 7px; border-radius: 7px; font-family: var(--mono); opacity: .92; }
+
+  .station-pop { display: none; position: absolute; z-index: 9; width: min(430px, 92vw); background: var(--card); border: 1.5px solid var(--accent); border-radius: 12px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(60,45,25,.18); font-size: 13px; }
+  .station-pop.show { display: block; }
+  .station-pop .close { position: absolute; top: 6px; right: 10px; cursor: pointer; color: var(--muted); font-size: 16px; border: 0; background: none; padding: 2px 6px; }
+  .station-pop .where { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .station-pop .where code { font-size: 11px; }
+
+  /* ── 旅程解说 ─────────────────────────── */
+  .journey { margin-top: 14px; }
+  .explain { border-left: 4px solid var(--accent); }
+  .explain .step-no { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 700; }
+  .explain .step-title { font-weight: 800; font-size: 16.5px; margin: 2px 0 6px; }
+  .explain .step-desc { font-size: 14px; }
+  .explain details { margin-top: 10px; }
+  .explain summary { cursor: pointer; font-size: 12px; color: var(--blue); user-select: none; }
+  .explain .jargon { margin-top: 6px; background: var(--blue-bg); border: 1px solid #d3ddec; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+  .jargon code { background: #fff; }
+
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); padding: 8px 18px; font-size: 14px; transition: all .15s; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  button.primary:hover { background: var(--accent-soft); }
+  button:disabled { opacity: .4; cursor: default; }
+  .progress { flex: 1; min-width: 140px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); transition: width .3s; }
+  .kbd-hint { font-size: 11.5px; color: var(--muted); }
+
+  /* ── 术语速查 ─────────────────────────── */
+  .term-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
+  .term { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; cursor: pointer; transition: all .15s; }
+  .term:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .term.open { border-color: var(--accent); box-shadow: 0 2px 12px rgba(176,113,63,.15); }
+  .term .h { font-weight: 700; font-size: 14px; }
+  .term .one { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .term-detail { display: none; grid-column: 1 / -1; background: var(--card); border: 1px solid var(--accent-soft); border-radius: 10px; padding: 14px 16px; font-size: 13.5px; }
+  .term-detail.show { display: block; }
+  .term-detail .in-proj { margin-top: 8px; font-size: 12.5px; background: var(--green-bg); border: 1px solid #cfe0d4; border-radius: 8px; padding: 7px 12px; }
+  .in-proj::before { content: "📍 在你的项目里: "; font-weight: 700; color: var(--green); }
+
+  .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .three .panel b { color: var(--accent); }
+  .foot { margin-top: 30px; color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🍽️ 你的 Agent 是怎么接进前后端系统的？</h1>
+<p class="sub">全篇只用一个比方讲到底：<b>整套系统 = 一家餐厅</b>。你在 Music!!! 项目里训练的 agent 库是一位主厨，dashboard 这家餐厅把他"外聘"了过来。看完这页你会明白：你在网页上打一句话，它是怎么一路跑到主厨手里、又怎么变成屏幕上蹦出来的回答的。</p>
+
+<div class="intro">
+  <div class="panel">
+    <h3><span class="em">🪑</span>前端 = 餐厅大堂</h3>
+    你<b>看得见、摸得着</b>的一切：聊天框、按钮、设置页。它只负责"好看 + 收集你的操作"，自己不会思考。
+    <span class="fx">大堂里的菜单、桌椅、服务员——但饭不是在这做的。（对应 <code>frontend/</code> 文件夹，用 React 写的网页）</span>
+  </div>
+  <div class="panel">
+    <h3><span class="em">🍳</span>后端 = 后厨</h3>
+    你<b>看不见但真正干活</b>的程序，在你电脑上默默运行。这家餐厅有<b>好几个后厨</b>，各管一摊（等下地图上见）。
+    <span class="fx">点了菜之后所有的洗切炒炖——都发生在你看不到的地方。（对应 <code>backend/</code> 文件夹）</span>
+  </div>
+  <div class="panel">
+    <h3><span class="em">🚪</span>端口 = 门牌号</h3>
+    这些程序全住在你电脑这"一栋楼"里，靠数字门牌区分：<code>5173</code>、<code>3000</code>、<code>8100</code>、<code>8080</code>。给 8100 送单子，绝不会送错到 8080。
+    <span class="fx">同一栋楼里的不同房间号。网址 <code>localhost:5173</code> 意思就是"本楼 5173 室"。</span>
+  </div>
+</div>
+
+<h2>① 餐厅平面图 — 每个房间都可以点开看</h2>
+<p class="sub">虚线绿框 = 你自己写的部分（从 Music!!! "外聘"来的）。运行下面的旅程时，📨 小票会在房间之间移动。</p>
+
+<div class="map-outer">
+  <div class="map" id="map">
+    <div class="lane" id="lane1">
+      <div class="station" data-st="you"><span class="addr">你的浏览器</span><span class="em">🧑</span><div class="nm">你</div><div class="role">在聊天框打字、看回答</div></div>
+      <div class="station" data-st="front"><span class="addr">:5173</span><span class="em">🪑</span><div class="nm">大堂（前端）</div><div class="role">网页本体 + 传菜口</div></div>
+      <div class="station" data-st="gateway"><span class="addr">:3000</span><span class="em">🛎️</span><div class="nm">前台（网关）</div><div class="role">只转单，不做菜</div></div>
+      <div class="station" data-st="kitchen"><span class="addr">:8100</span><span class="em">🍳</span><div class="nm">新厨房（agent 服务）</div><div class="role">主厨在这上班</div></div>
+    </div>
+    <div class="lane" id="lane2">
+      <div class="station yours" data-st="chef"><span class="addr">Music!!! 项目</span><span class="em">👨‍🍳</span><div class="nm">主厨（你的 agent 库）</div><div class="role">被外聘，人没搬家</div></div>
+      <div class="station" data-st="pantry"><span class="addr">:8080</span><span class="em">🥬</span><div class="nm">储藏室（硬件后厨）</div><div class="role">传感器、录音数据</div></div>
+      <div class="station" data-st="llm"><span class="addr">互联网远端</span><span class="em">🧠</span><div class="nm">远方智囊（LLM）</div><div class="role">venice / deepseek</div></div>
+      <div class="station" data-st="archive"><span class="addr">硬盘文件</span><span class="em">🗄️</span><div class="nm">档案柜（会话记录）</div><div class="role">回头客的点单历史</div></div>
+    </div>
+    <div id="ticket" style="left:10px; top:40px;">📨<span class="tag" id="ticketTag"></span></div>
+  </div>
+  <div class="station-pop" id="pop"><button class="close" id="popClose">✕</button><div id="popBody"></div></div>
+</div>
+
+<h2>② 一条消息的完整旅程 — 按「下一步」跟着小票走</h2>
+<p class="sub">场景：你在聊天框输入 <b>「帮我看看最近的录音数据」</b> 然后回车。每一步先看人话和比方，想深入再展开"术语版"。</p>
+
+<div class="journey">
+  <div class="panel explain">
+    <div class="step-no" id="stepNo"></div>
+    <div class="step-title" id="stepTitle"></div>
+    <div class="step-desc" id="stepDesc"></div>
+    <div class="fx" id="stepFx"></div>
+    <details id="jargonWrap"><summary>▶ 术语版（给想深入的你）</summary><div class="jargon" id="stepJargon"></div></details>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="primary" id="btnNext">下一步 ▸</button>
+  <button id="btnAuto">▶ 自动播放</button>
+  <button id="btnReset">↺ 重置</button>
+  <div class="progress"><i id="progBar" style="width:0%"></i></div>
+  <span class="kbd-hint" id="progText"></span>
+</div>
+
+<h2>③ 术语速查 — 以后再看到这些词就不慌了</h2>
+<p class="sub">点卡片展开：一句人话 + 比方 + 它在你项目里具体是哪个东西。</p>
+<div class="term-grid" id="termGrid"></div>
+
+<h2>④ 为什么要隔这么多层？不能让网页直接找主厨吗？</h2>
+<div class="three">
+  <div class="panel"><b>1 · 前台没换人 → 随时能回退</b><br>
+    迁移时的约定是"不动原版代码"。老前台（原来对接 Claude 的 :3000）原样留着，我们复制了一个新前台改成"只转单"。哪天想换回旧厨房，换个启动脚本就行，大堂完全无感。
+    <span class="fx">餐厅换主厨没有装修大堂——客人第二天来，一切照旧，只是菜更合口味了。</span></div>
+  <div class="panel"><b>2 · 主厨不用学接单 → 你的库保持纯粹</b><br>
+    你的 agent 库里没有一行"怎么收网络请求"的代码——接单、排队、催菜全是 :8100 这个厨房（agent_service）的事，主厨只管一件事：拿到菜单，做菜（<code>Agent.send()</code>）。所以这个库明天还能被别的项目外聘。
+    <span class="fx">主厨只练厨艺，不学收银。收银台换了牌子，主厨的手艺一点不受影响。</span></div>
+  <div class="panel"><b>3 · 智囊是外包的 → 换 LLM 像换供应商</b><br>
+    真正"想答案"的是远方的大模型。你的库把"寄信给谁"做成了配置（venice / deepseek / qwen…都行），设置页改一下，整个餐厅其它环节零改动。
+    <span class="fx">今天用 A 家的高汤，明天换 B 家——菜谱和厨房流程一个字不用改。</span></div>
+</div>
+
+<div class="foot">
+  想看代码层面的细节：<code>docs/agent-migration-sod/</code>（01 现状 · 02 方案 · 03 协议 · 06 工作流 · 07 能力控制台）。
+  姐妹篇：<code>workflow-engine-explainer.html</code>（Workflow JSON 是怎么被逐步执行的）。
+</div>
+
+</div>
+
+<script>
+// ═══════════ 站点资料（点击平面图弹出） ═══════════
+const STATIONS = {
+  you:     { t: "🧑 你", body: "整个系统存在的意义。你只需要打字和点按钮，剩下的都是下面这群程序的事。",
+             fx: "坐在大堂里的客人。", where: "你的浏览器窗口（Chrome/Edge）" },
+  front:   { t: "🪑 大堂（前端, :5173）", body: "你看到的网页本身：聊天框、气泡、设置页。它不会思考，只做两件事——把你的操作打包送出去、把送回来的内容画在屏幕上。它还兼任「传菜口」：根据单子开头的字（/api/chat 还是 /api/agent）决定送去哪个后厨。",
+             fx: "大堂 + 传菜口二合一：服务员看一眼小票抬头就知道递给哪个窗口。", where: "frontend/ 文件夹（React 网页），传菜规则在 vite.config.ts" },
+  gateway: { t: "🛎️ 前台（网关, :3000）", body: "历史遗留但故意保留的一层。它原来负责对接 Claude，迁移时我们复制了一份、掏空了 Claude 的部分，改成「收到聊天单子 → 原样转给 :8100」。日记等旧功能也还归它管。",
+             fx: "老前台还站在原位，只是他现在的工作从「自己安排厨房」变成了「把单子转交给新厨房」。", where: "backend/agent_gateway/ 文件夹（backend/claude 的去 Claude 副本）" },
+  kitchen: { t: "🍳 新厨房（agent 服务, :8100）", body: "为你的主厨新盖的厨房，管一切「厨房事务」：查档案认回头客、给主厨发工具、危险操作先找你签字、把做好的每一步实时递出去。厨房是我们写的，但做菜的手艺全是主厨的。",
+             fx: "厨房提供灶台、食材通道和传菜窗，主厨拎包入住。", where: "backend/agent_service/ 文件夹（Python 写的服务）" },
+  chef:    { t: "👨‍🍳 主厨（你的 agent 库）", body: "你在 Music!!! 项目里一个 Phase 一个 Phase 亲手搭的 agent 框架：会多轮思考、会用工具、会记笔记、会查知识库。重点：他人没搬家——代码仍在 Music!!! 文件夹里，餐厅通过一条「直通电梯」实时用到他的最新手艺。",
+             fx: "外聘主厨没搬家：你在他家里改菜谱（改库代码），餐厅这边立刻就是新做法。", where: "D:\\Imperial\\individual\\Music!!!\\project\\agent（pip install -e 挂进来的）" },
+  pantry:  { t: "🥬 储藏室（硬件后厨, :8080）", body: "餐厅最早就有的另一个后厨，管 ESP32 传感器、录音文件这些「食材」。主厨想看录音数据时，派个帮厨（工具）来这里取，它俩之间也是递小票（HTTP）沟通。",
+             fx: "冷库管理员：不做菜，但所有食材都归他管。", where: "backend/app/ 文件夹（原有的 FastAPI 后端，一行没动）" },
+  llm:     { t: "🧠 远方智囊（LLM）", body: "真正「想答案」的大脑不在你电脑里——主厨把整段对话装信封寄给云端的大模型（现在签约的是 venice 平台的 deepseek-v4-flash），对方逐字回信。你设置页里的「模型路由」就是在选签约哪家。",
+             fx: "主厨遇事打电话请教的远方顾问，按字数收咨询费。", where: "agent 库的 llm.py 负责寄信；密钥在 .env 里" },
+  archive: { t: "🗄️ 档案柜（会话记录）", body: "每桌客人一个文件夹，聊过的每句话都归档（硬盘上的 .jsonl 文件）。哪怕整个餐厅关门重开（重启服务），回头客报上桌号（sessionId），主厨翻档案就能接着上次聊。",
+             fx: "理发店的会员档案：换了班的师傅翻一眼记录，照样知道你上次剪的什么。", where: "backend/data/agent_service/sessions/ 里的一堆 .jsonl 文件" },
+};
+
+// ═══════════ 旅程脚本 ═══════════
+const JOURNEY = [
+  { st: "you", tag: "打字中…", title: "你按下了回车",
+    desc: "你输入「帮我看看最近的录音数据」。此刻这句话还只是网页输入框里的一串文字，什么都还没发生。",
+    fx: "你合上菜单，招手叫服务员。",
+    jargon: "输入框的内容存在 React 的状态 (state) 里；回车触发 ChatInput 组件的提交事件。" },
+  { st: "front", tag: "打包成小票", title: "大堂把话打包成「小票」",
+    desc: "网页把你的话、你的桌号（会话编号）、你选的主厨（agent 选择器）装进一个标准格式的小纸条，这就是一次「请求」。系统里所有房间之间的沟通，全部靠递这种小票。",
+    fx: "服务员写单：几号桌、点什么、有什么忌口——写法全餐厅统一，谁拿到都看得懂。",
+    jargon: "HTTP POST 请求，内容是 JSON：<code>{\"message\":\"帮我看看…\", \"sessionId\":\"…\", \"agentId\":\"default\"}</code>，发往 <code>/api/chat</code>。JSON 就是那种「键: 值」的通用小票格式。" },
+  { st: "front", tag: "看抬头分拣", title: "传菜口看一眼抬头，决定送哪",
+    desc: "小票抬头写着 /api/chat——传菜口的分拣规则说：这类单子送 3000 号房间。（如果抬头是 /api/agent 开头，比如你在设置页保存模型配置，就直接送 8100。）",
+    fx: "传菜口墙上贴着分单表：「点菜单 → 3 号窗，采购单 → 直接找厨房」。",
+    jargon: "vite 开发服务器的代理 (proxy) 配置：<code>vite.config.ts</code> 里写着 <code>'/api/chat' → localhost:3000</code>、<code>'/api/agent' → localhost:8100</code>。代理 = 帮你转发请求的中间人。" },
+  { st: "gateway", tag: "前台转抄", title: "前台（网关）收单，原样转抄给新厨房",
+    desc: "3000 号房的前台不做任何菜。他从单子上只抄三样：你说的话、桌号、选的主厨，然后递给 8100。当年他对接的是 Claude；迁移时我们没动老前台，复制了一个改成纯转单——这就是「不动原版、随时可回退」。",
+    fx: "老前台还在，但现在他只负责喊一嗓子：「8100，来单了！」",
+    jargon: "agent_gateway 的 <code>handlers/chat.ts</code>：读取 body，只保留 message/sessionId/agentId 三个字段，<code>fetch</code> 转发到 <code>:8100/api/compat/chat</code>，响应字节流原样管道回去（纯透传）。" },
+  { st: "kitchen", tag: "查档案", title: "新厨房收单：先认人",
+    desc: "厨房领班（会话管理器）看桌号：老客人？从内存里找到正在服务这桌的主厨；主厨下班了？去档案柜把这桌的历史翻出来，让主厨读一遍再接着聊。全新客人？开新档案。",
+    fx: "领班翻会员簿：「哦，这位老客，上次聊到录音分析——主厨，接着来。」",
+    jargon: "<code>sessions.py</code> 的 SessionManager：内存字典缓存 Agent 实例（30 分钟不活跃就释放）；文件还在就 <code>Agent.resume(session_id)</code> 从 AuditLog 重建对话历史。" },
+  { st: "chef", tag: "主厨思考", title: "主厨登场 — 这是你写的代码在跑",
+    desc: "从这一刻起运转的是你在 Music!!! 里搭的框架：主厨把系统提示词、历史对话、这次的新话摆开，开始琢磨。注意他其实还在 Music!!! 的文件夹里「远程上班」——你在那边改一行代码，这边立刻生效。",
+    fx: "直通电梯：主厨人在自己家厨房，菜却出现在这家餐厅的传菜窗。",
+    jargon: "<code>pip install -e</code>（可编辑安装）：dashboard 的 Python 环境里装的不是拷贝，而是指向 Music!!!/project 的「快捷方式」。厨房调用的就是 <code>Agent.send()</code>——你的 Phase 1 主循环。" },
+  { st: "llm", tag: "✉️ 寄信问智囊", title: "第一次请教智囊：该做什么？",
+    desc: "主厨自己不「想」——他把整桌对话装进信封寄给远方的大模型。智囊回信说：「客人想看录音数据？你手上不是有个 list_recordings 工具吗，先去查。」",
+    fx: "主厨打给顾问：「客人要看食材新鲜度」，顾问：「你先去冷库拿清单，拿回来我帮你分析。」",
+    jargon: "<code>AgentDeploy.invoke()</code> 向 venice 的 OpenAI 兼容接口发一次 chat.completions 请求，随信附上工具清单 (tools)；模型返回的不是文字而是一个 <code>tool_call</code>：「调 list_recordings」。" },
+  { st: "pantry", tag: "帮厨取货", title: "帮厨跑一趟储藏室",
+    desc: "主厨派帮厨（工具）去 8080 号房取录音清单。储藏室管理员翻出最近的录音记录递回来。与此同时，大堂里你的屏幕上已经出现了一张「🔧 正在调用 list_recordings」的小卡片——厨房做到哪一步，都会实时喊一声。",
+    fx: "「后厨传话：正在取货！」——你人在大堂就能听见后厨的动静。",
+    jargon: "工具 handler 里就是一次普通的 HTTP GET <code>:8080/api/recordings/list</code>；同时厨房往回递了一行 <code>tool_call</code> 事件（NDJSON 流的一行），前端把它画成工具气泡。" },
+  { st: "llm", tag: "✉️ 再寄一信", title: "带着货再问智囊：现在怎么答？",
+    desc: "帮厨把清单交回，主厨把「工具的结果」附在对话后面，再寄一封信。这次智囊看到了真实数据，开始口述最终回答。这个「问→用工具→再问」的圈，一轮对话里可以转好几次——这就是你框架里的多轮工具循环。",
+    fx: "顾问看到冷库清单后：「好，你就这么跟客人说……」。",
+    jargon: "tool 结果以 <code>role:\"tool\"</code> 消息回填历史，<code>send()</code> 循环再次 invoke；模型这次返回最终文本。循环上限 max_rounds=8 防失控。" },
+  { st: "front", tag: "上菜喽", title: "做好一道上一道 — 回答是「流」回来的",
+    desc: "厨房不是憋到全做完才出餐：过程被拆成一行行「事件」——工具卡先到、完整回答随后到、最后一行「done」表示上齐。每一行经前台原样转交、传菜口递进大堂，网页把它们画成你看到的气泡。所以你先看到工具卡、再看到回答冒出来。",
+    fx: "上菜不等全席做齐：凉菜先上、热菜跟上、最后服务员说一声「菜齐了」。",
+    jargon: "NDJSON 流式响应：一行一个 JSON 事件（<code>tool_call → tool_result → 回答文本 → done</code>），HTTP 连接保持打开逐行推送。前端 useStreamParser 逐行解析、更新状态、React 重绘。" },
+  { st: "archive", tag: "归档", title: "收尾：这桌的对话进档案柜",
+    desc: "整轮做完，厨房把这桌新增的对话写进档案柜的文件里。下次你带着同一个桌号来——哪怕电脑重启过——主厨翻档案就能无缝接着聊。你在侧栏看到的历史会话列表，就是档案柜的目录。",
+    fx: "打烊前把今天的点单钉进会员档案，明天谁值班都接得上。",
+    jargon: "AuditLog（both 模式）把干净对话追加到 <code>sessions/&lt;id&gt;.jsonl</code>；侧栏的 GET /api/sessions 就是列这个目录。跨进程恢复实测过。" },
+  { st: "kitchen", tag: "⚠️ 支线剧情", title: "支线：如果主厨要做「危险菜」呢？",
+    desc: "假如你说的是「帮我把分析结果写进文件」——写文件是危险操作。厨房会整个暂停，递一张签字单到你桌上（屏幕上弹出允许/拒绝卡片）。你不点头，主厨就站在原地等；你点「允许」，铃一响，继续做。",
+    fx: "切河豚前必须拿到客人签字——单子递到你桌上，全后厨停下来等那声铃。",
+    jargon: "权限桥：工具标了 requires_approval → 厨房线程往流里推 <code>permission_request</code> 事件后用 <code>threading.Event.wait()</code> 原地阻塞；前端 POST /permission 决定 → <code>Event.set()</code> 唤醒。120 秒没人签字视为拒绝。" },
+];
+
+// ═══════════ 渲染 & 交互 ═══════════
+let cur = -1, timer = null;
+const $ = id => document.getElementById(id);
+const mapEl = $("map"), ticket = $("ticket");
+
+function moveTicket(stKey, tag) {
+  const st = document.querySelector(`.station[data-st="${stKey}"]`);
+  if (!st) return;
+  const mr = mapEl.getBoundingClientRect(), sr = st.getBoundingClientRect();
+  ticket.style.left = (sr.left - mr.left + sr.width / 2 - 13) + "px";
+  ticket.style.top  = (sr.top - mr.top - 14) + "px";
+  $("ticketTag").textContent = tag || "";
+}
+
+function render() {
+  const s = JOURNEY[cur];
+  $("stepNo").textContent = "第 " + (cur + 1) + " 步 / 共 " + JOURNEY.length + " 步";
+  $("stepTitle").textContent = s.title;
+  $("stepDesc").textContent = s.desc;
+  $("stepFx").textContent = s.fx;
+  $("stepJargon").innerHTML = s.jargon;
+  $("jargonWrap").open = false;
+  document.querySelectorAll(".station").forEach(el =>
+    el.classList.toggle("lit", el.dataset.st === s.st));
+  moveTicket(s.st, s.tag);
+  $("progBar").style.width = ((cur + 1) / JOURNEY.length * 100) + "%";
+  $("progText").textContent = "快捷键: 空格=下一步, R=重置";
+  $("btnNext").disabled = cur >= JOURNEY.length - 1;
+  if (cur >= JOURNEY.length - 1) stopAuto();
+}
+function next() { if (cur < JOURNEY.length - 1) { cur++; render(); } }
+function reset() { stopAuto(); cur = 0; render(); }
+function stopAuto() { if (timer) { clearInterval(timer); timer = null; $("btnAuto").textContent = "▶ 自动播放"; } }
+$("btnNext").onclick = next;
+$("btnReset").onclick = reset;
+$("btnAuto").onclick = () => {
+  if (timer) { stopAuto(); return; }
+  if (cur >= JOURNEY.length - 1) cur = -1;
+  $("btnAuto").textContent = "⏸ 暂停";
+  next(); timer = setInterval(next, 3400);
+};
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") { e.preventDefault(); next(); }
+  if (e.key === "r" || e.key === "R") reset();
+});
+window.addEventListener("resize", () => { if (cur >= 0) moveTicket(JOURNEY[cur].st, JOURNEY[cur].tag); });
+
+// 站点弹窗
+const pop = $("pop"), popBody = $("popBody");
+document.querySelectorAll(".station").forEach(st => {
+  st.addEventListener("click", () => {
+    const d = STATIONS[st.dataset.st];
+    popBody.innerHTML = `<b style="font-size:14.5px">${d.t}</b><div style="margin-top:6px">${d.body}</div>
+      <span class="fx">${d.fx}</span><div class="where">📍 ${d.where}</div>`;
+    const outer = mapEl.parentElement.getBoundingClientRect(), sr = st.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(sr.left - outer.left, outer.width - 445)) + "px";
+    pop.style.top = (sr.bottom - outer.top + 8) + "px";
+    pop.classList.add("show");
+  });
+});
+$("popClose").onclick = () => pop.classList.remove("show");
+document.addEventListener("click", e => { if (!e.target.closest(".station") && !e.target.closest(".station-pop")) pop.classList.remove("show"); });
+
+// ═══════════ 术语速查 ═══════════
+const TERMS = [
+  { h: "前端 / 后端", one: "看得见的 vs 干活的",
+    body: "前端 = 跑在你浏览器里、画界面的程序；后端 = 跑在「幕后」、处理数据和逻辑的程序。它们是分开写、分开运行的两拨代码，靠互递小票（请求）合作。",
+    fx: "大堂与后厨。大堂负责体面，后厨负责真本事。",
+    proj: "frontend/（大堂）· backend/（三个后厨: agent_gateway、agent_service、app）" },
+  { h: "HTTP 请求 / 响应", one: "标准格式的小票与回执",
+    body: "程序 A 想让程序 B 干活，就发一张格式统一的小票（请求），B 干完回一张回执（响应）。整个互联网都靠这个规矩运转。GET =「给我看看」，POST =「帮我办事」。",
+    fx: "点单小票和找零回执——格式统一，跨店通用。",
+    proj: "你每发一条聊天 = 一次 POST /api/chat" },
+  { h: "JSON", one: "小票上的通用书写格式",
+    body: "「键: 值」组成的文本格式，人能读、程序也能读。前后端之间的通信、你的工作流定义、agent 配置，全用它。",
+    fx: "全世界餐厅统一的点单表格式：菜名一栏、数量一栏、备注一栏。",
+    proj: "agents.json、workflows.json、每一次请求的内容" },
+  { h: "端口", one: "同一台电脑里的门牌号",
+    body: "一台电脑能同时跑很多服务程序，每个占一个数字门牌。地址 localhost:8100 = 「本机的 8100 室」。",
+    fx: "写字楼房间号。快递（请求）必须写清房间号才送得到。",
+    proj: "5173 大堂 · 3000 前台 · 8100 新厨房 · 8080 储藏室" },
+  { h: "代理 (proxy)", one: "帮你转交小票的中间人",
+    body: "网页出于安全不能随便跨门牌号送单，所以大堂内置一个转交员：所有单子先给他，他按抬头分发。前端代码里只写「/api/chat」，不用关心最终送到哪个房间。",
+    fx: "传菜口：服务员不进后厨，单子放窗口，里面的人分拣。",
+    proj: "frontend/vite.config.ts 里的 proxy 配置表" },
+  { h: "网关 (gateway)", one: "统一收发的前台",
+    body: "挡在若干后端服务前面的一层，负责转发、翻译格式、管旧功能。我们的网关是特意保留的「老前台」，让迁移可以不动原版、随时回退。",
+    fx: "总服务台：客人只认它，它知道内部各部门怎么找。",
+    proj: "backend/agent_gateway/（:3000）" },
+  { h: "流式 (streaming)", one: "做好一口上一口",
+    body: "普通响应是「憋完一整份再给你」；流式是连接保持打开，做好一行推一行。所以你能看到工具卡先蹦出来、回答随后跟上——体验上「它在思考」而不是「它卡死了」。",
+    fx: "现捏寿司：捏好一贯上一贯，而不是等十贯齐了才端上桌。",
+    proj: "聊天回答、工作流运行面板的事件直播（NDJSON：一行一个 JSON）" },
+  { h: "会话 (session)", one: "一桌客人的完整对话",
+    body: "从你开新聊天到聊完的整段历史，配一个编号。带着编号再来，系统翻出档案接着聊——这就是「它记得上文」的全部原理，没有魔法。",
+    fx: "会员卡号 + 消费档案。",
+    proj: "backend/data/agent_service/sessions/*.jsonl，一个文件一桌" },
+  { h: "可编辑安装 (pip install -e)", one: "外聘不搬家的直通电梯",
+    body: "通常装一个库是「复印一份带走」，改原稿不影响复印件。可编辑安装是「贴个传送门」——餐厅用到的永远是 Music!!! 文件夹里的最新代码。你在库里改一行，这边重启服务就生效。",
+    fx: "主厨住自己家，餐厅装了直通他家厨房的电梯。",
+    proj: "backend/.venv 里装的 music-agent 指向 D:\\...\\Music!!!\\project" },
+  { h: "依赖注入", one: "厨房递工具，主厨不挑牌子",
+    body: "你的 Agent 构造时，记忆、知识库、审批回调都是「外面递进来」的参数，而不是写死在库里。所以同一个主厨在餐厅有审批铃、在你的 notebook 里可以什么都不带——环境决定装备。",
+    fx: "主厨自带手艺，锅和铃铛由店家配——换店不用换人。",
+    proj: "factory.py 负责「配装备」: Agent(client=…, registry=…, retrieval=…, approval_callback=…)" },
+  { h: "NDJSON 事件", one: "后厨的实时喊话",
+    body: "流式传输里的每一行都是一个独立 JSON，描述「刚发生了什么」：调工具了、工具回来了、说了一段话、上齐了。前端逐行解析，画成对应的气泡和卡片。",
+    fx: "后厨广播：「3号桌凉菜好了」「3号桌热菜下锅」——一句一条，谁都听得懂。",
+    proj: "事件类型: tool_call / tool_result / delta / done / permission_request" },
+  { h: "环境变量 / .env", one: "写在门后的保险柜密码",
+    body: "API 密钥这类不能写进代码、更不能提交到 git 的秘密，放在 .env 文件里，程序启动时读进来。谁拿到你的密钥谁就能花你的钱，所以它永远待在你本机。",
+    fx: "收银台钥匙放店长抽屉里，不印在菜单上。",
+    proj: "VENICE_API_KEY 在 Music!!!/project/agent/.env（库加载时自动读）" },
+];
+const tg = $("termGrid");
+TERMS.forEach((t, i) => {
+  const el = document.createElement("div");
+  el.className = "term"; el.dataset.i = i;
+  el.innerHTML = `<div class="h">${t.h}</div><div class="one">${t.one}</div>`;
+  tg.appendChild(el);
+});
+const td = document.createElement("div");
+td.className = "term-detail"; tg.appendChild(td);
+let openT = -1;
+tg.addEventListener("click", e => {
+  const card = e.target.closest(".term"); if (!card) return;
+  const i = +card.dataset.i;
+  document.querySelectorAll(".term").forEach(el => el.classList.remove("open"));
+  if (openT === i) { openT = -1; td.classList.remove("show"); return; }
+  openT = i; card.classList.add("open");
+  const t = TERMS[i];
+  td.innerHTML = `<b>${t.h}</b> — ${t.body}<span class="fx">${t.fx}</span><div class="in-proj">${t.proj}</div>`;
+  td.classList.add("show");
+});
+
+reset();
+</script>
+</body>
+</html>
