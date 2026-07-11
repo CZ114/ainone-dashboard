@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一条 JSON 的往返 — 从你提问到看见回答</title>
+<style>
+  :root {
+    --bg: #f7f2ea; --card: #fffdf9; --border: #e6dccc; --border-strong: #d4c5ab;
+    --text: #3d3629; --muted: #8a7d68; --accent: #b0713f; --accent-soft: #c4854f;
+    --accent-bg: #f5e6d3; --green: #3d8b5f; --green-bg: #e8f3ec;
+    --red: #b8503d; --blue: #4a6fa5; --blue-bg: #e8eef7;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.65; padding: 30px 18px 70px; }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  h1 { font-size: 25px; margin-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 6px; }
+  .rule3 { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .rule3 .r { flex: 1; min-width: 240px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 9px 13px; font-size: 13px; }
+  .rule3 b { color: var(--accent); }
+  code { font-family: var(--mono); font-size: .9em; background: var(--accent-bg); padding: 1px 5px; border-radius: 4px; }
+
+  /* 线路条 */
+  .wirebar { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 22px 22px; margin-top: 14px; }
+  .wire-ends { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 800; }
+  .wire-ends .side { text-align: center; }
+  .wire-ends .side small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .wire-line { position: relative; height: 6px; background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border)); border-radius: 3px; margin: 12px 40px 0; }
+  #pkg { position: absolute; top: -14px; left: 0%; font-size: 22px; transition: left .6s cubic-bezier(.5,1.3,.4,1); filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+  .wire-note { position: absolute; top: -34px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--muted); }
+  .conn { text-align: center; font-size: 11.5px; margin-top: 10px; font-family: var(--mono); }
+  .conn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .conn.open .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: breathe 1.6s infinite; }
+  .conn.closed .dot { background: var(--border-strong); }
+  @keyframes breathe { 50% { opacity: .45; } }
+
+  /* 主舞台三栏 */
+  .stage { display: grid; grid-template-columns: 250px 1fr 330px; gap: 14px; margin-top: 14px; }
+  @media (max-width: 980px) { .stage { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; }
+  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 9px; }
+
+  /* 前端屏幕 mock */
+  .screen { background: #35302a; border-radius: 14px; padding: 12px 10px 10px; min-height: 320px; display: flex; flex-direction: column; }
+  .bubs { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+  .bub { max-width: 96%; font-size: 11.5px; border-radius: 10px; padding: 6px 10px; animation: pop .35s ease-out; }
+  @keyframes pop { 0% { transform: scale(.7); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .bub.user { background: var(--accent); color: #fff; align-self: flex-end; }
+  .bub.txt { background: #fffdf9; color: var(--text); align-self: flex-start; }
+  .bub.tool { background: #2c3a2f; color: #a8d8b4; border: 1px solid #47614d; font-family: var(--mono); font-size: 10.5px; }
+  .bub.result { background: #3a3428; color: #e8ddc8; border: 1px solid #5c5240; font-family: var(--mono); font-size: 10.5px; }
+  .bub.spin { color: #8fa596; font-size: 10.5px; align-self: center; background: none; }
+  .inputbar { margin-top: 9px; background: #4a443c; border-radius: 8px; padding: 6px 10px; font-size: 11px; color: #cfc5b4; display: flex; justify-content: space-between; }
+  .inputbar.locked { opacity: .5; }
+
+  /* 中央 JSON 卡 */
+  .pkt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .dirtag { font-size: 12px; font-weight: 800; padding: 3px 12px; border-radius: 999px; }
+  .dirtag.go { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-soft); }
+  .dirtag.back { background: var(--blue-bg); color: var(--blue); border: 1px solid #c4d2e6; }
+  .dirtag.inner { background: var(--green-bg); color: var(--green); border: 1px solid #cfe0d4; }
+  .pkt-title { font-weight: 800; font-size: 15.5px; }
+  pre.json { font-family: var(--mono); font-size: 13px; line-height: 1.8; background: #2e2a24; color: #d8cdb8; border-radius: 10px; padding: 12px 15px; overflow-x: auto; }
+  pre.json .k { color: #9db8d8; }
+  pre.json .s { color: #a8d8b4; }
+  pre.json .n { color: #e0a878; }
+  pre.json .hot { background: rgba(255,202,133,.22); outline: 1.5px solid #c4854f; border-radius: 4px; padding: 0 3px; }
+  .action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .action .a { flex: 1; min-width: 140px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+  .action .a b { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  .desc { margin-top: 10px; font-size: 13.5px; border-left: 3px solid var(--accent); padding: 4px 10px; background: var(--accent-bg); border-radius: 0 8px 8px 0; }
+
+  /* 纸带 */
+  .tape { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 10.6px; max-height: 380px; overflow-y: auto; }
+  .tl { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl.go { border-left: 4px solid var(--accent); }
+  .tl.back { border-left: 4px solid var(--blue); }
+  .tl.now { outline: 2px solid var(--accent-soft); background: #fff; animation: pop .3s; }
+  .tl .ar { font-weight: 800; }
+  .tl.go .ar { color: var(--accent); }
+  .tl.back .ar { color: var(--blue); }
+  .tape-hint { font-size: 11px; color: var(--muted); font-style: italic; }
+
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); padding: 8px 18px; font-size: 14px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  button.primary:hover { background: var(--accent-soft); }
+  button:disabled { opacity: .4; cursor: default; }
+  .progress { flex: 1; min-width: 130px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); transition: width .3s; }
+  .kbd { font-size: 11.5px; color: var(--muted); }
+
+  /* 终章分发表 */
+  .switch-card { margin-top: 22px; }
+  .switch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 8px; }
+  .sw { border: 1px solid var(--border); border-radius: 9px; padding: 8px 11px; font-size: 12.5px; background: var(--bg); }
+  .sw code { background: #fff; }
+  .sw .to { color: var(--muted); font-size: 11.5px; }
+  .foot { margin-top: 26px; color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>📦 一条 JSON 的往返 — 从你提问到看见回答</h1>
+<p class="sub">这次不讲房子（架构），只跟着<b>数据本身</b>走。先记住三条规矩，整个流程的逻辑就这三句话：</p>
+<div class="rule3">
+  <div class="r"><b>规矩一：一去，多回。</b><br>你的问题打包成 <b>1 个</b>去程包发出；回来的不是一个包，是<b>一串</b>回程行——沿着同一根保持打开的管子，做好一件回一行。</div>
+  <div class="r"><b>规矩二：全程都是 JSON。</b><br>前端↔后端、后端↔LLM、后端↔工具，说的全是同一种话：「键: 值」的小纸条。没有第二种格式。</div>
+  <div class="r"><b>规矩三：分发 = 认 type 字段。</b><br>每行回程 JSON 都带一个 <code>type</code>。前端拆开只看它：<code>tool_call</code>→画工具卡，<code>delta</code>→写字，<code>done</code>→收工。一个 switch，没有别的魔法。</div>
+</div>
+
+<div class="wirebar">
+  <div class="wire-ends">
+    <div class="side">🪑 前端<small>你的浏览器</small></div>
+    <div class="side">🍳 后端<small>agent 服务 :8100（背后连着 LLM 和工具）</small></div>
+  </div>
+  <div class="wire-line"><div id="pkg">📦</div></div>
+  <div class="conn closed" id="conn"><span class="dot"></span><span id="connText">连接未建立</span></div>
+</div>
+
+<div class="stage">
+  <div class="panel">
+    <h3>🪑 前端屏幕（实时长出来）</h3>
+    <div class="screen">
+      <div class="bubs" id="bubs"></div>
+      <div class="inputbar" id="inputbar"><span id="inputText">帮我看看最近的录音|</span><span>➤</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>📦 舞台中央 — 此刻正在被读的 JSON</h3>
+    <div class="pkt-head">
+      <span class="dirtag go" id="dirTag">·</span>
+      <span class="pkt-title" id="pktTitle"></span>
+    </div>
+    <pre class="json" id="pktJson"></pre>
+    <div class="action">
+      <div class="a"><b>谁在读</b><span id="aWho"></span></div>
+      <div class="a"><b>读哪个字段</b><span id="aRead"></span></div>
+      <div class="a"><b>读完做什么</b><span id="aDo"></span></div>
+    </div>
+    <div class="desc" id="desc"></div>
+  </div>
+
+  <div class="panel">
+    <h3>🧾 电报纸带 — 流过管子的每一行</h3>
+    <div class="tape" id="tape"><span class="tape-hint">还没有数据经过</span></div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="primary" id="btnNext">下一步 ▸</button>
+  <button id="btnAuto">▶ 自动播放</button>
+  <button id="btnReset">↺ 重置</button>
+  <div class="progress"><i id="progBar" style="width:0%"></i></div>
+  <span class="kbd" id="progText"></span>
+</div>
+
+<div class="panel switch-card">
+  <h3>🎯 终章 — 前端的"分发中心"其实只有这一张表（switch type）</h3>
+  <div class="switch-grid">
+    <div class="sw"><code>"type":"session"</code><div class="to">→ 把桌号存起来，下次请求带上</div></div>
+    <div class="sw"><code>"type":"tool_call"</code><div class="to">→ 画一张 🔧 工具卡</div></div>
+    <div class="sw"><code>"type":"tool_result"</code><div class="to">→ 画一张 ↩️ 结果卡</div></div>
+    <div class="sw"><code>"type":"delta"</code><div class="to">→ 往回答气泡里写字</div></div>
+    <div class="sw"><code>"type":"permission_request"</code><div class="to">→ 弹「允许 / 拒绝」审批卡</div></div>
+    <div class="sw"><code>"type":"done"</code><div class="to">→ 解锁输入框，收工</div></div>
+  </div>
+  <p style="font-size:12.5px; color:var(--muted); margin-top:10px">
+    真实代码位置：前端 <code>useStreamParser.ts</code>（一串 if/else 认 type）；后端造这些行的地方是 <code>agent_service/wire.py</code>。
+    聊天页实际用的字段名略有不同（claude_json 兼容格式），机制一模一样。</p>
+</div>
+
+<div class="foot">系列第三篇。① 房子怎么盖：agent-integration-explainer.html · ② 工作流引擎怎么转：workflow-engine-explainer.html · ③ 本篇：数据怎么流。</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ── JSON 片段（带高亮标记）──
+const J = {
+  req: (hot) => `{
+  <span class="k ${hot=='m'?'hot':''}">"message"</span>: <span class="s ${hot=='m'?'hot':''}">"帮我看看最近的录音"</span>,
+  <span class="k ${hot=='s'?'hot':''}">"sessionId"</span>: <span class="n ${hot=='s'?'hot':''}">null</span>,
+  <span class="k ${hot=='a'?'hot':''}">"agentId"</span>: <span class="s ${hot=='a'?'hot':''}">"default"</span>,
+  "requestId": <span class="s">"req-7f3a"</span>
+}`,
+  session: `{ <span class="k hot">"type"</span>: <span class="s hot">"session"</span>,
+  "sessionId": <span class="s">"20260711T0930_e5c2"</span> }`,
+  llmreq: `{ "model": <span class="s">"deepseek-v4-flash"</span>,
+  "messages": [system, 历史…, <span class="s">"帮我看看最近的录音"</span>],
+  <span class="k hot">"tools"</span>: [<span class="s hot">list_recordings, read_file, …</span>] }`,
+  llmresp: `{ "choices": [{ "message": {
+  <span class="k hot">"tool_calls"</span>: [{ "function": {
+      "name": <span class="s hot">"list_recordings"</span> } }] } }] }`,
+  toolcall: `{ <span class="k hot">"type"</span>: <span class="s hot">"tool_call"</span>,
+  "name": <span class="s">"list_recordings"</span>, "arguments": {} }`,
+  toolhttp: `GET :8080/api/recordings/list
+← { "recordings": [ <span class="n hot">3 条</span> (5月7日 501行 / …) ] }`,
+  toolresult: `{ <span class="k hot">"type"</span>: <span class="s hot">"tool_result"</span>,
+  "name": <span class="s">"list_recordings"</span>, "ok": <span class="n">true</span>,
+  "content": <span class="s">"[3 条录音…]"</span> }`,
+  delta: `{ <span class="k hot">"type"</span>: <span class="s hot">"delta"</span>,
+  "text": <span class="s">"最近有 3 条录音：5月7日这条有 501 行传感器数据…"</span> }`,
+  done: `{ <span class="k hot">"type"</span>: <span class="s hot">"done"</span> }`,
+};
+
+// ── 纸带行 ──
+const TAPE = [
+  { d: "go",   t: '{"message":"帮我看看最近的录音","sessionId":null,"agentId":"default"}' },
+  { d: "back", t: '{"type":"session","sessionId":"20260711T0930_e5c2"}' },
+  { d: "back", t: '{"type":"tool_call","name":"list_recordings","arguments":{}}' },
+  { d: "back", t: '{"type":"tool_result","name":"list_recordings","ok":true,"content":"[3条…]"}' },
+  { d: "back", t: '{"type":"delta","text":"最近有 3 条录音：5月7日…"}' },
+  { d: "back", t: '{"type":"done"}' },
+];
+
+// ── 屏幕气泡 ──
+const BUBS = [
+  { c: "user", h: "帮我看看最近的录音" },
+  { c: "spin", h: "· · · 思考中" },
+  { c: "tool", h: "🔧 list_recordings — 调用中…" },
+  { c: "result", h: "↩️ 返回 3 条录音 (5月7日 501行 / …)" },
+  { c: "txt", h: "最近有 3 条录音：5月7日这条有 501 行传感器数据…" },
+];
+
+// ── 步骤脚本 ──
+// pkg: 0=前端 1=后端 (线上位置 %); dir: go/back/inner; conn: open/closed
+const STEPS = [
+  { title: "一切开始前", dir: ["inner","内部·前端"], pkg: 2, conn: 0,
+    json: `<span class="s">（还没有 JSON —— 只是输入框里的一句话）</span>`,
+    who: "没人", read: "—", act: "等你按回车",
+    desc: "此刻数据还不存在。你按下回车的那一瞬间，才有第一份 JSON 被造出来。",
+    tape: 0, bubs: 0, input: "帮我看看最近的录音|" },
+  { title: "去程包诞生 — 全程唯一的一个", dir: ["go","去程 →"], pkg: 8, conn: 1,
+    json: J.req(''),
+    who: "前端 (ChatPage)", read: "输入框 + 内存里的桌号", act: "装进 4 个字段, POST 出去; 管子从此刻保持打开",
+    desc: "注意绿灯亮了：这根管子发完请求不挂断——它就是等下回程一串行要走的路。",
+    tape: 1, bubs: 2, input: "" , lock: 1 },
+  { title: "路上两站只看信封, 不拆信", dir: ["go","去程 →"], pkg: 45, conn: 1,
+    json: J.req('m'),
+    who: "传菜口 :5173 → 前台 :3000", read: "只看地址 /api/chat (+抄 3 个字段)", act: "按分单表转发, 内容原样递进 :8100",
+    desc: "中途没有任何一站『理解』你的话——它们只认信封上的地址。逻辑简单，所以永远不会转错。",
+    tape: 1, bubs: 2, lock: 1 },
+  { title: "后端拆包 — 三个字段, 三个决定", dir: ["go","抵达 · 拆包"], pkg: 92, conn: 1,
+    json: J.req('s'),
+    who: "agent 服务 :8100", read: "sessionId / agentId / message", act: "null→开新会话 · default→造哪个主厨 · 话→喂给 agent.stream()",
+    desc: "去程包的使命到此结束。接下来舞台交给回程——注意每一行都是后端『做到哪步就发哪步』。",
+    tape: 1, bubs: 2, lock: 1 },
+  { title: "回程第 1 行: 报桌号", dir: ["back","← 回程 1/5"], pkg: 8, conn: 1,
+    json: J.session,
+    who: "前端 (useStreamParser)", read: "type → \"session\"", act: "把桌号存进内存, 下次请求的 sessionId 就填它",
+    desc: "第一行就体现了规矩三：拆开先看 type，按 type 决定干什么。这行不画任何东西，只是记账。",
+    tape: 2, bubs: 2, lock: 1 },
+  { title: "幕后: 后端和 LLM 说的也是 JSON", dir: ["inner","内部·后端↔LLM"], pkg: 92, conn: 1,
+    json: J.llmreq + `\n<span style="color:#8a7d68">— 智囊回信 —</span>\n` + J.llmresp,
+    who: "agent 库 (llm.py)", read: "LLM 回信里的 tool_calls", act: "智囊说『先查录音』→ 主厨决定调工具",
+    desc: "同一套玩法换了对话双方：后端把整段对话寄给 LLM（去程 JSON），LLM 回一个『去调工具』（回程 JSON）。",
+    tape: 2, bubs: 2, lock: 1 },
+  { title: "回程第 2 行: 工具卡蹦出来了", dir: ["back","← 回程 2/5"], pkg: 8, conn: 1,
+    json: J.toolcall,
+    who: "前端", read: "type → \"tool_call\"", act: "switch 走到 tool_call 分支 → 画一张 🔧 卡",
+    desc: "看左边屏幕——你平时看到的『正在调用』卡片，就是这一行 JSON 的样子。type 不同，画法不同。",
+    tape: 3, bubs: 3, lock: 1 },
+  { title: "幕后: 工具执行 = 又一次 JSON 往返", dir: ["inner","内部·后端↔工具"], pkg: 92, conn: 1,
+    json: J.toolhttp,
+    who: "工具 list_recordings", read: "储藏室 :8080 的回信", act: "拿到 3 条录音, 交回给主厨",
+    desc: "连工具取数据也是同一个模式：发个小 JSON 过去，收个小 JSON 回来。整个系统只有这一种沟通方式。",
+    tape: 3, bubs: 3, lock: 1 },
+  { title: "回程第 3 行: 结果卡", dir: ["back","← 回程 3/5"], pkg: 8, conn: 1,
+    json: J.toolresult,
+    who: "前端", read: "type → \"tool_result\"", act: "画 ↩️ 结果卡 (ok:true → 不标红)",
+    desc: "主厨拿到货的同一时刻，你也看到了货。后端做一步 → 回一行 → 前端画一笔，节奏完全同步。",
+    tape: 4, bubs: 4, lock: 1 },
+  { title: "回程第 4 行: 回答本体", dir: ["back","← 回程 4/5"], pkg: 8, conn: 1,
+    json: J.delta,
+    who: "前端", read: "type → \"delta\" + text", act: "把 text 写进回答气泡",
+    desc: "主厨带着数据又问了一次智囊（幕后又一个 JSON 往返），这次智囊口述了人话——它顺着管子到了你眼前。",
+    tape: 5, bubs: 5, lock: 1 },
+  { title: "回程第 5 行: 收工信号", dir: ["back","← 回程 5/5"], pkg: 8, conn: 0,
+    json: J.done,
+    who: "前端", read: "type → \"done\"", act: "解锁输入框, 停止转圈; 管子此刻才关闭",
+    desc: "灯灭了：一去五回，连接完成使命。整轮对话在数据层面就是纸带上这 6 行。",
+    tape: 6, bubs: 5, input: "继续输入…|" },
+  { title: "全景回看: 这就是全部", dir: ["inner","总结"], pkg: 50, conn: 0,
+    json: `<span class="s">1 个去程包 (你的问题)
++ 5 行回程 (桌号/工具卡/结果/回答/收工)
+= 一轮对话的全部数据</span>`,
+    who: "你", read: "右边完整纸带", act: "对照下面的 switch 分发表 — 逻辑闭环了",
+    desc: "所谓『读取分发』：后端按进度一行行发，前端一行行拆，认准 type 各画各的。没有发现、没有副本、没有魔法。",
+    tape: 6, bubs: 5, input: "继续输入…|" },
+];
+
+let cur = -1, timer = null;
+function render() {
+  const s = STEPS[cur];
+  $("pktTitle").textContent = s.title;
+  const dt = $("dirTag");
+  dt.className = "dirtag " + s.dir[0];
+  dt.textContent = s.dir[1];
+  $("pktJson").innerHTML = s.json;
+  $("aWho").textContent = s.who;
+  $("aRead").textContent = s.read;
+  $("aDo").textContent = s.act;
+  $("desc").textContent = s.desc;
+  $("pkg").style.left = s.pkg + "%";
+  const conn = $("conn");
+  conn.className = "conn " + (s.conn ? "open" : "closed");
+  $("connText").textContent = s.conn ? "HTTP 连接保持打开 — 回程的路" : "连接已关闭";
+  // 纸带
+  $("tape").innerHTML = s.tape
+    ? TAPE.slice(0, s.tape).map((l, i) =>
+        `<div class="tl ${l.d} ${i === s.tape - 1 ? "now" : ""}"><span class="ar">${l.d === "go" ? "→" : "←"}</span> ${l.t.replace(/</g,"&lt;")}</div>`).join("")
+    : '<span class="tape-hint">还没有数据经过</span>';
+  // 屏幕
+  $("bubs").innerHTML = BUBS.slice(0, s.bubs).map(b => `<div class="bub ${b.c}">${b.h}</div>`).join("");
+  $("inputText").textContent = s.input !== undefined ? s.input : "";
+  $("inputbar").className = "inputbar" + (s.lock ? " locked" : "");
+  $("progBar").style.width = ((cur + 1) / STEPS.length * 100) + "%";
+  $("progText").textContent = (cur + 1) + " / " + STEPS.length + " · 空格=下一步, R=重置";
+  $("btnNext").disabled = cur >= STEPS.length - 1;
+  if (cur >= STEPS.length - 1) stopAuto();
+}
+function next() { if (cur < STEPS.length - 1) { cur++; render(); } }
+function reset() { stopAuto(); cur = 0; render(); }
+function stopAuto() { if (timer) { clearInterval(timer); timer = null; $("btnAuto").textContent = "▶ 自动播放"; } }
+$("btnNext").onclick = next;
+$("btnReset").onclick = reset;
+$("btnAuto").onclick = () => {
+  if (timer) { stopAuto(); return; }
+  if (cur >= STEPS.length - 1) cur = -1;
+  $("btnAuto").textContent = "⏸ 暂停";
+  next(); timer = setInterval(next, 3000);
+};
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") { e.preventDefault(); next(); }
+  if (e.key === "r" || e.key === "R") reset();
+});
+reset();
+</script>
+</body>
+</html>
