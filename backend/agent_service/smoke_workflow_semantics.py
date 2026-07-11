@@ -114,6 +114,30 @@ probs = validate_spec({"id": "bad3", "steps": [
         {"type": "agent", "id": "a", "agent": "A", "prompt": "x"}]}]})
 check("max_iters 越界被拦下", any("max_iters" in p for p in probs))
 
+# 6. human_in_loop 组件
+wf = Workflow({
+    "id": "h", "inputs": ["q"], "output": "{final}",
+    "steps": [
+        {"type": "agent", "id": "plan", "agent": "A", "prompt": "计划: {q}"},
+        {"type": "human", "id": "choice", "prompt": "计划是 <{plan}>, 同意吗?"},
+        {"type": "agent", "id": "final", "agent": "A", "prompt": "用户说: {choice}"},
+    ],
+})
+asked = []
+def fake_human(prompt):
+    asked.append(prompt)
+    return "同意, 执行吧"
+r = wf.run_sync({"q": "Q"}, make_factory({"A": ["P1", "F1"]}), ask_human=fake_human)
+check("human: 提问包含上游变量", bool(asked) and "P1" in asked[0])
+check("human: 回答进变量池", built["A"].received[1] == "用户说: 同意, 执行吧")
+check("human: 有 human_ask 事件", any(e["event"] == "human_ask" for e in r["trace"]))
+
+try:
+    wf.run_sync({"q": "Q"}, make_factory({"A": ["P1", "F1"]}))  # 不注入 ask_human
+    check("human: 无通道明确报错", False)
+except WorkflowError as e:
+    check("human: 无通道明确报错", "ask_human" in str(e))
+
 print()
 if failures:
     print(f"{len(failures)} 项失败: {failures}")

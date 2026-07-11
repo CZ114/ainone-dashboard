@@ -30,6 +30,12 @@ dashboard 侧存储于 `data/agent_service/workflows.json`，端点见下。
 {"type": "route",    "id": "kind", "agent": "router", "prompt": "...",
  "routes": {"音乐": [...], "医疗": [...]}, "default": "音乐"}
 // 路由 agent 输出与 routes 键做包含匹配 (不分大小写) → 动态消息顺序
+
+{"type": "human",    "id": "user_pick", "prompt": "两个方案:\n{plans}\n选哪个?"}
+// 人机协同 (2026-07-11 加, 第六组件): 渲染 prompt → 暂停等真人回答 → 答案入变量池。
+// 只在流式接口可用 (/stream 发 human_input_required + input_id, 前端
+// POST /api/agent/workflows/input {id, value} 续跑, 600s 超时);
+// 阻塞式 /run 遇到直接 400。示例: plan_confirm (已入库, UI 实测通过)
 ```
 
 顶层：`{id, name, description, inputs: ["task"], output: "{draft}", steps: [...]}`

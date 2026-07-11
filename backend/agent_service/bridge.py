@@ -60,6 +60,44 @@ class PermissionBroker:
             p.event.set()
 
 
+class PendingHumanInput:
+    def __init__(self):
+        self.id = uuid.uuid4().hex[:12]
+        self.event = threading.Event()
+        self.value = None
+
+
+class HumanInputBroker:
+    """workflow human 步骤的跨请求桥 — 与 PermissionBroker 同构, 但传回文本值。"""
+
+    def __init__(self):
+        self._pending = {}
+        self._lock = threading.Lock()
+
+    def create(self):
+        p = PendingHumanInput()
+        with self._lock:
+            self._pending[p.id] = p
+        return p
+
+    def resolve(self, input_id, value):
+        with self._lock:
+            p = self._pending.pop(input_id, None)
+        if p is None:
+            return False
+        p.value = value
+        p.event.set()
+        return True
+
+    def wait(self, pending, timeout):
+        """返回用户输入; 超时返回 None (调用方决定如何终止工作流)。"""
+        if not pending.event.wait(timeout):
+            with self._lock:
+                self._pending.pop(pending.id, None)
+            return None
+        return pending.value
+
+
 class AbortRegistry:
     def __init__(self):
         self._flags = {}

@@ -114,19 +114,36 @@ def build_client(cfg):
 
 def build_chat_agent(session_id, agent_id=None):
     """交互会话 agent: 全套工具 + 录音上下文注入 + AuditLog (both 模式, 供 resume+审计)。
-    cfg.retrieval 存在时自动挂知识库 (库侧注册 retrieve 工具)。"""
+    cfg.retrieval 存在时自动挂知识库; MCP 工具源与 Skills 技能库全局挂载
+    (仅 chat agent — oneshot/工作流节点保持轻量, SOD 07)。"""
     cfg = resolve_agent_config(agent_id)
     audit = AuditLog(
         SESSIONS_DIR / f"{session_id}.jsonl",
         session_id=session_id,
         mode="both",
     )
+    reg = build_registry()
+
+    # MCP 工具源 — 逐 server 隔离失败 (状态进 mcp_admin 缓存, 不拖垮聊天)
+    from . import mcp_admin
+    mcp_admin.apply_to_registry(reg)
+
+    # Skills 技能库 — 有技能才挂 (聊天 /名字 展开 + LLM 自主发现两条路)
+    skill_store = None
+    from . import skills_admin
+    if skills_admin.has_skills():
+        from agent import FileSkillStore
+        from agent.tools.skills import register_skills
+        skill_store = FileSkillStore(str(skills_admin.SKILLS_DIR))
+        register_skills(reg, str(skills_admin.SKILLS_DIR))
+
     return Agent(
         build_client(cfg),
         cfg["system_prompt"],
-        registry=build_registry(),
+        registry=reg,
         context_providers=[recordings_context_provider],
         audit_log=audit,
+        skill_store=skill_store,
         max_rounds=8,
         **_retrieval_kwargs(cfg),
     )

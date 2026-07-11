@@ -9,6 +9,7 @@
 abort 置 Event, worker 在事件边界退出并修补历史。
 """
 
+import json
 import os
 import queue
 import threading
@@ -22,19 +23,22 @@ from pydantic import BaseModel
 
 from agent.orchestration import Workflow, WorkflowError
 
-from . import agents_admin, config_store, rag, workflows_admin
+from . import agents_admin, config_store, mcp_admin, rag, skills_admin, workflows_admin
 from .agent_tools import build_registry
-from .bridge import AbortRegistry, PermissionBroker
+from .bridge import AbortRegistry, HumanInputBroker, PermissionBroker
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import build_oneshot_agent
 from .sessions import SessionManager, repair_history
 from .wire import new_stream_ctx, serialize
+
+HUMAN_INPUT_TIMEOUT_S = 600  # workflow human 步骤等真人回答的上限
 
 app = FastAPI(title="agent_service", version="0.1.0")
 
 broker = PermissionBroker()
 aborts = AbortRegistry()
 manager = SessionManager()
+human_inputs = HumanInputBroker()
 
 
 # ─── 请求模型 ────────────────────────────────────────────────────────
@@ -116,6 +120,23 @@ class WorkflowUpsertBody(BaseModel):
 
 class WorkflowRunBody(BaseModel):
     inputs: dict = {}
+
+
+class WorkflowInputBody(BaseModel):
+    id: str
+    value: str
+
+
+class McpUpsertBody(BaseModel):
+    transport: str
+    command: str | None = None
+    url: str | None = None
+    enabled: bool = True
+
+
+class SkillUpsertBody(BaseModel):
+    description: str = ""
+    body: str
 
 
 # ─── chat 流核心 (neutral 与 compat 共用) ────────────────────────────
@@ -446,25 +467,117 @@ def workflows_run(wf_id: str, body: WorkflowRunBody):
 
 @app.post("/api/agent/workflows/{wf_id}/stream")
 def workflows_stream(wf_id: str, body: WorkflowRunBody):
-    """NDJSON 事件流: {type: workflow_start|step_start|step_end|loop_iter|
-    loop_break|route_choice|workflow_end|error, ...}"""
+    """NDJSON 事件流: workflow_start|step_start|step_end|loop_iter|loop_break|
+    route_choice|human_ask|human_input_required|workflow_end|error。
+
+    human 步骤: 引擎在 worker 线程里跑, ask_human 先把 human_input_required
+    (含 input_id) 推进流, 再阻塞等 POST /api/agent/workflows/input 唤醒
+    (与 chat 权限桥同构; 超时 {HUMAN_INPUT_TIMEOUT_S}s = 终止工作流)。"""
     wf = _load_workflow_or_404(wf_id)
+    q: queue.Queue = queue.Queue()
+
+    def ask_human(prompt: str) -> str:
+        p = human_inputs.create()
+        q.put(("human_input_required", {"input_id": p.id, "prompt": prompt}))
+        value = human_inputs.wait(p, HUMAN_INPUT_TIMEOUT_S)
+        if value is None:
+            raise WorkflowError(f"等待人工输入超时 ({HUMAN_INPUT_TIMEOUT_S}s)")
+        return value
+
+    def worker():
+        try:
+            for kind, payload in wf.run(body.inputs,
+                                        build_agent=build_oneshot_agent,
+                                        ask_human=ask_human):
+                q.put((kind, payload))
+        except WorkflowError as e:
+            q.put(("error", {"error": str(e)}))
+        except Exception as e:
+            q.put(("error", {"error": f"{type(e).__name__}: {e}"}))
+        finally:
+            q.put(("__end__", None))
 
     def gen():
-        import json as _json
-        try:
-            for kind, payload in wf.run(body.inputs, build_agent=build_oneshot_agent):
-                yield _json.dumps({"type": kind, **payload},
-                                  ensure_ascii=False, default=str) + "\n"
-        except WorkflowError as e:
-            yield _json.dumps({"type": "error", "error": str(e)},
-                              ensure_ascii=False) + "\n"
-        except Exception as e:
-            yield _json.dumps({"type": "error",
-                               "error": f"{type(e).__name__}: {e}"},
-                              ensure_ascii=False) + "\n"
+        threading.Thread(target=worker, daemon=True,
+                         name=f"workflow-{wf_id}").start()
+        while True:
+            kind, payload = q.get()
+            if kind == "__end__":
+                return
+            yield json.dumps({"type": kind, **(payload or {})},
+                             ensure_ascii=False, default=str) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.post("/api/agent/workflows/input")
+def workflows_input(body: WorkflowInputBody):
+    """human_input_required 的回填端点。"""
+    return {"ok": human_inputs.resolve(body.id, body.value)}
+
+
+# ─── MCP 工具源 (Agents tab 分节; SOD 07 §3) ─────────────────────────
+
+@app.get("/api/agent/mcp")
+def mcp_list():
+    return {"servers": mcp_admin.list_servers()}
+
+
+@app.put("/api/agent/mcp/{name}")
+def mcp_upsert(name: str, body: McpUpsertBody):
+    try:
+        return {"server": mcp_admin.upsert_server(name, body.model_dump())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/agent/mcp/{name}")
+def mcp_delete(name: str):
+    try:
+        mcp_admin.delete_server(name)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/agent/mcp/{name}/test")
+def mcp_test(name: str):
+    try:
+        return mcp_admin.test_server(name)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
+
+# ─── Skills 技能库 (Knowledge tab 分节; SOD 07 §4) ───────────────────
+
+@app.get("/api/agent/skills")
+def skills_list():
+    return {"skills": skills_admin.list_skills()}
+
+
+@app.get("/api/agent/skills/{name}")
+def skills_get(name: str):
+    try:
+        return {"skill": skills_admin.get_skill(name)}
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.put("/api/agent/skills/{name}")
+def skills_upsert(name: str, body: SkillUpsertBody):
+    try:
+        return {"skill": skills_admin.upsert_skill(name, body.description, body.body)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/agent/skills/{name}")
+def skills_delete(name: str):
+    try:
+        skills_admin.delete_skill(name)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
 
 
 # ─── RAG 管理 (SOD 04 预留已兑现) ────────────────────────────────────

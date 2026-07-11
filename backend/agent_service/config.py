@@ -3,6 +3,23 @@
 设计文档: docs/agent-migration-sod/ (02-migration-plan.md M1)
 """
 
+# ── WMI 规避 (必须在任何三方库 import 前执行) ────────────────────────
+# openai SDK 构建请求头时调 platform.platform(), Python 3.12 在 Windows 上
+# 经 WMI 查询 (uname 的 machine/processor 等字段); WMI 服务僵死时该调用无限
+# 阻塞, 所有 LLM 请求挂死 (2026-07-11 实况: py-spy 抓到 chat 线程卡在
+# platform._wmi_query / processor 懒属性)。
+# 把 _wmi_query 打成立即抛 OSError — 标准库自身就有 "WMI 失败 → 回退
+# PROCESSOR_* 环境变量" 的设计路径, 等于强制走官方降级通道。WMI 正常时
+# 也无害 (信息略糙, 但没人消费它)。
+import platform as _platform
+
+
+def _wmi_query_disabled(*_args, **_kwargs):
+    raise OSError("WMI query disabled by agent_service (WMI 僵死规避, 见 config.py)")
+
+
+_platform._wmi_query = _wmi_query_disabled
+
 import os
 from pathlib import Path
 
