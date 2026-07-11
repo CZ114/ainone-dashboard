@@ -14,6 +14,7 @@ import { ExtensionCard } from './ExtensionCard';
 import { ModelRoutingPanel } from './ModelRoutingPanel';
 import { AgentsPanel } from './AgentsPanel';
 import { KnowledgePanel } from './KnowledgePanel';
+import { WorkflowsPanel } from './WorkflowsPanel';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 import { useT } from '../../contexts/LanguageContext';
 
@@ -22,6 +23,7 @@ type Tab =
   | 'model'
   | 'agents'
   | 'knowledge'
+  | 'workflows'
   | 'diary'
   | 'appearance'
   | 'about';
@@ -31,6 +33,7 @@ const TAB_IDS: readonly Tab[] = [
   'model',
   'agents',
   'knowledge',
+  'workflows',
   'diary',
   'appearance',
   'about',
@@ -110,6 +113,9 @@ export function SettingsPage() {
         <TabButton active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')}>
           📚 {t.settings.tabs.knowledge}
         </TabButton>
+        <TabButton active={activeTab === 'workflows'} onClick={() => setActiveTab('workflows')}>
+          🔁 {t.settings.tabs.workflows}
+        </TabButton>
         <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
           📓 {t.settings.tabs.diary}
         </TabButton>
@@ -135,6 +141,7 @@ export function SettingsPage() {
           {activeTab === 'model' && <ModelRoutingPanel />}
           {activeTab === 'agents' && <AgentsPanel />}
           {activeTab === 'knowledge' && <KnowledgePanel />}
+          {activeTab === 'workflows' && <WorkflowsPanel />}
           {activeTab === 'diary' && <DiarySettingsPanel />}
           {activeTab === 'appearance' && <ThemePicker />}
           {activeTab === 'about' && <AboutTabBody />}

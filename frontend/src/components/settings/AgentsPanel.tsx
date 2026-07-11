@@ -7,6 +7,9 @@ import {
   agentAdminApi,
   type AgentDef,
   type AgentUpsertBody,
+  type McpServer,
+  type McpTransport,
+  type McpUpsertBody,
   type ProviderInfo,
   type RagCollection,
   type SecretEntry,
@@ -39,6 +42,19 @@ type TestUiState =
       error?: string;
     };
 
+interface McpDraft {
+  name: string;
+  transport: McpTransport;
+  command: string;
+  url: string;
+  /** 编辑器不暴露开关（卡片上切）——新建默认 true，编辑时原样带回。 */
+  enabled: boolean;
+}
+
+type McpTestUiState =
+  | { running: true }
+  | { running: false; ok: boolean; latencyMs: number; tools?: string[]; error?: string };
+
 export function AgentsPanel() {
   const t = useT();
   const [agents, setAgents] = useState<AgentDef[]>([]);
@@ -61,6 +77,19 @@ export function AgentsPanel() {
   const [secretError, setSecretError] = useState<string | null>(null);
   const [secretSaving, setSecretSaving] = useState(false);
 
+  // MCP servers
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [mcpError, setMcpError] = useState<string | null>(null);
+  const [mcpTestState, setMcpTestState] = useState<Record<string, McpTestUiState>>(
+    {},
+  );
+  const [mcpEditor, setMcpEditor] = useState<{
+    isNew: boolean;
+    draft: McpDraft;
+  } | null>(null);
+  const [mcpEditorError, setMcpEditorError] = useState<string | null>(null);
+  const [mcpSaving, setMcpSaving] = useState(false);
+
   const refreshAgents = useCallback(async () => {
     try {
       const r = await agentAdminApi.listAgents();
@@ -81,9 +110,21 @@ export function AgentsPanel() {
     }
   }, []);
 
+  /** 只存原始错误消息，渲染时再套 i18n — 避免 refreshMcp 依赖语言。 */
+  const refreshMcp = useCallback(async () => {
+    try {
+      const r = await agentAdminApi.listMcpServers();
+      setMcpServers(r.servers);
+      setMcpError(null);
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   useEffect(() => {
     void refreshAgents();
     void refreshSecrets();
+    void refreshMcp();
     void agentAdminApi
       .getConfig()
       .then((r) => setProviders(r.providers))
@@ -92,7 +133,7 @@ export function AgentsPanel() {
       .listCollections()
       .then((r) => setCollections(r.collections))
       .catch(() => {});
-  }, [refreshAgents, refreshSecrets]);
+  }, [refreshAgents, refreshSecrets, refreshMcp]);
 
   const handleTest = async (id: string) => {
     setTestState((s) => ({ ...s, [id]: { running: true } }));
@@ -264,6 +305,129 @@ export function AgentsPanel() {
         ),
       );
     }
+  };
+
+  // ---- MCP servers ----
+
+  /** PUT 是替换语义 — 翻转 enabled 时原样带回 transport + command/url。 */
+  const handleMcpToggle = async (server: McpServer) => {
+    const body: McpUpsertBody =
+      server.transport === 'stdio'
+        ? {
+            transport: 'stdio',
+            command: server.command ?? '',
+            enabled: !server.enabled,
+          }
+        : { transport: 'url', url: server.url ?? '', enabled: !server.enabled };
+    try {
+      await agentAdminApi.putMcpServer(server.name, body);
+      await refreshMcp();
+    } catch (err) {
+      window.alert(
+        t.settings.agents.mcp.toggleFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+  };
+
+  const handleMcpTest = async (name: string) => {
+    setMcpTestState((s) => ({ ...s, [name]: { running: true } }));
+    try {
+      const r = await agentAdminApi.testMcpServer(name);
+      setMcpTestState((s) => ({
+        ...s,
+        [name]: r.ok
+          ? { running: false, ok: true, latencyMs: r.latency_ms, tools: r.tools }
+          : { running: false, ok: false, latencyMs: r.latency_ms, error: r.error },
+      }));
+    } catch (err) {
+      setMcpTestState((s) => ({
+        ...s,
+        [name]: {
+          running: false,
+          ok: false,
+          latencyMs: 0,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      }));
+    }
+    // 测试成功会解除服务端的 "失败即跳过" 标记 — 拉一次列表刷新状态徽标。
+    await refreshMcp();
+  };
+
+  const handleMcpDelete = async (name: string) => {
+    if (!window.confirm(t.settings.agents.mcp.confirmDelete(name))) return;
+    try {
+      await agentAdminApi.deleteMcpServer(name);
+      if (mcpEditor && !mcpEditor.isNew && mcpEditor.draft.name === name) {
+        setMcpEditor(null);
+      }
+      await refreshMcp();
+    } catch (err) {
+      window.alert(
+        t.settings.agents.mcp.deleteFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+  };
+
+  const openMcpNew = () => {
+    setMcpEditor({
+      isNew: true,
+      draft: { name: '', transport: 'stdio', command: '', url: '', enabled: true },
+    });
+    setMcpEditorError(null);
+  };
+
+  const openMcpEdit = (server: McpServer) => {
+    setMcpEditor({
+      isNew: false,
+      draft: {
+        name: server.name,
+        transport: server.transport,
+        command: server.command ?? '',
+        url: server.url ?? '',
+        enabled: server.enabled,
+      },
+    });
+    setMcpEditorError(null);
+  };
+
+  const patchMcpDraft = (patch: Partial<McpDraft>) => {
+    setMcpEditor((e) => (e ? { ...e, draft: { ...e.draft, ...patch } } : e));
+  };
+
+  const mcpCanSave =
+    !!mcpEditor &&
+    !mcpSaving &&
+    !!mcpEditor.draft.name.trim() &&
+    (mcpEditor.draft.transport === 'stdio'
+      ? !!mcpEditor.draft.command.trim()
+      : !!mcpEditor.draft.url.trim());
+
+  const handleMcpSave = async () => {
+    if (!mcpEditor || !mcpCanSave) return;
+    const d = mcpEditor.draft;
+    const body: McpUpsertBody =
+      d.transport === 'stdio'
+        ? { transport: 'stdio', command: d.command.trim(), enabled: d.enabled }
+        : { transport: 'url', url: d.url.trim(), enabled: d.enabled };
+    setMcpSaving(true);
+    setMcpEditorError(null);
+    try {
+      await agentAdminApi.putMcpServer(d.name.trim(), body);
+      setMcpEditor(null);
+      await refreshMcp();
+    } catch (err) {
+      setMcpEditorError(
+        t.settings.agents.mcp.editor.saveFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+    setMcpSaving(false);
   };
 
   return (
@@ -617,6 +781,226 @@ export function AgentsPanel() {
         </div>
         {secretError && (
           <p className="mt-2 text-xs text-status-danger break-all">{secretError}</p>
+        )}
+      </section>
+
+      {/* MCP servers */}
+      <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t.settings.agents.mcp.heading}{' '}
+            <span className="text-[11px] font-normal text-text-muted">
+              ({mcpServers.length})
+            </span>
+          </h3>
+          <button
+            type="button"
+            onClick={openMcpNew}
+            className="shrink-0 rounded border border-card-border px-2 py-1 text-xs text-text-secondary hover:bg-card-border/40"
+          >
+            {t.settings.agents.mcp.add}
+          </button>
+        </div>
+        <p className="mt-1 mb-3 text-[11px] text-text-muted leading-relaxed">
+          {t.settings.agents.mcp.hint}
+        </p>
+
+        {mcpError && (
+          <p className="mb-2 text-xs text-status-danger break-all">
+            {t.settings.agents.mcp.loadFailed(mcpError)}
+          </p>
+        )}
+        {!mcpError && mcpServers.length === 0 && (
+          <div className="text-xs text-text-muted">
+            {t.settings.agents.mcp.empty}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {mcpServers.map((s) => {
+            const ts = mcpTestState[s.name];
+            const summary = s.transport === 'stdio' ? s.command : s.url;
+            return (
+              <div key={s.name} className="rounded border border-card-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs text-text-primary">
+                    {s.name}
+                  </span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent/20 text-accent-soft border border-accent/30 font-mono">
+                    {s.transport}
+                  </span>
+                  {s.status === null ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-card-border/40 text-text-muted border border-card-border">
+                      {t.settings.agents.mcp.statusNever}
+                    </span>
+                  ) : s.status.ok ? (
+                    <span
+                      title={s.status.tools.join(', ')}
+                      className="text-[11px] px-2 py-0.5 rounded-full bg-status-success/15 text-status-success border border-status-success/30"
+                    >
+                      {t.settings.agents.mcp.statusOk(s.status.tools.length)}
+                    </span>
+                  ) : (
+                    <span
+                      title={s.status.error ?? ''}
+                      className="max-w-[220px] truncate text-[11px] px-2 py-0.5 rounded-full bg-status-danger/10 text-status-danger border border-status-danger/30"
+                    >
+                      ✗ {s.status.error}
+                    </span>
+                  )}
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <label className="mr-1 flex cursor-pointer items-center gap-1 text-[11px] text-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={s.enabled}
+                        onChange={() => void handleMcpToggle(s)}
+                        className="accent-accent"
+                      />
+                      {t.settings.agents.mcp.enabled}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => openMcpEdit(s)}
+                      className="rounded border border-card-border px-2 py-1 text-xs text-text-secondary hover:bg-card-border/40"
+                    >
+                      {t.settings.agents.mcp.edit}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMcpTest(s.name)}
+                      disabled={ts?.running === true}
+                      className="rounded border border-card-border px-2 py-1 text-xs text-text-secondary hover:bg-card-border/40 disabled:opacity-50"
+                    >
+                      {ts?.running
+                        ? t.settings.agents.mcp.testing
+                        : t.settings.agents.mcp.test}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMcpDelete(s.name)}
+                      className="rounded border border-card-border px-2 py-1 text-xs text-text-muted hover:text-status-danger"
+                    >
+                      {t.settings.agents.mcp.delete}
+                    </button>
+                  </div>
+                </div>
+                {summary && (
+                  <p
+                    className="mt-1 truncate font-mono text-[11px] text-text-muted"
+                    title={summary}
+                  >
+                    {summary}
+                  </p>
+                )}
+                {ts?.running && (
+                  <div className="mt-1 text-xs text-text-muted animate-pulse">
+                    {t.settings.agents.mcp.testing}{' '}
+                    <span className="text-[11px]">
+                      {t.settings.agents.mcp.testHint}
+                    </span>
+                  </div>
+                )}
+                {ts && !ts.running && (
+                  <div
+                    className={`mt-1 text-xs break-all ${
+                      ts.ok ? 'text-status-success' : 'text-status-danger'
+                    }`}
+                  >
+                    {ts.ok
+                      ? t.settings.agents.mcp.testOk(ts.latencyMs, ts.tools ?? [])
+                      : t.settings.agents.mcp.testFailed(ts.error ?? '')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* MCP add/edit form — inline expanding */}
+        {mcpEditor && (
+          <div className="mt-3 space-y-3 rounded-lg border border-accent/40 p-3">
+            <h4 className="text-xs font-semibold text-text-primary">
+              {mcpEditor.isNew
+                ? t.settings.agents.mcp.editor.titleNew
+                : t.settings.agents.mcp.editor.titleEdit(mcpEditor.draft.name)}
+            </h4>
+            <div className="flex flex-wrap items-start gap-2">
+              <Field label={t.settings.agents.mcp.editor.fieldName} className="w-40">
+                <input
+                  value={mcpEditor.draft.name}
+                  disabled={!mcpEditor.isNew}
+                  onChange={(e) => patchMcpDraft({ name: e.target.value })}
+                  placeholder="demo"
+                  className={inputClass + ' font-mono text-xs'}
+                />
+                {mcpEditor.isNew && (
+                  <span className="text-[11px] text-text-muted">
+                    {t.settings.agents.mcp.editor.nameHint}
+                  </span>
+                )}
+              </Field>
+              <Field
+                label={t.settings.agents.mcp.editor.fieldTransport}
+                className="w-28"
+              >
+                <select
+                  value={mcpEditor.draft.transport}
+                  onChange={(e) =>
+                    patchMcpDraft({ transport: e.target.value as McpTransport })
+                  }
+                  className={inputClass}
+                >
+                  <option value="stdio">stdio</option>
+                  <option value="url">url</option>
+                </select>
+              </Field>
+              {mcpEditor.draft.transport === 'stdio' ? (
+                <Field
+                  label={t.settings.agents.mcp.editor.fieldCommand}
+                  className="min-w-[260px] flex-1"
+                >
+                  <input
+                    value={mcpEditor.draft.command}
+                    onChange={(e) => patchMcpDraft({ command: e.target.value })}
+                    placeholder={t.settings.agents.mcp.editor.commandPlaceholder}
+                    className={inputClass + ' font-mono text-xs'}
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label={t.settings.agents.mcp.editor.fieldUrl}
+                  className="min-w-[260px] flex-1"
+                >
+                  <input
+                    value={mcpEditor.draft.url}
+                    onChange={(e) => patchMcpDraft({ url: e.target.value })}
+                    placeholder={t.settings.agents.mcp.editor.urlPlaceholder}
+                    className={inputClass + ' font-mono text-xs'}
+                  />
+                </Field>
+              )}
+            </div>
+            {mcpEditorError && (
+              <p className="text-xs text-status-danger break-all">{mcpEditorError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleMcpSave()}
+                disabled={!mcpCanSave}
+                className="rounded bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {t.settings.agents.mcp.editor.save}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMcpEditor(null)}
+                className="rounded border border-card-border px-3 py-1.5 text-xs text-text-secondary hover:bg-card-border/40"
+              >
+                {t.settings.agents.mcp.editor.cancel}
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </div>

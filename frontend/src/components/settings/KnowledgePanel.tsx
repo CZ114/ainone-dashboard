@@ -9,8 +9,20 @@ import {
   type IngestDocument,
   type RagCollection,
   type RagHit,
+  type SkillSummary,
 } from '../../api/agentAdminApi';
 import { useT } from '../../contexts/LanguageContext';
+
+// 与服务端一致的技能名规则（同 agent id）。
+const SKILL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,39}$/;
+
+interface SkillDraft {
+  name: string;
+  description: string;
+  body: string;
+  /** 技能目录下的附加文件 — 只读展示（磁盘上手动管理）。 */
+  files: string[];
+}
 
 export function KnowledgePanel() {
   const t = useT();
@@ -44,6 +56,17 @@ export function KnowledgePanel() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // skills
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [skillsError, setSkillsError] = useState<string | null>(null); // raw message
+  const [skillEditor, setSkillEditor] = useState<{
+    isNew: boolean;
+    draft: SkillDraft;
+  } | null>(null);
+  const [skillEditorError, setSkillEditorError] = useState<string | null>(null);
+  const [skillSaving, setSkillSaving] = useState(false);
+  const [skillOpening, setSkillOpening] = useState<string | null>(null); // 编辑前拉详情中
+
   const refresh = useCallback(async () => {
     try {
       const r = await agentAdminApi.listCollections();
@@ -55,9 +78,21 @@ export function KnowledgePanel() {
     setLoaded(true);
   }, []);
 
+  /** 只存原始错误消息，渲染时再套 i18n — 避免依赖语言。 */
+  const refreshSkills = useCallback(async () => {
+    try {
+      const r = await agentAdminApi.listSkills();
+      setSkills(r.skills);
+      setSkillsError(null);
+    } catch (err) {
+      setSkillsError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshSkills();
+  }, [refresh, refreshSkills]);
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -172,6 +207,96 @@ export function KnowledgePanel() {
       else next.add(id);
       return next;
     });
+  };
+
+  // ---- skills ----
+
+  const openSkillNew = () => {
+    setSkillEditor({
+      isNew: true,
+      draft: { name: '', description: '', body: '', files: [] },
+    });
+    setSkillEditorError(null);
+  };
+
+  /** 列表项只有 name/description — 编辑前先拉完整 body + files。 */
+  const openSkillEdit = async (name: string) => {
+    if (skillOpening) return;
+    setSkillOpening(name);
+    try {
+      const r = await agentAdminApi.getSkill(name);
+      setSkillEditor({
+        isNew: false,
+        draft: {
+          name: r.skill.name,
+          description: r.skill.description,
+          body: r.skill.body,
+          files: r.skill.files,
+        },
+      });
+      setSkillEditorError(null);
+    } catch (err) {
+      window.alert(
+        t.settings.knowledge.skills.loadOneFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+    setSkillOpening(null);
+  };
+
+  const patchSkillDraft = (patch: Partial<SkillDraft>) => {
+    setSkillEditor((e) => (e ? { ...e, draft: { ...e.draft, ...patch } } : e));
+  };
+
+  const handleSkillSave = async () => {
+    if (!skillEditor) return;
+    const d = skillEditor.draft;
+    const name = d.name.trim();
+    if (skillEditor.isNew) {
+      if (!SKILL_NAME_RE.test(name)) {
+        setSkillEditorError(t.settings.knowledge.skills.editor.nameInvalid);
+        return;
+      }
+      if (skills.some((s) => s.name === name)) {
+        setSkillEditorError(t.settings.knowledge.skills.editor.nameTaken);
+        return;
+      }
+    }
+    setSkillSaving(true);
+    setSkillEditorError(null);
+    try {
+      await agentAdminApi.putSkill(name, {
+        description: d.description.trim(),
+        body: d.body,
+      });
+      setSkillEditor(null);
+      await refreshSkills();
+    } catch (err) {
+      setSkillEditorError(
+        t.settings.knowledge.skills.editor.saveFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+    setSkillSaving(false);
+  };
+
+  const handleSkillDelete = async (name: string) => {
+    if (!window.confirm(t.settings.knowledge.skills.confirmDelete(name))) return;
+    try {
+      await agentAdminApi.deleteSkill(name);
+      if (skillEditor && !skillEditor.isNew && skillEditor.draft.name === name) {
+        setSkillEditor(null);
+      }
+      await refreshSkills();
+    } catch (err) {
+      window.alert(
+        t.settings.knowledge.skills.deleteFailed(
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
   };
 
   const collectionSelect = (
@@ -482,6 +607,170 @@ export function KnowledgePanel() {
                 </div>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      {/* ④ Skills */}
+      <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t.settings.knowledge.skills.heading}{' '}
+            <span className="text-[11px] font-normal text-text-muted">
+              ({skills.length})
+            </span>
+          </h3>
+          <button
+            type="button"
+            onClick={openSkillNew}
+            className="shrink-0 rounded border border-card-border px-2 py-1 text-xs text-text-secondary hover:bg-card-border/40"
+          >
+            {t.settings.knowledge.skills.newSkill}
+          </button>
+        </div>
+        <p className="mt-1 mb-3 text-[11px] text-text-muted leading-relaxed">
+          {t.settings.knowledge.skills.hint}
+        </p>
+
+        {skillsError && (
+          <p className="mb-2 text-xs text-status-danger break-all">
+            {t.settings.knowledge.skills.loadFailed(skillsError)}
+          </p>
+        )}
+        {!skillsError && skills.length === 0 && (
+          <div className="text-xs text-text-muted">
+            {t.settings.knowledge.skills.empty}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {skills.map((s) => (
+            <div
+              key={s.name}
+              className="flex items-center justify-between gap-3 rounded border border-card-border p-2 text-sm"
+            >
+              <div className="min-w-0">
+                <span className="font-mono text-xs text-text-primary">
+                  /{s.name}
+                </span>
+                {s.description && (
+                  <span className="ml-2 text-[11px] text-text-muted">
+                    {s.description}
+                  </span>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  onClick={() => void openSkillEdit(s.name)}
+                  disabled={skillOpening !== null}
+                  className="rounded border border-card-border px-2 py-1 text-xs text-text-secondary hover:bg-card-border/40 disabled:opacity-50"
+                >
+                  {skillOpening === s.name
+                    ? t.settings.knowledge.skills.loading
+                    : t.settings.knowledge.skills.edit}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSkillDelete(s.name)}
+                  className="rounded border border-card-border px-2 py-1 text-xs text-text-muted hover:text-status-danger"
+                >
+                  {t.settings.knowledge.skills.delete}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Skill editor — inline expanding */}
+        {skillEditor && (
+          <div className="mt-3 space-y-3 rounded-lg border border-accent/40 p-3">
+            <h4 className="text-xs font-semibold text-text-primary">
+              {skillEditor.isNew
+                ? t.settings.knowledge.skills.editor.titleNew
+                : t.settings.knowledge.skills.editor.titleEdit(
+                    skillEditor.draft.name,
+                  )}
+            </h4>
+            <div className="flex flex-wrap items-start gap-2">
+              <Field
+                label={t.settings.knowledge.skills.editor.fieldName}
+                className="w-48"
+              >
+                <input
+                  value={skillEditor.draft.name}
+                  disabled={!skillEditor.isNew}
+                  onChange={(e) => patchSkillDraft({ name: e.target.value })}
+                  placeholder="report_style"
+                  className={inputClass + ' font-mono text-xs'}
+                />
+                {skillEditor.isNew && (
+                  <span className="text-[11px] text-text-muted">
+                    {t.settings.knowledge.skills.editor.nameHint}
+                  </span>
+                )}
+              </Field>
+              <Field
+                label={t.settings.knowledge.skills.editor.fieldDescription}
+                className="min-w-[240px] flex-1"
+              >
+                <input
+                  value={skillEditor.draft.description}
+                  onChange={(e) => patchSkillDraft({ description: e.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+            <Field label={t.settings.knowledge.skills.editor.fieldBody}>
+              <textarea
+                rows={10}
+                value={skillEditor.draft.body}
+                onChange={(e) => patchSkillDraft({ body: e.target.value })}
+                className={inputClass + ' resize-y font-mono text-xs leading-relaxed'}
+              />
+            </Field>
+            {!skillEditor.isNew && skillEditor.draft.files.length > 0 && (
+              <div>
+                <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                  {t.settings.knowledge.skills.editor.filesLabel}
+                </span>
+                <ul className="mt-1 space-y-0.5">
+                  {skillEditor.draft.files.map((f) => (
+                    <li
+                      key={f}
+                      className="font-mono text-[11px] text-text-secondary break-all"
+                    >
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {skillEditorError && (
+              <p className="text-xs text-status-danger break-all">
+                {skillEditorError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSkillSave()}
+                disabled={
+                  skillSaving ||
+                  (skillEditor.isNew && !skillEditor.draft.name.trim())
+                }
+                className="rounded bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {t.settings.knowledge.skills.editor.save}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSkillEditor(null)}
+                className="rounded border border-card-border px-3 py-1.5 text-xs text-text-secondary hover:bg-card-border/40"
+              >
+                {t.settings.knowledge.skills.editor.cancel}
+              </button>
+            </div>
           </div>
         )}
       </section>
