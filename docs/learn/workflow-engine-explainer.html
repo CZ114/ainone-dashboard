@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow JSON 是怎么被执行的 — 交互式原理梳理</title>
+<style>
+  :root {
+    --bg: #f7f2ea; --card: #fffdf9; --border: #e6dccc; --border-strong: #d4c5ab;
+    --text: #3d3629; --muted: #8a7d68; --accent: #b0713f; --accent-soft: #c4854f;
+    --accent-bg: #f5e6d3; --green: #3d8b5f; --green-bg: #e8f3ec;
+    --red: #b8503d; --red-bg: #f7e8e4; --blue: #4a6fa5; --blue-bg: #e8eef7;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.65; padding: 32px 20px 80px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  h2 { font-size: 18px; margin: 34px 0 12px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 20px; }
+  .sub code, p code, li code { font-family: var(--mono); font-size: 0.92em; background: var(--accent-bg); padding: 1px 5px; border-radius: 4px; }
+
+  /* ── 顶部管线图 ─────────────────────────── */
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin: 14px 0 6px; }
+  .pipe-node { flex: 1; min-width: 120px; background: var(--card); border: 1.5px solid var(--border-strong); border-radius: 10px; padding: 10px 12px; text-align: center; position: relative; transition: all .25s; }
+  .pipe-node .t { font-weight: 700; font-size: 13px; }
+  .pipe-node .d { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pipe-node.yours { border-color: var(--green); background: var(--green-bg); }
+  .pipe-node.yours::after { content: "你原有的"; position: absolute; top: -9px; right: 8px; font-size: 10px; background: var(--green); color: #fff; padding: 0 6px; border-radius: 6px; }
+  .pipe-node.new { border-color: var(--accent); }
+  .pipe-node.new::after { content: "Phase 7 新增"; position: absolute; top: -9px; right: 8px; font-size: 10px; background: var(--accent); color: #fff; padding: 0 6px; border-radius: 6px; }
+  .pipe-arrow { display: flex; align-items: center; padding: 0 6px; color: var(--accent-soft); font-weight: 700; }
+  .pipe-node.lit { box-shadow: 0 0 0 3px var(--accent-bg), 0 2px 10px rgba(176,113,63,.28); border-color: var(--accent); transform: translateY(-2px); }
+
+  /* ── 模拟器布局 ─────────────────────────── */
+  .sim { display: grid; grid-template-columns: minmax(380px, 46%) 1fr; gap: 16px; margin-top: 14px; }
+  @media (max-width: 900px) { .sim { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .panel h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
+
+  /* JSON 面板 */
+  pre.spec { font-family: var(--mono); font-size: 12.8px; line-height: 1.75; overflow-x: auto; }
+  pre.spec .k { color: var(--blue); }
+  pre.spec .s { color: var(--green); }
+  pre.spec .n { color: var(--red); }
+  .seg { display: inline; border-radius: 5px; transition: background .3s; }
+  .seg.hl { background: linear-gradient(90deg, #ffe9c9, #ffdba8); outline: 2px solid var(--accent-soft); box-shadow: 0 0 12px rgba(196,133,79,.35); }
+  .seg.done { background: #eef3e9; }
+
+  /* 右列 */
+  .right-col { display: flex; flex-direction: column; gap: 12px; }
+
+  /* 解说卡 */
+  .explain { border-left: 4px solid var(--accent); }
+  .explain .step-no { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 700; }
+  .explain .step-title { font-weight: 700; font-size: 15.5px; margin: 2px 0 6px; }
+  .explain .step-desc { font-size: 13.5px; }
+  .explain details { margin-top: 8px; }
+  .explain summary { cursor: pointer; font-size: 12px; color: var(--accent); user-select: none; }
+  .explain pre.code { font-family: var(--mono); font-size: 11.8px; background: #2e2a24; color: #e8ddc8; padding: 10px 12px; border-radius: 8px; margin-top: 6px; overflow-x: auto; line-height: 1.6; }
+  .explain pre.code .cm { color: #8a7d68; }
+  .explain pre.code .hot { color: #ffca85; font-weight: 700; }
+
+  /* 变量池 */
+  .ctx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ctx-table td { padding: 4px 8px; border-bottom: 1px dashed var(--border); vertical-align: top; }
+  .ctx-table td.key { font-family: var(--mono); color: var(--blue); white-space: nowrap; width: 70px; }
+  .ctx-table td.val { font-family: var(--mono); color: var(--text); word-break: break-all; }
+  .ctx-table tr.fresh td { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0% { background: #ffe9c9; } 100% { background: transparent; } }
+  .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
+
+  /* 节点实例 */
+  .agents-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .agent-card { border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 8px 12px; font-size: 12px; min-width: 130px; transition: all .3s; }
+  .agent-card.active { border-style: solid; border-color: var(--accent); background: var(--accent-bg); }
+  .agent-card .nm { font-family: var(--mono); font-weight: 700; }
+  .agent-card .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  /* 事件流 */
+  .events { font-family: var(--mono); font-size: 11.5px; max-height: 170px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+  .ev { padding: 3px 8px; border-radius: 6px; background: #f4eee3; border: 1px solid var(--border); }
+  .ev.kind-step_end { border-color: #cfe0d4; background: var(--green-bg); }
+  .ev.kind-loop_iter, .ev.kind-loop_break { border-color: #d3ddec; background: var(--blue-bg); }
+  .ev.kind-workflow_end { border-color: var(--accent-soft); background: var(--accent-bg); font-weight: 700; }
+  .ev .ek { color: var(--accent); font-weight: 700; }
+
+  /* 控制条 */
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); padding: 8px 18px; font-size: 14px; transition: all .15s; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  button.primary:hover { background: var(--accent-soft); }
+  button:disabled { opacity: .4; cursor: default; }
+  .progress { flex: 1; min-width: 140px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); transition: width .3s; }
+  .kbd-hint { font-size: 11.5px; color: var(--muted); }
+
+  /* 组件参考卡 */
+  .comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .comp { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: all .15s; }
+  .comp:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .comp.open { border-color: var(--accent); box-shadow: 0 2px 12px rgba(176,113,63,.15); }
+  .comp .h { font-weight: 700; font-size: 14px; }
+  .comp .one { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .comp-detail { display: none; grid-column: 1 / -1; background: var(--card); border: 1px solid var(--accent-soft); border-radius: 10px; padding: 14px 16px; }
+  .comp-detail.show { display: block; }
+  .comp-detail pre { font-family: var(--mono); font-size: 12px; background: #2e2a24; color: #e8ddc8; padding: 10px 12px; border-radius: 8px; overflow-x: auto; line-height: 1.6; margin-top: 6px; }
+  .comp-detail .lbl { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 10px; }
+
+  .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .three .panel { font-size: 13px; }
+  .three b { color: var(--accent); }
+  .foot { margin-top: 30px; color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 14px; }
+  .foot code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🔁 Workflow JSON 是怎么被执行的？</h1>
+<p class="sub">
+  你的 agent 架构 (Music!!!/project/agent) 原本没有编排层 —— 它是新增的 <code>agent/orchestration/</code> 子包 (Phase 7, ~300 行)。
+  核心只有一句话：<b>JSON 不被编译成任何东西，而是被一个解释器逐节点遍历；每个 agent 节点的执行 = 调你原有的 <code>Agent.send()</code></b>。core 一行没改。
+</p>
+
+<h2>① 分层链路 — 谁把 JSON 递给谁</h2>
+<p class="sub">下面模拟器运行时，当前活跃的层会亮起来。绿色 = 你 Phase 1-6 已有的代码，橙色 = 新增解释器。</p>
+<div class="pipeline" id="pipeline">
+  <div class="pipe-node" data-layer="json"><div class="t">workflows.json</div><div class="d">纯数据 (spec)</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node new" data-layer="engine"><div class="t">Workflow 解释器</div><div class="d">walk 树 · 分发 type</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node new" data-layer="tpl"><div class="t">模板 + 变量池</div><div class="d">{var} ← context dict</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node" data-layer="factory"><div class="t">build_agent 注入</div><div class="d">dashboard factory</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node yours" data-layer="send"><div class="t">Agent.send()</div><div class="d">Phase 1 工具循环</div></div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node yours" data-layer="llm"><div class="t">AgentDeploy</div><div class="d">llm.py → API</div></div>
+</div>
+
+<h2>② 逐步执行模拟器 — 以 reflect_write (反思循环) 为例</h2>
+<p class="sub">输入 <code>{"task": "给呼吸训练 App 写一句开屏标语"}</code>。点 <b>下一步</b> (或按空格) 看每一拍发生什么；左侧 JSON 高亮"解释器现在停在哪"。</p>
+
+<div class="sim">
+  <div class="panel">
+    <h3>workflows.json 里的 spec（解释器的输入）</h3>
+    <pre class="spec" id="specView"></pre>
+  </div>
+
+  <div class="right-col">
+    <div class="panel explain" id="explainCard">
+      <div class="step-no" id="stepNo"></div>
+      <div class="step-title" id="stepTitle"></div>
+      <div class="step-desc" id="stepDesc"></div>
+      <details id="codeWrap"><summary>▶ 对应的真实源码</summary><pre class="code" id="stepCode"></pre></details>
+    </div>
+
+    <div class="panel">
+      <h3>变量池 context（步骤间传值的全部机制）</h3>
+      <table class="ctx-table" id="ctxTable"></table>
+    </div>
+
+    <div class="panel">
+      <h3>节点实例缓存（同名节点整个 run 只建一次 → 跨轮记忆）</h3>
+      <div class="agents-row" id="agentsRow"><span class="empty-hint">还没有节点被构建</span></div>
+    </div>
+
+    <div class="panel">
+      <h3>yield 出的事件流（前端运行面板消费的就是这些）</h3>
+      <div class="events" id="events"><span class="empty-hint">等待 run() 开始…</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="primary" id="btnNext">下一步 ▸</button>
+  <button id="btnAuto">▶ 自动播放</button>
+  <button id="btnReset">↺ 重置</button>
+  <div class="progress"><i id="progBar" style="width:0%"></i></div>
+  <span class="kbd-hint" id="progText">0 / 0 · 快捷键: 空格=下一步, R=重置</span>
+</div>
+
+<h2>③ 六种组件在解释器里各是哪几行</h2>
+<p class="sub">点卡片看「JSON 写法 ↔ 解释器分支源码」的对应。所谓"识别"就是 <code>_run_steps</code> 里的一个 if/elif 分发，没有注册表、没有反射、没有魔法。</p>
+<div class="comp-grid" id="compGrid"></div>
+
+<h2>④ 三条底层设计（为什么 core 不用改）</h2>
+<div class="three">
+  <div class="panel"><b>1 · 解释执行，不编译</b><br>spec 永远是 dict。<code>_run_steps</code> 用 Python 的 for/递归/异常实现顺序、循环、跳出 —— JSON 只描述"走哪条路"，控制流全是普通 Python。</div>
+  <div class="panel"><b>2 · 鸭子类型边界</b><br>引擎对节点的全部要求 = 有 <code>.send(text) → str</code>。节点怎么构造通过 <code>build_agent</code> 注入（dashboard 的 factory 从 agents.json 建），引擎不 import Agent。这和你 Phase 1 留的 <code>approval_callback</code> 是同一个设计哲学。</div>
+  <div class="panel"><b>3 · 节点实例缓存 = 记忆</b><br><code>node(name)</code> 闭包每个名字只构建一次。critic 第 2 轮记得第 1 轮，是因为<b>同一个 Agent 实例的 self.messages 在自然累积</b>（你 Phase 1 的历史机制），引擎自己不管理任何对话状态。</div>
+</div>
+
+<div class="foot">
+  源码阅读顺序: <code>agent/orchestration/workflow.py</code> → <code>run()</code> → <code>_run_steps()</code> → <code>_run_agent_step()</code> → <code>render_template()</code>（共约 300 行，模块 docstring 有完整设计笔记）。
+  服务层接线: <code>backend/agent_service/main.py</code> 的 workflows 端点 + <code>factory.build_oneshot_agent</code>。设计文档: SOD 06 / 07。
+</div>
+
+</div>
+
+<script>
+// ═══════════════ JSON spec 渲染（带可高亮的段落锚点）═══════════════
+const SPEC_HTML = [
+  { seg: "root",   html: '{\n  <span class="k">"id"</span>: <span class="s">"reflect_write"</span>,\n  <span class="k">"inputs"</span>: [<span class="s">"task"</span>],' },
+  { seg: "output", html: '\n  <span class="k">"output"</span>: <span class="s">"{draft}"</span>,' },
+  { seg: "steps",  html: '\n  <span class="k">"steps"</span>: [' },
+  { seg: "draft",  html: '\n    { <span class="k">"type"</span>: <span class="s">"agent"</span>, <span class="k">"id"</span>: <span class="s">"draft"</span>, <span class="k">"agent"</span>: <span class="s">"writer"</span>,\n      <span class="k">"prompt"</span>: <span class="s">"写作任务:\\n{task}"</span> },' },
+  { seg: "loop",   html: '\n    { <span class="k">"type"</span>: <span class="s">"loop"</span>, <span class="k">"id"</span>: <span class="s">"revise"</span>, <span class="k">"max_iters"</span>: <span class="n">3</span>, <span class="k">"steps"</span>: [' },
+  { seg: "review", html: '\n        { <span class="k">"type"</span>: <span class="s">"agent"</span>, <span class="k">"id"</span>: <span class="s">"review"</span>, <span class="k">"agent"</span>: <span class="s">"critic"</span>,\n          <span class="k">"prompt"</span>: <span class="s">"审阅以下文本:\\n\\n{draft}"</span> },' },
+  { seg: "brk",    html: '\n        { <span class="k">"type"</span>: <span class="s">"break_if"</span>,\n          <span class="k">"when"</span>: { <span class="k">"var"</span>: <span class="s">"review"</span>, <span class="k">"regex"</span>: <span class="s">"^\\\\s*APPROVED\\\\b"</span> } },' },
+  { seg: "revise", html: '\n        { <span class="k">"type"</span>: <span class="s">"agent"</span>, <span class="k">"id"</span>: <span class="s">"draft"</span>, <span class="k">"agent"</span>: <span class="s">"writer"</span>,\n          <span class="k">"prompt"</span>: <span class="s">"根据评审意见修订:\\n\\n{review}"</span> }' },
+  { seg: "tail",   html: '\n    ]}\n  ]\n}' },
+];
+document.getElementById("specView").innerHTML =
+  SPEC_HTML.map(x => `<span class="seg" id="seg-${x.seg}">${x.html}</span>`).join("");
+
+// ═══════════════ 源码片段库 ═══════════════
+const CODE = {
+  validate: `<span class="cm"># workflow.py — 构造时静态校验, 不合法根本不会开始跑</span>
+class Workflow:
+    def __init__(self, spec):
+        problems = <span class="hot">validate_spec(spec)</span>   <span class="cm"># 递归走树: type 合法? 缺字段? max_iters≤20?</span>
+        if problems: raise WorkflowError(...)`,
+  run: `<span class="cm"># workflow.py — run() 是生成器; context 就是普通 dict</span>
+def run(self, inputs, build_agent, ask_human=None):
+    <span class="hot">context = dict(inputs or {})</span>          <span class="cm"># 变量池初始化</span>
+    agents = {}
+    def <span class="hot">node(name)</span>:                       <span class="cm"># 每个名字只构建一次并缓存</span>
+        if name not in agents:
+            agents[name] = <span class="hot">build_agent(name)</span>  <span class="cm"># ← 注入点, 引擎不知道怎么造 Agent</span>
+        return agents[name]`,
+  dispatch: `<span class="cm"># workflow.py — "识别" = 一个 if/elif 分发器</span>
+def _run_steps(self, steps, context, rt, iteration):
+    for step in steps:
+        t = <span class="hot">step["type"]</span>
+        if   t == "agent":    yield from self._run_agent_step(...)
+        elif t == "loop":     yield from self._run_loop(...)
+        elif t == "break_if":
+            if eval_condition(step["when"], context): <span class="hot">raise _LoopBreak(...)</span>`,
+  agentstep: `<span class="cm"># workflow.py — LLM 被调用的那三行</span>
+prompt = <span class="hot">render_template(step["prompt"], context)</span>  <span class="cm"># ① {task} 填值</span>
+output = rt["node"](step["agent"])<span class="hot">.send(prompt)</span>       <span class="cm"># ② ★ 你的 Phase 1 循环!</span>
+<span class="hot">context[step["id"]] = output</span>                        <span class="cm"># ③ 输出回变量池</span>`,
+  send: `<span class="cm"># agent/core/agent.py — 你写的 send(), 原封不动</span>
+def send(self, user_text):
+    self.messages.append({"role": "user", ...})
+    for _ in range(self.max_rounds):
+        msg = <span class="hot">self.client.invoke(messages, tools=...)</span>  <span class="cm"># llm.py → API</span>
+        if not msg.get("tool_calls"):
+            return msg["content"]              <span class="cm"># 最终文本 → 回到解释器</span>
+        dispatch_all(self.registry, msg["tool_calls"])  <span class="cm"># 工具循环照常</span>`,
+  loop: `<span class="cm"># workflow.py — loop 就是 for + 递归 + 异常捕获</span>
+def _run_loop(self, step, context, rt):
+    for i in range(1, <span class="hot">min(step.get("max_iters",3), 20)</span> + 1):
+        yield ("loop_iter", {...})
+        try:
+            yield from <span class="hot">self._run_steps(step["steps"], ...)</span>  <span class="cm"># 递归子块</span>
+        except <span class="hot">_LoopBreak</span> as brk:
+            yield ("loop_break", {...}); return`,
+  brk: `<span class="cm"># workflow.py — break_if: 求值命中就抛内部异常, 最近的 loop 接住</span>
+elif t == "break_if":
+    if <span class="hot">eval_condition(step["when"], context)</span>:
+        raise _LoopBreak(step["when"])
+<span class="cm"># eval_condition: contains → 子串 / regex → re.search / equals → 全等</span>`,
+  memory: `<span class="cm"># 为什么第 2 轮的 writer 记得第 1 轮?</span>
+<span class="cm"># node("writer") 返回的是同一个实例, 它的 self.messages 一直在长:</span>
+writer.messages = [system, u"写作任务...", a"焕活身心",
+                   <span class="hot">u"根据评审意见修订...", a"吐故纳新"</span>]  <span class="cm"># ← Phase 1 机制</span>`,
+  end: `<span class="cm"># workflow.py — 结束: output 模板渲染 (缺省=最后一步输出)</span>
+output_tpl = self.spec.get("output")          <span class="cm"># "{draft}"</span>
+output = <span class="hot">render_template(output_tpl, context)</span>
+yield ("workflow_end", {"output": output, "context": dict(context)})`,
+};
+
+// ═══════════════ 模拟脚本（每步 = 一拍）═══════════════
+const V1 = "一呼一吸，焕活身心", V2 = "一呼一吸，吐故纳新";
+const REV1 = "「焕活」略生造，建议换更自然的词…";
+const SIM = [
+  { no:"STEP 0", title:"载入 spec + 静态校验", seg:"root", layers:["json","engine"], code:CODE.validate,
+    desc:"服务从 workflows.json 读出这份 dict，Workflow(spec) 构造时 validate_spec 递归走一遍树。它此刻只是数据 —— 没有任何东西被「编译」。",
+    ctx:{}, agents:{}, ev:[] },
+  { no:"STEP 1", title:"run(inputs) — 变量池诞生", seg:"root", layers:["engine","tpl"], code:CODE.run,
+    desc:"run() 把你传的 inputs 复制成 context（就是个普通 dict，右边可以看到它）。同时准备好 node() 闭包 —— 注意 build_agent 是外面注入的，引擎不知道 Agent 怎么造。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语"}, agents:{}, ev:[{k:"workflow_start", d:"inputs={task}"}] },
+  { no:"STEP 2", title:"遇到第一个节点: draft — 模板渲染", seg:"draft", layers:["engine","tpl"], code:CODE.dispatch,
+    desc:"_run_steps 拿到 step，看 type == \"agent\" → 走 _run_agent_step。第一件事：render_template 把 prompt 里的 {task} 换成变量池里的值 → 「写作任务:\\n给呼吸训练 App 写一句开屏标语」。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语"}, agents:{}, ev:[{k:"step_start", d:"draft (writer)"}] },
+  { no:"STEP 3", title:"node(\"writer\") — 首次构建, 进入你的地盘", seg:"draft", layers:["factory","send","llm"], code:CODE.agentstep,
+    desc:"writer 不在缓存里 → build_agent(\"writer\") 被调（dashboard 的 factory 查 agents.json，拼出 AgentDeploy + Agent）。然后 .send(prompt) —— 从这行起就是你 Phase 1 写的循环：invoke → (工具?) → 最终文本。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语"}, agents:{writer:{calls:1, msgs:3, active:1}}, ev:[] },
+  { no:"STEP 4", title:"输出回填变量池", seg:"draft", layers:["engine","tpl"], code:CODE.agentstep,
+    desc:"send() 返回「" + V1 + "」→ context[\"draft\"] = 它。所谓步骤间「消息传递」，全部机制就是这个 dict 的读写。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V1}, agents:{writer:{calls:1, msgs:3}}, ev:[{k:"step_end", d:"draft ✓ (7.5s)"}] },
+  { no:"STEP 5", title:"进入 loop — 就是个 for 循环", seg:"loop", layers:["engine"], code:CODE.loop,
+    desc:"type == \"loop\" → _run_loop：字面意义的 for i in range(max_iters)，每轮递归执行子步骤，并随时准备接住 _LoopBreak 异常。第 1 轮开始。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V1}, agents:{writer:{calls:1, msgs:3}}, ev:[{k:"loop_iter", d:"revise #1"}] },
+  { no:"STEP 6", title:"review 节点 — critic 首次构建", seg:"review", layers:["engine","tpl","factory","send","llm"], code:CODE.agentstep,
+    desc:"渲染 prompt（{draft} → 现稿）→ node(\"critic\") 首次构建 → critic.send()。它给出改进意见。注意右边节点缓存里现在有两个实例了。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V1, review:REV1}, agents:{writer:{calls:1, msgs:3}, critic:{calls:1, msgs:3, active:1}}, ev:[{k:"step_end", d:"review #1 ✓"}] },
+  { no:"STEP 7", title:"break_if 求值 — 不中, 继续", seg:"brk", layers:["engine","tpl"], code:CODE.brk,
+    desc:"eval_condition 对 context[\"review\"] 跑 regex ^\\s*APPROVED\\b —— 意见不是以 APPROVED 开头 → False → 不抛异常，顺序执行下一步。（用锚定 regex 而非 contains，是防评审在意见里「提到」这个词造成误跳出 —— 实测踩过的坑。）",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V1, review:REV1}, agents:{writer:{calls:1, msgs:3}, critic:{calls:1, msgs:3}}, ev:[] },
+  { no:"STEP 8", title:"修订节点 — 同一个 writer, 它有记忆", seg:"revise", layers:["engine","tpl","send","llm"], code:CODE.memory,
+    desc:"node(\"writer\") 命中缓存 → 还是那个实例！它的 self.messages 里已经有第一轮的完整对话，所以「根据评审意见修订」它知道原稿是什么。跨轮记忆 = 你 Phase 1 的消息累积机制，引擎零参与。输出 v2 覆盖 context[\"draft\"]。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V2, review:REV1}, agents:{writer:{calls:2, msgs:5, active:1}, critic:{calls:1, msgs:3}}, ev:[{k:"step_end", d:"draft #1 ✓ (v2)"}] },
+  { no:"STEP 9", title:"loop 第 2 轮 — review 再审", seg:"review", layers:["engine","send","llm"], code:CODE.loop,
+    desc:"for 循环进入 i=2，再次执行子步骤。critic（也命中缓存，记得自己第一轮提过什么意见）审 v2 → 这次它回复「APPROVED」。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V2, review:"APPROVED"}, agents:{writer:{calls:2, msgs:5}, critic:{calls:2, msgs:5, active:1}}, ev:[{k:"loop_iter", d:"revise #2"}, {k:"step_end", d:"review #2 ✓"}] },
+  { no:"STEP 10", title:"break_if 命中 — 异常跳出循环", seg:"brk", layers:["engine"], code:CODE.brk,
+    desc:"regex 命中「APPROVED」→ raise _LoopBreak → 被 _run_loop 的 try/except 接住 → yield loop_break 事件并 return。关键语义：跳出发生在修订步之前，所以达标后不会再多改一版。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V2, review:"APPROVED"}, agents:{writer:{calls:2, msgs:5}, critic:{calls:2, msgs:5}}, ev:[{k:"loop_break", d:"regex ^\\s*APPROVED\\b"}] },
+  { no:"STEP 11", title:"收尾 — output 模板渲染", seg:"output", layers:["engine","tpl"], code:CODE.end,
+    desc:"steps 走完，output 模板 \"{draft}\" 从变量池取最终稿 → yield workflow_end。整个过程中前端运行面板收到的每一行 NDJSON，就是右下角这串事件 —— 引擎 yield 什么，UI 画什么。",
+    ctx:{task:"给呼吸训练 App 写一句开屏标语", draft:V2, review:"APPROVED"}, agents:{writer:{calls:2, msgs:5}, critic:{calls:2, msgs:5}}, ev:[{k:"workflow_end", d:'output="'+V2+'"'}] },
+];
+
+// ═══════════════ 渲染 & 交互 ═══════════════
+let cur = -1, timer = null;
+const $ = id => document.getElementById(id);
+
+function fmtVal(v) { return v.length > 34 ? v.slice(0, 34) + "…" : v; }
+
+function render() {
+  const s = SIM[cur];
+  // 解说
+  $("stepNo").textContent = s.no + "  ·  " + (cur + 1) + "/" + SIM.length;
+  $("stepTitle").textContent = s.title;
+  $("stepDesc").textContent = s.desc;
+  $("stepCode").innerHTML = s.code;
+  $("codeWrap").open = false;
+  // JSON 高亮
+  document.querySelectorAll(".seg").forEach(el => el.classList.remove("hl"));
+  const seg = $("seg-" + s.seg); if (seg) seg.classList.add("hl");
+  // 管线亮灯
+  document.querySelectorAll(".pipe-node").forEach(el =>
+    el.classList.toggle("lit", s.layers.includes(el.dataset.layer)));
+  // 变量池
+  const prev = cur > 0 ? SIM[cur - 1].ctx : {};
+  $("ctxTable").innerHTML = Object.keys(s.ctx).length
+    ? Object.entries(s.ctx).map(([k, v]) =>
+        `<tr class="${prev[k] !== v ? "fresh" : ""}"><td class="key">${k}</td><td class="val">"${fmtVal(v)}"</td></tr>`).join("")
+    : '<tr><td class="empty-hint">（空 —— run() 还没开始）</td></tr>';
+  // 节点缓存
+  $("agentsRow").innerHTML = Object.keys(s.agents).length
+    ? Object.entries(s.agents).map(([n, a]) =>
+        `<div class="agent-card ${a.active ? "active" : ""}"><div class="nm">🤖 ${n}</div>
+         <div class="meta">send 调用 ×${a.calls} · messages ${a.msgs} 条</div></div>`).join("")
+    : '<span class="empty-hint">还没有节点被构建（首次用到才 build_agent）</span>';
+  // 事件流（累积）
+  const evs = SIM.slice(0, cur + 1).flatMap(x => x.ev);
+  $("events").innerHTML = evs.length
+    ? evs.map(e => `<div class="ev kind-${e.k}"><span class="ek">${e.k}</span> ${e.d}</div>`).join("")
+    : '<span class="empty-hint">等待 run() 开始…</span>';
+  $("events").scrollTop = 9999;
+  // 进度
+  $("progBar").style.width = ((cur + 1) / SIM.length * 100) + "%";
+  $("progText").textContent = (cur + 1) + " / " + SIM.length + " · 快捷键: 空格=下一步, R=重置";
+  $("btnNext").disabled = cur >= SIM.length - 1;
+  if (cur >= SIM.length - 1) stopAuto();
+}
+
+function next() { if (cur < SIM.length - 1) { cur++; render(); } }
+function reset() { stopAuto(); cur = 0; render(); }
+function stopAuto() { if (timer) { clearInterval(timer); timer = null; $("btnAuto").textContent = "▶ 自动播放"; } }
+$("btnNext").onclick = next;
+$("btnReset").onclick = reset;
+$("btnAuto").onclick = () => {
+  if (timer) { stopAuto(); return; }
+  if (cur >= SIM.length - 1) cur = -1;
+  $("btnAuto").textContent = "⏸ 暂停";
+  next(); timer = setInterval(next, 2600);
+};
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") { e.preventDefault(); next(); }
+  if (e.key === "r" || e.key === "R") reset();
+});
+
+// ═══════════════ 组件参考卡 ═══════════════
+const COMPS = [
+  { icon:"🤖", name:"agent", one:"一个节点处理模板化输入", json:`{"type": "agent", "id": "draft",\n "agent": "writer", "prompt": "任务:\\n{task}"}`,
+    code:`prompt = render_template(step["prompt"], context)\noutput = rt["node"](step["agent"]).send(prompt)   # ★ 你的 Agent.send\ncontext[step["id"]] = output`,
+    note:"输出以 id 为键进变量池；后续任何步骤用 {draft} 引用。" },
+  { icon:"🙋", name:"human", one:"暂停等真人回答（人机协同）", json:`{"type": "human", "id": "pick",\n "prompt": "两个方案:\\n{plans}\\n选哪个?"}`,
+    code:`if rt["ask_human"] is None: raise WorkflowError(...)  # 阻塞式运行不支持\nyield ("human_ask", {...})\nanswer = rt["ask_human"](prompt)   # ← 注入的回调, 服务端桥到 HTTP\ncontext[step["id"]] = answer`,
+    note:"与你 Phase 1 的 approval_callback 同构：库只留同步回调口，HTTP 桥由 dashboard 实现（600s 超时）。" },
+  { icon:"◇", name:"break_if", one:"条件命中跳出最近的 loop", json:`{"type": "break_if", "when":\n {"var": "review", "regex": "^\\\\s*APPROVED\\\\b"}}`,
+    code:`if eval_condition(step["when"], context):\n    raise _LoopBreak(step["when"])   # 最近一层 loop 的 except 接住`,
+    note:"条件三选一 contains/regex/equals。评审类循环用锚定 regex —— contains 会被意见里「提到」该词误触发（实测踩过）。" },
+  { icon:"🔁", name:"loop", one:"循环子步骤（max_iters 封顶 20）", json:`{"type": "loop", "id": "revise",\n "max_iters": 3, "steps": [ ... ]}`,
+    code:`for i in range(1, min(max_iters, 20) + 1):\n    yield ("loop_iter", {...})\n    try:    yield from self._run_steps(step["steps"], ...)\n    except _LoopBreak: yield ("loop_break", {...}); return`,
+    note:"字面意义的 Python for 循环 + 递归；没有隐藏调度器。" },
+  { icon:"⫲", name:"parallel", one:"并发执行（线程池）", json:`{"type": "parallel", "steps": [\n  {agent 步骤 A}, {agent 步骤 B} ]}`,
+    code:`rendered = [(s, render_template(...)) for s in subs]  # 先渲染快照\nwith ThreadPoolExecutor(...) as pool:                 # 再并发 send\n    for fut in as_completed(futures):\n        context[s["id"]] = out`,
+    note:"子步骤的 agent 名必须互不相同 —— 同名共享实例并发写 messages 会竞态，校验直接拦。" },
+  { icon:"🔀", name:"route", one:"LLM 输出决定走哪条分支", json:`{"type": "route", "id": "kind", "agent": "router",\n "prompt": "...", "routes": {"音乐": [...], "医疗": [...]},\n "default": "音乐"}`,
+    code:`yield from self._run_agent_step(step, ...)   # router 先跑一步\ndecision = str(context[step["id"]])\nfor key in step["routes"]:                    # 键名包含匹配(不分大小写)\n    if key.lower() in decision.lower(): choice = key; break\nyield from self._run_steps(step["routes"][choice], ...)`,
+    note:"消息传递顺序由 LLM 动态决定；未命中走 default。未选分支完全不执行。" },
+];
+const grid = $("compGrid");
+COMPS.forEach((c, i) => {
+  const card = document.createElement("div");
+  card.className = "comp"; card.dataset.i = i;
+  card.innerHTML = `<div class="h">${c.icon} ${c.name}</div><div class="one">${c.one}</div>`;
+  grid.appendChild(card);
+});
+const detail = document.createElement("div");
+detail.className = "comp-detail"; grid.appendChild(detail);
+let openIdx = -1;
+grid.addEventListener("click", e => {
+  const card = e.target.closest(".comp"); if (!card) return;
+  const i = +card.dataset.i;
+  document.querySelectorAll(".comp").forEach(el => el.classList.remove("open"));
+  if (openIdx === i) { openIdx = -1; detail.classList.remove("show"); return; }
+  openIdx = i; card.classList.add("open");
+  const c = COMPS[i];
+  detail.innerHTML = `<div class="lbl">JSON 写法</div><pre>${c.json.replace(/</g,"&lt;")}</pre>
+    <div class="lbl">解释器对应源码 (workflow.py)</div><pre>${c.code.replace(/</g,"&lt;")}</pre>
+    <div class="lbl">要点</div><div style="font-size:13px">${c.note}</div>`;
+  detail.classList.add("show");
+});
+
+reset();
+</script>
+</body>
+</html>
