@@ -1,0 +1,9 @@
+# agent_service 专属依赖 (装进 backend/.venv, 与 :8080 app 共用 venv):
+#   uv pip install -r agent_service/requirements.txt --python backend\.venv\Scripts\python.exe
+# 另需 editable 安装 agent 库:
+#   uv pip install -e "D:\Imperial\individual\Music!!!\project" --python backend\.venv\Scripts\python.exe
+
+# RAG (设置页知识库 tab; agent 库的 retrieval 子包依赖)
+chromadb>=1.0
+sentence-transformers>=3.0     # 拉 torch; bge-m3 模型走 HF_HOME 缓存 (D:\hf)
+pymupdf4llm>=1.24              # agent.retrieval 包 __init__ 引 ingest 模块所需 (PDF 解析)

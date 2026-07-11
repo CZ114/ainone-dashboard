@@ -194,7 +194,8 @@ export async function findSecretReferences(): Promise<Record<string, string[]>> 
   const file = await readAgentsFile();
   const refs: Record<string, string[]> = {};
   for (const [agentId, agent] of Object.entries(file.agents)) {
-    for (const v of Object.values(agent.env)) {
+    // Agents written by the Python admin API may omit `env` entirely.
+    for (const v of Object.values(agent.env ?? {})) {
       const re = /\$\{([A-Z0-9_]+)\}/gi;
       let m: RegExpExecArray | null;
       while ((m = re.exec(v)) !== null) {

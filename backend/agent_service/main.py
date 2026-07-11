@@ -9,18 +9,21 @@
 abort 置 Event, worker 在事件边界退出并修补历史。
 """
 
+import os
 import queue
 import threading
 import time
 import uuid
 
+import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from . import agents_admin, config_store, rag
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, PermissionBroker
-from .config import DEFAULT_MODEL, DEFAULT_PROVIDER, PERMISSION_TIMEOUT_S, REPO_ROOT
+from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import build_oneshot_agent
 from .sessions import SessionManager, repair_history
 from .wire import new_stream_ctx, serialize
@@ -56,6 +59,49 @@ class OneshotBody(BaseModel):
 
 class ResetBody(BaseModel):
     scope: str = "messages"
+
+
+class ConfigPatchBody(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    embedder: str | None = None
+
+
+class AgentUpsertBody(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    system_prompt: str | None = None
+    sampling: dict | None = None
+    retrieval: dict | None = None
+    env: dict | None = None
+
+
+class AgentTestBody(BaseModel):
+    message: str | None = None
+
+
+class CollectionBody(BaseModel):
+    name: str
+    embedder: str | None = None
+
+
+class IngestDoc(BaseModel):
+    source: str
+    text: str
+
+
+class IngestBody(BaseModel):
+    collection: str
+    documents: list[IngestDoc]
+
+
+class RagSearchBody(BaseModel):
+    collection: str
+    query: str
+    top_k: int = 5
 
 
 # ─── chat 流核心 (neutral 与 compat 共用) ────────────────────────────
@@ -209,32 +255,170 @@ def agent_session_reset(session_id: str, body: ResetBody):
 
 @app.get("/api/agent/health")
 def agent_health():
+    cfg = config_store.load()
     return {
         "ok": True,
-        "provider": DEFAULT_PROVIDER,
-        "model": DEFAULT_MODEL,
+        "provider": cfg["provider"],
+        "model": cfg["model"],
         "tools": [t["name"] for t in build_registry().list_tools()],
     }
 
 
-# ─── RAG 预留 (SOD 04, 统一 501) ─────────────────────────────────────
+# ─── 模型服务商路由 (设置页) ─────────────────────────────────────────
 
-_RAG_501 = "RAG 系统尚未接入 — 预留接口, 见 docs/agent-migration-sod/04-reserved-interfaces.md"
+def _provider_catalog():
+    """agent 库 PROVIDERS 表 + 本机 key 可用性 (含 config.py 的命名映射后)。"""
+    from agent.core import llm
+    out = []
+    for name, (key_envs, base_url, default_model) in llm.PROVIDERS.items():
+        if name == "custom":
+            key_present = bool(os.getenv("LLM_BASE_URL"))
+        elif name == "ollama":
+            key_present = True  # 本地服务不验 key
+        else:
+            # 只认专属 key — LLM_API_KEY 是全局兜底, 拿来标"可用"会全绿误导
+            key_present = bool(llm._first_env(*key_envs))
+        out.append({
+            "name": name,
+            "keyEnvs": list(key_envs),
+            "keyPresent": key_present,
+            "defaultModel": default_model,
+            "baseUrl": base_url,
+        })
+    return out
 
 
-@app.post("/api/agent/rag/ingest")
-def rag_ingest():
-    return JSONResponse({"error": _RAG_501}, status_code=501)
+@app.get("/api/agent/config")
+def get_config():
+    return {"config": config_store.load(), "providers": _provider_catalog()}
 
+
+@app.patch("/api/agent/config")
+def patch_config(body: ConfigPatchBody):
+    saved = config_store.save(body.model_dump(exclude_none=True))
+    return {"config": saved, "providers": _provider_catalog()}
+
+
+@app.get("/api/agent/models")
+def list_models(provider: str | None = None):
+    """向服务商实时拉模型列表 (OpenAI 兼容 GET /models)。失败给 502, UI 回退手填。"""
+    from agent.core import llm
+    p = (provider or config_store.load()["provider"]).lower()
+    if p not in llm.PROVIDERS:
+        raise HTTPException(404, f"未知 provider: {p}")
+    key_envs, base_url, _ = llm.PROVIDERS[p]
+    if p == "custom":
+        base_url = os.getenv("LLM_BASE_URL")
+    api_key = llm._first_env(*key_envs, "LLM_API_KEY") or ("ollama" if p == "ollama" else None)
+    if not base_url or not api_key:
+        raise HTTPException(400, f"provider '{p}' 缺 key 或 base_url, 无法拉模型列表")
+    try:
+        r = httpx.get(f"{base_url.rstrip('/')}/models", timeout=10,
+                      headers={"Authorization": f"Bearer {api_key}"})
+        r.raise_for_status()
+        ids = sorted(m.get("id", "") for m in r.json().get("data", []) if m.get("id"))
+    except Exception as e:
+        raise HTTPException(502, f"拉取模型列表失败 ({p}): {type(e).__name__}: {e}")
+    return {"provider": p, "models": ids}
+
+
+# ─── multi-agent 配置 (设置页 Agents tab; 与日记共享 agents.json) ────
+
+@app.get("/api/agent/agents")
+def agents_list():
+    return {"agents": agents_admin.list_agents(config_store.load())}
+
+
+@app.put("/api/agent/agents/{agent_id}")
+def agents_upsert(agent_id: str, body: AgentUpsertBody):
+    try:
+        return {"agent": agents_admin.upsert_agent(agent_id, body.model_dump(exclude_none=True))}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/agent/agents/{agent_id}")
+def agents_delete(agent_id: str):
+    try:
+        agents_admin.delete_agent(agent_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/agent/agents/{agent_id}/test")
+def agents_test(agent_id: str, body: AgentTestBody):
+    """跑一次最小 oneshot 验证该 agent 配置可用 (对齐日记的 test 端点语义)。"""
+    started = time.time()
+    try:
+        agent = build_oneshot_agent(agent_id)
+        text = agent.send(body.message or "用一句话介绍你自己。")
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        return {"ok": False, "latency_ms": int((time.time() - started) * 1000),
+                "error": f"{type(e).__name__}: {e}"}
+    return {
+        "ok": True,
+        "latency_ms": int((time.time() - started) * 1000),
+        "model": agent.client.model,
+        "provider": agent.client.provider,
+        "sample": (text or "")[:300],
+    }
+
+
+# ─── RAG 管理 (SOD 04 预留已兑现) ────────────────────────────────────
 
 @app.get("/api/agent/rag/collections")
 def rag_collections():
-    return JSONResponse({"error": _RAG_501}, status_code=501)
+    return {"collections": rag.list_collections()}
+
+
+@app.post("/api/agent/rag/collections")
+def rag_create_collection(body: CollectionBody):
+    try:
+        col = rag.create_collection(
+            body.name, body.embedder or config_store.load()["embedder"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"collection": col}
 
 
 @app.delete("/api/agent/rag/collections/{name}")
-def rag_delete(name: str):
-    return JSONResponse({"error": _RAG_501}, status_code=501)
+def rag_delete_collection(name: str):
+    try:
+        rag.delete_collection(name)
+    except Exception as e:
+        raise HTTPException(404, f"删除失败: {e}")
+    return {"ok": True}
+
+
+@app.post("/api/agent/rag/ingest")
+def rag_ingest(body: IngestBody):
+    """切块→嵌入→入库。首次调用会加载 embedding 模型 (bge-m3, 可能要几十秒)。"""
+    try:
+        result = rag.ingest(
+            body.collection,
+            [d.model_dump() for d in body.documents],
+            config_store.load()["embedder"],
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"ingest 失败: {type(e).__name__}: {e}")
+    return result
+
+
+@app.post("/api/agent/rag/search")
+def rag_search(body: RagSearchBody):
+    try:
+        hits = rag.search(body.collection, body.query, body.top_k,
+                          config_store.load()["embedder"])
+    except Exception as e:
+        raise HTTPException(500, f"检索失败: {type(e).__name__}: {e}")
+    return {"hits": hits}
 
 
 # ─── compat 端点 (/api/compat/*, 供 agent_gateway 透传) ──────────────

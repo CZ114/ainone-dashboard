@@ -71,6 +71,7 @@ export async function handleChatRequest(c: Context): Promise<Response> {
     message?: unknown;
     requestId?: unknown;
     sessionId?: unknown;
+    agentId?: unknown;
   };
   try {
     body = await c.req.json();
@@ -91,6 +92,9 @@ export async function handleChatRequest(c: Context): Promise<Response> {
   }
   if (typeof body.sessionId === "string" && body.sessionId) {
     forwarded.sessionId = body.sessionId;
+  }
+  if (typeof body.agentId === "string" && body.agentId) {
+    forwarded.agentId = body.agentId;
   }
 
   console.log("[chat] proxy →", `${agentServiceUrl()}/api/compat/chat`, {

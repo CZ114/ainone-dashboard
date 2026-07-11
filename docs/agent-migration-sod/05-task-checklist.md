@@ -62,7 +62,19 @@
 - [ ] 回归：原链路用原 start.bat 依旧可用（原版代码零改动，理论必然；有空跑一次确认）
 
 ## 里程碑后（预留接口兑现，不阻塞迁移）
-- [ ] multi-agent：orchestrator + delegate 实现
-- [ ] RAG：ingest 管线 + collections 管理 + 前端设置页
+- [x] （2026-07-11）**设置页模型服务商路由**：config_store 运行时配置 +
+      /api/agent/config·/models + "模型路由"tab（provider key 徽标/实时模型列表/温度/embedder）
+- [x] （2026-07-11）**multi-agent 配置界面**：agents_admin + /api/agent/agents CRUD/test +
+      "Agents"tab（含 secrets 管理）+ chat 页 agent 选择器（agentId 仅新会话生效）
+- [x] （2026-07-11）**RAG 管理界面**：rag.py（Chroma + bge-m3 懒加载，HF_HOME=D:\hf 缓存命中）+
+      /api/agent/rag/*（collections/ingest/search）+ "知识库"tab；
+      factory 兑现 cfg.retrieval → retrieve 工具自动注册。
+      实测：ingest 55s（首次含模型加载）→ 检索 0.1s → kb_helper agent 从库答题正确
+- [x] （2026-07-11）**diary 完美适配**：网关 mainProvider 改读 :8100（徽标显示 via api.venice.ai）、
+      runner test 端点走 oneshot、前端清光 ~/.claude / Anthropic native / claude process 文案；
+      修复 agentStore.findSecretReferences 对无 env agent 的 500
+- [ ] multi-agent：orchestrator + delegate 工具实现（占位依旧）
 - [ ] memory：给 default agent 挂 `memory_root` 试运行
 - [ ] M4 语音：`/api/agent/voice` + `AgentDeploy.think()`
+- [ ] 新依赖（chromadb/sentence-transformers/pymupdf4llm）已装入 backend/.venv，
+      清单见 backend/agent_service/requirements.txt

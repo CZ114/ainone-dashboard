@@ -1,123 +1,67 @@
 /**
- * Main-agent provider detection.
+ * Main-agent provider detection — agent_service edition.
  *
- * The "main agent" is whatever Claude CLI provider the user has
- * configured for their interactive chat work — i.e. whatever
- * `claude` would default to when they run it from a shell. We read
- * `~/.claude/settings.json` (which the chat handler already loads
- * via `getUserEnvFromSettings`) and fall back to `process.env`.
+ * The "main agent" is whatever the Python agent service (:8100) is
+ * currently routed to — provider + model live in its runtime config
+ * (Settings → Model routing in the UI, persisted server-side). This
+ * replaces the old behaviour of reading ~/.claude/settings.json, which
+ * described the Claude CLI's provider and is irrelevant now that chat
+ * and diary both run through the agent service.
  *
  * Diary uses this for two purposes:
  *
  * 1. **Fallback agent** — when no explicit diary agent is configured,
- *    the runner builds an ephemeral agent that uses the main
- *    provider's BASE_URL + MODEL + AUTH. Avoids the old behaviour of
- *    hard-coding Haiku, which surprised users who had switched their
- *    main env to a non-Anthropic provider.
+ *    the runner posts to the agent service's oneshot endpoint with the
+ *    built-in `diary_observer` id, which mirrors this main config.
  *
- * 2. **Provider lock** — when the user creates a diary agent in the
- *    UI, the editor restricts the provider picker to the main
- *    provider's family. Prevents a class of misconfiguration where
- *    e.g. an Anthropic API key from settings.json silently gets
- *    sent to a MiniMax endpoint via a per-agent BASE_URL override.
+ * 2. **Provider hint** — the UI badge showing which provider/model a
+ *    "Generate now" run will use, and whether auth is available.
  */
 
-import { getUserEnvFromSettings } from "../handlers/chat.ts";
+import { agentServiceUrl } from "../utils/agentService.ts";
 
 export interface MainProviderInfo {
-  /**
-   * `ANTHROPIC_BASE_URL` value from the user's environment, normalised
-   * to a string with no trailing slash. `null` means Anthropic native
-   * (no override set).
-   */
+  /** The current provider's API base URL (informational, for the UI badge). */
   base_url: string | null;
-  /**
-   * `ANTHROPIC_MODEL` value if explicitly set, else `null`. The
-   * fallback runner uses this when a caller doesn't pick a model.
-   * Most users don't set this — they pick per-invocation via `--model`.
-   */
+  /** Current default model of the agent service. */
   model: string | null;
   /**
-   * Whether SOME credential is reachable at runtime — does NOT include
-   * the value itself. UI uses this to show a "main agent configured"
-   * vs "main agent missing — paste a key" hint.
+   * Whether the agent service has a usable credential for the current
+   * provider — does NOT include the value itself.
    */
   auth_present: boolean;
-  /**
-   * Where the values came from. Useful in the UI hint and in logs
-   * when debugging "why does the diary fallback think I'm on
-   * DeepSeek?".
-   */
+  /** Where the values came from. */
   env_source:
-    | "settings_json"     // ~/.claude/settings.json env block
-    | "process_env"       // shell env / .env
-    | "default";          // nothing found, defaulting to Anthropic native
+    | "agent_service"     // live runtime config from :8100
+    | "default";          // agent service unreachable
 }
 
-const ANTHROPIC_AUTH_KEYS = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-] as const;
-
-function trimTrailingSlash(url: string | undefined): string | null {
-  if (!url) return null;
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+interface AgentServiceConfig {
+  config?: { provider?: string; model?: string };
+  providers?: Array<{
+    name?: string;
+    keyPresent?: boolean;
+    baseUrl?: string | null;
+  }>;
 }
 
 export async function getMainProviderInfo(): Promise<MainProviderInfo> {
-  const settingsEnv = await getUserEnvFromSettings();
-
-  // Prefer settings.json over process.env so a user who set things up
-  // via `claude /login` or by editing settings.json sees that as
-  // canonical. Process.env is a fallback for shell/.env-based setups.
-  const baseUrl =
-    trimTrailingSlash(settingsEnv.ANTHROPIC_BASE_URL) ??
-    trimTrailingSlash(process.env.ANTHROPIC_BASE_URL);
-
-  const model =
-    settingsEnv.ANTHROPIC_MODEL?.trim() ||
-    process.env.ANTHROPIC_MODEL?.trim() ||
-    null;
-
-  const authFromSettings = ANTHROPIC_AUTH_KEYS.some(
-    (k) => typeof settingsEnv[k] === "string" && settingsEnv[k].length > 0,
-  );
-  const authFromProcess = ANTHROPIC_AUTH_KEYS.some(
-    (k) => typeof process.env[k] === "string" && (process.env[k] ?? "").length > 0,
-  );
-  const auth_present = authFromSettings || authFromProcess;
-
-  let env_source: MainProviderInfo["env_source"];
-  if (settingsEnv.ANTHROPIC_BASE_URL || authFromSettings || settingsEnv.ANTHROPIC_MODEL) {
-    env_source = "settings_json";
-  } else if (process.env.ANTHROPIC_BASE_URL || authFromProcess || process.env.ANTHROPIC_MODEL) {
-    env_source = "process_env";
-  } else {
-    env_source = "default";
+  try {
+    const r = await fetch(`${agentServiceUrl()}/api/agent/config`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = (await r.json()) as AgentServiceConfig;
+    const provider = data.config?.provider ?? null;
+    const entry = (data.providers ?? []).find((p) => p.name === provider);
+    return {
+      base_url: entry?.baseUrl ?? null,
+      model: data.config?.model ?? null,
+      auth_present: Boolean(entry?.keyPresent),
+      env_source: "agent_service",
+    };
+  } catch {
+    // Agent service down — diary runs would fail anyway; report honestly.
+    return { base_url: null, model: null, auth_present: false, env_source: "default" };
   }
-
-  return {
-    base_url: baseUrl ?? null,
-    model: model ?? null,
-    auth_present,
-    env_source,
-  };
-}
-
-/**
- * Build the resolved agent env that mirrors the main agent's provider.
- * Used by the fallback agent when no explicit diary agent is in scope.
- *
- * Returns ONLY the BASE_URL when set; auth comes from inheritance at
- * spawn time (the chat handler's normal env-merge path picks up the
- * settings.json keys). Diary's runner does its own auth normalisation
- * (see runner.ts) which handles both API_KEY and AUTH_TOKEN styles.
- */
-export async function buildMainProviderEnv(): Promise<Record<string, string>> {
-  const info = await getMainProviderInfo();
-  const env: Record<string, string> = {};
-  if (info.base_url) env.ANTHROPIC_BASE_URL = info.base_url;
-  return env;
 }

@@ -1,10 +1,11 @@
 """AgentFactory — 从配置构造 Agent 实例。
 
-multi-agent 预留落点 (SOD 04): agent_id 映射到 backend/data/diary/agents.json 里的定义,
-secrets 用 ${NAME} 占位符, 解析链: agents.json secrets 块 > 环境变量。
-当前只有 "default" 是保证可用的; agents.json 里的自定义 id 也能解析 (schema 兼容日记系统)。
+multi-agent 落点 (SOD 04 已兑现): agent_id 映射到 backend/data/diary/agents.json 里的
+定义 (与日记系统共享), secrets 用 ${NAME} 占位符, 解析链: agents.json secrets 块 > 环境变量。
+"default" 跟随运行时配置 (config_store, 设置页可改); 自定义 agent 缺省字段回落到运行时默认。
 
-RAG 预留: cfg 里出现 retrieval 字段时报 NotImplementedError (系统未完善, 接口先占位)。
+RAG (SOD 04 已兑现): cfg.retrieval = {collection, top_k} 时挂载 ChromaStore + embedder,
+agent 库自动注册 retrieve 工具。
 """
 
 import json
@@ -13,14 +14,9 @@ import re
 
 from agent import Agent, AgentDeploy, AuditLog, create_registry
 
+from . import config_store
 from .agent_tools import build_registry, recordings_context_provider
-from .config import (
-    AGENTS_JSON,
-    DEFAULT_MODEL,
-    DEFAULT_PROVIDER,
-    DEFAULT_SYSTEM_PROMPT,
-    SESSIONS_DIR,
-)
+from .config import AGENTS_JSON, DEFAULT_SYSTEM_PROMPT, SESSIONS_DIR
 
 _SECRET_REF = re.compile(r"\$\{(\w+)\}")
 
@@ -44,17 +40,23 @@ def _resolve_secret(value, secrets):
 
 
 def resolve_agent_config(agent_id=None):
-    """返回归一化配置 dict: provider/model/api_key/system_prompt/temperature。
+    """返回归一化配置 dict:
+    provider/model/api_key/system_prompt/temperature/retrieval/embedder。
 
-    agent_id 为 None/"default" 时用服务默认; 否则查 agents.json (日记系统 schema)。
+    agent_id 为 None/"default" 时用运行时默认 (config_store);
+    否则查 agents.json (与日记系统同一 schema), 缺省字段回落到运行时默认。
     """
+    runtime = config_store.load()
+
     if not agent_id or agent_id == "default":
         return {
-            "provider": DEFAULT_PROVIDER,
-            "model": DEFAULT_MODEL,
+            "provider": runtime["provider"],
+            "model": runtime["model"],
             "api_key": None,  # AgentDeploy 走环境变量 (含 config.py 的命名映射)
             "system_prompt": DEFAULT_SYSTEM_PROMPT,
-            "temperature": 0.7,
+            "temperature": runtime["temperature"],
+            "retrieval": None,
+            "embedder": runtime["embedder"],
         }
 
     doc = _load_agents_json()
@@ -67,11 +69,6 @@ def resolve_agent_config(agent_id=None):
         known = ["default", "diary_observer", *(doc.get("agents") or {}).keys()]
         raise KeyError(f"未知 agent_id: {agent_id}; 可用: {known}")
 
-    if cfg.get("retrieval"):
-        raise NotImplementedError(
-            "RAG 尚未接入 — retrieval 字段是预留接口 (SOD 04-reserved-interfaces.md)"
-        )
-
     secrets = doc.get("secrets") or {}
     # env 块解析后注入环境 (agent 库按环境变量找 key); 已存在的变量不覆盖
     for k, v in (cfg.get("env") or {}).items():
@@ -79,12 +76,30 @@ def resolve_agent_config(agent_id=None):
             os.environ[k] = _resolve_secret(v, secrets)
 
     sampling = cfg.get("sampling") or {}
+    retrieval = cfg.get("retrieval") or None
+    if retrieval and not retrieval.get("collection"):
+        retrieval = None
     return {
-        "provider": cfg.get("provider") or DEFAULT_PROVIDER,
-        "model": cfg.get("model") or DEFAULT_MODEL,
+        "provider": cfg.get("provider") or runtime["provider"],
+        "model": cfg.get("model") or runtime["model"],
         "api_key": None,
         "system_prompt": cfg.get("system_prompt") or DEFAULT_SYSTEM_PROMPT,
-        "temperature": sampling.get("temperature", 0.7),
+        "temperature": sampling.get("temperature", runtime["temperature"]),
+        "retrieval": retrieval,
+        "embedder": runtime["embedder"],
+    }
+
+
+def _retrieval_kwargs(cfg):
+    """cfg.retrieval → Agent(retrieval=, embedder=) 参数对; 未挂载则空 dict。"""
+    if not cfg.get("retrieval"):
+        return {}
+    from . import rag  # 延迟 import — 不用 RAG 时不碰 chromadb
+    collection = cfg["retrieval"]["collection"]
+    emb_name = rag.collection_embedder_name(collection, cfg["embedder"])
+    return {
+        "retrieval": rag.get_store(collection),
+        "embedder": rag.get_embedder(emb_name),
     }
 
 
@@ -98,7 +113,8 @@ def build_client(cfg):
 
 
 def build_chat_agent(session_id, agent_id=None):
-    """交互会话 agent: 全套工具 + 录音上下文注入 + AuditLog (both 模式, 供 resume+审计)。"""
+    """交互会话 agent: 全套工具 + 录音上下文注入 + AuditLog (both 模式, 供 resume+审计)。
+    cfg.retrieval 存在时自动挂知识库 (库侧注册 retrieve 工具)。"""
     cfg = resolve_agent_config(agent_id)
     audit = AuditLog(
         SESSIONS_DIR / f"{session_id}.jsonl",
@@ -112,14 +128,17 @@ def build_chat_agent(session_id, agent_id=None):
         context_providers=[recordings_context_provider],
         audit_log=audit,
         max_rounds=8,
+        **_retrieval_kwargs(cfg),
     )
 
 
 def build_oneshot_agent(agent_id=None, system_prompt=None):
-    """一次性 agent (日记用): 无工具、无审计, prompt 由调用方全权控制。"""
+    """一次性 agent (日记/测试用): 无文件工具、无审计, prompt 由调用方全权控制。
+    挂了知识库的 agent 仍有 retrieve 工具 (Agent.send 自带工具循环)。"""
     cfg = resolve_agent_config(agent_id)
     return Agent(
         build_client(cfg),
         system_prompt or cfg["system_prompt"],
         registry=create_registry(),
+        **_retrieval_kwargs(cfg),
     )

@@ -1,5 +1,17 @@
 # 04 · 预留接口
 
+> **状态更新（2026-07-11）：multi-agent 与 RAG 两个预留接口均已兑现。**
+> - 运行时配置：`config_store.py` + `GET/PATCH /api/agent/config` + `/models`（设置页"模型路由"tab）
+> - multi-agent：`agents_admin.py` + `/api/agent/agents/*` CRUD/test（设置页"Agents"tab，
+>   与日记共享 agents.json）；chat 页有 agent 选择器（agentId 只对新会话生效）
+> - RAG：`rag.py`（ChromaStore@data/agent_service/rag + bge-m3 懒加载单例 + 段落切块）+
+>   `/api/agent/rag/*`（collections CRUD/ingest/search，设置页"知识库"tab）；
+>   factory `_retrieval_kwargs` 把 cfg.retrieval 挂成 Agent(retrieval=, embedder=)
+> - diary 适配：网关 mainProvider.ts 改读 :8100 config；前端清光 Claude CLI 时代文案
+> - 仍未做：`delegate` 工具的 orchestrator 实现（占位依旧）、MCP 配置化接入
+>
+> 以下为原始预留设计，留作历史记录。
+
 原则：**协议字段先带上、工厂先留槽、端点先占位（501）**，实现补上时前端与契约零改动。
 
 ## 1. Multi-agent（定义尚未编写 → 只留槽位）
