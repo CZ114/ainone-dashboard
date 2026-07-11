@@ -127,9 +127,13 @@ export function SettingsPage() {
         </TabButton>
       </nav>
 
-      {/* Body */}
+      {/* Body — workflows 的可视化画布需要并排的 JSON 侧栏, 给更宽的容器 */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto w-full px-6 py-6">
+        <div
+          className={`${
+            activeTab === 'workflows' ? 'max-w-7xl' : 'max-w-3xl'
+          } mx-auto w-full px-6 py-6`}
+        >
           {activeTab === 'extensions' && (
             <ExtensionsTabBody
               extensions={extensions}

@@ -368,6 +368,47 @@ export const en = {
         templateNote:
           '{var} pulls from the variable pool (inputs + finished step ids); {{ }} escapes literal braces.',
       },
+      // 可视化画布编辑器（SOD 07 §8）— 拖拽版块 + 右侧 JSON 双向同步
+      canvas: {
+        paletteHint: 'drag a chip onto the canvas, or click “+ add step”',
+        fieldName: 'Name',
+        fieldDescription: 'Description',
+        fieldInputs: 'Inputs (comma-separated)',
+        fieldOutput: 'Output template (optional)',
+        outputPlaceholder: 'defaults to the last agent step, e.g. {final}',
+        jsonLabel: 'JSON (two-way sync)',
+        jsonSynced: '✓ in sync with the canvas',
+        jsonPending: 'parsing…',
+        cheatsheetToggle: 'Step cheat-sheet',
+        addStep: '+ add step',
+        addBranch: '+ add branch',
+        emptyCanvas: 'No steps yet — drag a chip from the palette, or click “+ add step”.',
+        emptyContainer: 'empty — drop a step here, or click “+ add step”',
+        emptyPrompt: '(empty prompt)',
+        humanLabel: 'human input',
+        deleteStep: 'Delete this step',
+        unknownHint: 'Unknown step type — edit it in the JSON panel, or delete it.',
+        agentHint: 'pick one of your agents, or type any agent id',
+        regexHint:
+          'Tip: for approval loops an anchored regex like ^\\s*APPROVED\\b beats contains — a review merely mentioning the word won’t misfire.',
+        maxItersTitle: 'max_iters — loop cap (1–20)',
+        cond: {
+          contains: (v: string, val: string): string =>
+            `break if {${v}} contains “${val}”`,
+          regex: (v: string, val: string): string => `break if {${v}} matches /${val}/`,
+          equals: (v: string, val: string): string => `break if {${v}} equals “${val}”`,
+          empty: 'break_if — click to set the condition',
+        },
+        route: {
+          defaultLabel: 'default',
+          defaultTitle: 'fallback branch when no key matches the router’s answer',
+          keyTitle:
+            'branch key — matched (case-insensitively) against the router’s answer',
+          removeBranch: 'Remove this branch',
+          confirmRemoveBranch: (key: string): string =>
+            `Remove branch “${key}” and the steps inside it?`,
+        },
+      },
       runPanel: {
         heading: (name: string): string => `Run · ${name}`,
         close: 'Close',
@@ -1022,6 +1063,46 @@ export const zh: Strings = {
           '条件（when）：contains / regex / equals 三选一。审批循环请用锚定 regex，如 ^\\s*APPROVED\\b（JSON 里写 "^\\\\s*APPROVED\\\\b"）——用 contains 时评审意见里只要提到该词就会误触发。',
         templateNote:
           '{var} 取自变量池（inputs + 已完成步骤的 id）；{{ }} 转义字面花括号。',
+      },
+      // 可视化画布编辑器（SOD 07 §8）— 拖拽版块 + 右侧 JSON 双向同步
+      canvas: {
+        paletteHint: '把组件拖进画布，或点「+ 添加步骤」',
+        fieldName: '名称',
+        fieldDescription: '描述',
+        fieldInputs: '输入变量（逗号分隔）',
+        fieldOutput: '输出模板（可选）',
+        outputPlaceholder: '缺省为最后一个 agent 步骤，如 {final}',
+        jsonLabel: 'JSON（与画布双向同步）',
+        jsonSynced: '✓ 已与画布同步',
+        jsonPending: '解析中…',
+        cheatsheetToggle: '组件速查卡',
+        addStep: '+ 添加步骤',
+        addBranch: '+ 添加分支',
+        emptyCanvas: '还没有步骤——从上方组件栏拖入，或点「+ 添加步骤」。',
+        emptyContainer: '空——把步骤拖进来，或点「+ 添加步骤」',
+        emptyPrompt: '（prompt 为空）',
+        humanLabel: '人工输入',
+        deleteStep: '删除该步骤',
+        unknownHint: '未知步骤类型——请在右侧 JSON 面板里编辑，或直接删除。',
+        agentHint: '从已有 agent 里选，也可以直接输入任意 agent id',
+        regexHint:
+          '提示：审批循环用锚定 regex（如 ^\\s*APPROVED\\b）比 contains 稳——评审意见里只是提到该词不会误触发。',
+        maxItersTitle: 'max_iters——循环上限（1–20）',
+        cond: {
+          contains: (v: string, val: string): string =>
+            `当 {${v}} 包含「${val}」时跳出`,
+          regex: (v: string, val: string): string => `当 {${v}} 匹配 /${val}/ 时跳出`,
+          equals: (v: string, val: string): string => `当 {${v}} 等于「${val}」时跳出`,
+          empty: 'break_if——点击设置条件',
+        },
+        route: {
+          defaultLabel: 'default',
+          defaultTitle: '路由回答没有命中任何键时走的兜底分支',
+          keyTitle: '分支键——与路由 agent 的回答做包含匹配（不分大小写）',
+          removeBranch: '删除该分支',
+          confirmRemoveBranch: (key: string): string =>
+            `删除分支「${key}」及其中的步骤？`,
+        },
       },
       runPanel: {
         heading: (name: string): string => `运行 · ${name}`,

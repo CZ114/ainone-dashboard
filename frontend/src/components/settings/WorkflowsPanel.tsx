@@ -1,7 +1,8 @@
 // 设置页「工作流」tab — agent_service 声明式多 agent 工作流：
-// 列表 CRUD（JSON spec 编辑器 + 六组件速查卡，保存时服务端校验、
-// 400 detail 原样展示）+ 流式运行面板（NDJSON 事件直播；human 步骤
-// 让流暂停，内联输入框提交后继续）。状态全部留在本组件（useState）。
+// 列表 CRUD + 可视化画布编辑器（WorkflowCanvas 拖拽版块 + 右侧 JSON
+// 双向同步栏，速查卡折叠其下；保存时服务端校验、400 detail 原样展示）
+// + 流式运行面板（NDJSON 事件直播；human 步骤让流暂停，内联输入框
+// 提交后继续）。状态全部留在本组件（useState）。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -11,20 +12,17 @@ import {
   type WorkflowUpsertBody,
 } from '../../api/agentAdminApi';
 import { useT } from '../../contexts/LanguageContext';
+import { WorkflowCanvas } from './WorkflowCanvas';
+import {
+  newSpecTemplate,
+  normalizeSpec,
+  parseInputsList,
+  parseSpecJson,
+  specToJson,
+  type SpecDraft,
+} from './workflowSpecUtils';
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{1,39}$/;
-
-/** 新建工作流时预填的最小可运行示例。 */
-const NEW_WORKFLOW_TEMPLATE = JSON.stringify(
-  {
-    name: '',
-    description: '',
-    inputs: ['task'],
-    steps: [{ type: 'agent', id: 'draft', agent: 'writer', prompt: '{task}' }],
-  },
-  null,
-  2,
-);
 
 /** 速查卡的一行式 JSON 示例 — 语言无关；说明文字走 i18n（cheatsheet.steps）。 */
 const CHEAT_STEPS = [
@@ -96,22 +94,56 @@ export function WorkflowsPanel() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [editor, setEditor] = useState<{
-    isNew: boolean;
-    id: string;
-    json: string;
-  } | null>(null);
+  const [editor, setEditor] = useState<{ isNew: boolean; id: string } | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorOpening, setEditorOpening] = useState<string | null>(null);
+
+  // ---- 画布 + JSON 侧栏的双向同步状态 ----
+  // spec 是唯一真源（画布直接编辑它）；jsonText 是侧栏文本投影：
+  // 画布每次改动都重排版 jsonText，除非侧栏正被聚焦/有未应用的编辑
+  // （pending = 防抖解析中，error = 解析失败画布不动）。
+  const [spec, setSpec] = useState<SpecDraft | null>(null);
+  const [jsonText, setJsonText] = useState('');
+  const [jsonStatus, setJsonStatus] = useState<'synced' | 'pending' | 'error'>('synced');
+  const [jsonErrorMsg, setJsonErrorMsg] = useState<string | null>(null);
+  /** inputs 字段的输入草稿 — 聚焦期间保留原始文本（含尾逗号等中间态）。 */
+  const [inputsDraft, setInputsDraft] = useState<string | null>(null);
+  /** agent 下拉候选（datalist）；null = 尚未拉取。拉取失败按空列表处理。 */
+  const [agentIds, setAgentIds] = useState<string[] | null>(null);
+  const jsonFocusRef = useRef(false);
+  const jsonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [run, setRun] = useState<RunState | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const abortRef = useRef<AbortController | null>(null);
   const keyRef = useRef(0);
 
-  // 离开设置页时断开流（服务端仍会跑完当前步骤）。
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // 离开设置页时断开流（服务端仍会跑完当前步骤）+ 清掉 JSON 防抖定时器。
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (jsonTimerRef.current) clearTimeout(jsonTimerRef.current);
+    },
+    [],
+  );
+
+  // 编辑器首次打开时拉一次 agent 列表（画布 agent 下拉候选）。
+  useEffect(() => {
+    if (!editor || agentIds !== null) return;
+    let cancelled = false;
+    agentAdminApi
+      .listAgents()
+      .then((r) => {
+        if (!cancelled) setAgentIds(r.agents.map((a) => a.id));
+      })
+      .catch(() => {
+        if (!cancelled) setAgentIds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, agentIds]);
 
   const refresh = useCallback(async () => {
     try {
@@ -128,10 +160,27 @@ export function WorkflowsPanel() {
     void refresh();
   }, [refresh]);
 
-  // ---- 编辑器 ----
+  // ---- 编辑器（画布 + JSON 侧栏） ----
+
+  /** 统一入口：装载一份 spec 并重置侧栏/草稿状态。 */
+  const loadSpec = (next: SpecDraft) => {
+    setSpec(next);
+    setJsonText(specToJson(next));
+    setJsonStatus('synced');
+    setJsonErrorMsg(null);
+    setInputsDraft(null);
+  };
+
+  const closeEditor = () => {
+    setEditor(null);
+    setSpec(null);
+    if (jsonTimerRef.current) clearTimeout(jsonTimerRef.current);
+    jsonTimerRef.current = null;
+  };
 
   const openNew = () => {
-    setEditor({ isNew: true, id: '', json: NEW_WORKFLOW_TEMPLATE });
+    setEditor({ isNew: true, id: '' });
+    loadSpec(newSpecTemplate());
     setEditorError(null);
   };
 
@@ -139,10 +188,9 @@ export function WorkflowsPanel() {
     setEditorOpening(id);
     try {
       const r = await agentAdminApi.getWorkflow(id);
-      // id 由 URL/独立字段承载 — textarea 只放 body 字段。
-      const body: Record<string, unknown> = { ...r.workflow };
-      delete body.id;
-      setEditor({ isNew: false, id, json: JSON.stringify(body, null, 2) });
+      // id 由 URL/独立字段承载 — spec 状态只放 body 字段（normalizeSpec 剔除）。
+      setEditor({ isNew: false, id });
+      loadSpec(normalizeSpec(r.workflow as Record<string, unknown>));
       setEditorError(null);
     } catch (err) {
       window.alert(
@@ -152,8 +200,52 @@ export function WorkflowsPanel() {
     setEditorOpening(null);
   };
 
+  /** 画布/表单侧的改动：更新 spec，并在侧栏「干净」时重排版 JSON 文本。 */
+  const applyCanvasSpec = (next: SpecDraft) => {
+    setSpec(next);
+    if (!jsonFocusRef.current && jsonStatus === 'synced') setJsonText(specToJson(next));
+  };
+
+  /** 立即解析侧栏文本：合法 → 反向刷新画布；非法 → 行内红提示、画布不动。 */
+  const parseJsonNow = (text: string) => {
+    const r = parseSpecJson(text);
+    if (r.ok) {
+      setSpec(r.spec);
+      setJsonStatus('synced');
+      setJsonErrorMsg(null);
+      setInputsDraft(null);
+    } else {
+      setJsonStatus('error');
+      setJsonErrorMsg(r.notObject ? tw.editor.jsonNotObject : tw.editor.jsonInvalid(r.message));
+    }
+  };
+
+  const handleJsonChange = (text: string) => {
+    setJsonText(text);
+    setJsonStatus('pending');
+    setJsonErrorMsg(null);
+    if (jsonTimerRef.current) clearTimeout(jsonTimerRef.current);
+    jsonTimerRef.current = setTimeout(() => {
+      jsonTimerRef.current = null;
+      parseJsonNow(text);
+    }, 400);
+  };
+
+  const handleJsonBlur = () => {
+    jsonFocusRef.current = false;
+    // 失焦即冲掉防抖：blur 先于画布点击到达，保证后续画布改动
+    // 建立在用户刚输入的 JSON 之上。
+    if (jsonStatus === 'pending') {
+      if (jsonTimerRef.current) clearTimeout(jsonTimerRef.current);
+      jsonTimerRef.current = null;
+      parseJsonNow(jsonText);
+    } else if (jsonStatus === 'synced' && spec) {
+      setJsonText(specToJson(spec)); // 顺手重排版（等价内容，规范缩进）
+    }
+  };
+
   const handleEditorSave = async () => {
-    if (!editor) return;
+    if (!editor || !spec) return;
     const id = editor.id.trim();
     if (editor.isNew) {
       if (!ID_RE.test(id)) {
@@ -165,26 +257,32 @@ export function WorkflowsPanel() {
         return;
       }
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(editor.json);
-    } catch (err) {
-      setEditorError(
-        tw.editor.jsonInvalid(err instanceof Error ? err.message : String(err)),
-      );
-      return;
+    // 侧栏还有未应用的编辑 → 先冲掉：合法就采纳，非法则拦下保存。
+    let effective = spec;
+    if (jsonStatus !== 'synced') {
+      if (jsonTimerRef.current) clearTimeout(jsonTimerRef.current);
+      jsonTimerRef.current = null;
+      const r = parseSpecJson(jsonText);
+      if (!r.ok) {
+        const msg = r.notObject ? tw.editor.jsonNotObject : tw.editor.jsonInvalid(r.message);
+        setJsonStatus('error');
+        setJsonErrorMsg(msg);
+        setEditorError(msg);
+        return;
+      }
+      effective = r.spec;
+      setSpec(r.spec);
+      setJsonStatus('synced');
+      setJsonErrorMsg(null);
+      setInputsDraft(null);
     }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      setEditorError(tw.editor.jsonNotObject);
-      return;
-    }
-    const body: WorkflowUpsertBody = { ...(parsed as Record<string, unknown>) };
-    delete body.id; // 正文里的 id 与 URL 冲突时以 URL 为准 — 直接剔除
+    const body: WorkflowUpsertBody = { ...effective };
+    delete body.id; // 正文里的 id 与 URL 冲突时以 URL 为准 — 直接剔除（双保险）
     setEditorSaving(true);
     setEditorError(null);
     try {
       await agentAdminApi.putWorkflow(id, body);
-      setEditor(null);
+      closeEditor();
       await refresh();
     } catch (err) {
       // 服务端 400 detail（如「spec 校验失败: …」）原样展示。
@@ -199,7 +297,7 @@ export function WorkflowsPanel() {
     if (!window.confirm(tw.confirmDelete(id))) return;
     try {
       await agentAdminApi.deleteWorkflow(id);
-      if (editor && !editor.isNew && editor.id === id) setEditor(null);
+      if (editor && !editor.isNew && editor.id === id) closeEditor();
       if (run && run.workflowId === id && !run.running) setRun(null);
       await refresh();
     } catch (err) {
@@ -691,14 +789,16 @@ export function WorkflowsPanel() {
         ))}
       </div>
 
-      {/* Editor — inline expanding panel（同 AgentsPanel） */}
-      {editor && (
+      {/* Editor — inline expanding panel（同 AgentsPanel）：
+          顶部字段行 → 左画布 + 右 JSON 同步栏（窄屏 flex-wrap 换行下堆） */}
+      {editor && spec && (
         <section className="rounded-lg border border-accent/40 bg-card-bg/40 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-text-primary">
             {editor.isNew ? tw.editor.titleNew : tw.editor.titleEdit(editor.id)}
           </h3>
 
-          <div className="max-w-xs">
+          {/* 字段行：id（仅新建）/ name / description / inputs / output */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label={tw.editor.fieldId}>
               <input
                 value={editor.id}
@@ -715,24 +815,91 @@ export function WorkflowsPanel() {
                 </span>
               )}
             </Field>
+            <Field label={tw.canvas.fieldName}>
+              <input
+                value={spec.name}
+                onChange={(e) => applyCanvasSpec({ ...spec, name: e.target.value })}
+                className={inputClass + ' text-xs'}
+              />
+            </Field>
+            <Field label={tw.canvas.fieldDescription}>
+              <input
+                value={spec.description}
+                onChange={(e) =>
+                  applyCanvasSpec({ ...spec, description: e.target.value })
+                }
+                className={inputClass + ' text-xs'}
+              />
+            </Field>
+            <Field label={tw.canvas.fieldInputs}>
+              <input
+                value={inputsDraft ?? spec.inputs.join(', ')}
+                onChange={(e) => {
+                  setInputsDraft(e.target.value);
+                  applyCanvasSpec({ ...spec, inputs: parseInputsList(e.target.value) });
+                }}
+                onBlur={() => setInputsDraft(null)}
+                placeholder="task, tone"
+                className={inputClass + ' font-mono text-xs'}
+              />
+            </Field>
+            <Field label={tw.canvas.fieldOutput}>
+              <input
+                value={spec.output ?? ''}
+                onChange={(e) => {
+                  const next = { ...spec };
+                  if (e.target.value) next.output = e.target.value;
+                  else delete next.output;
+                  applyCanvasSpec(next);
+                }}
+                placeholder={tw.canvas.outputPlaceholder}
+                className={inputClass + ' font-mono text-xs'}
+              />
+            </Field>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <Field label={tw.editor.fieldSpec}>
+          <div className="flex flex-wrap items-start gap-4">
+            {/* 画布（结构化垂直流 + 拖拽） */}
+            <div className="min-w-[320px] flex-1">
+              <WorkflowCanvas
+                spec={spec}
+                onChange={applyCanvasSpec}
+                agents={agentIds ?? []}
+              />
+            </div>
+
+            {/* JSON 侧栏（双向同步）+ 折叠速查卡 */}
+            <div className="w-96 max-w-full shrink-0 space-y-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                {tw.canvas.jsonLabel}
+              </span>
               <textarea
-                rows={18}
-                value={editor.json}
+                rows={26}
+                value={jsonText}
                 spellCheck={false}
-                onChange={(e) =>
-                  setEditor((ed) => (ed ? { ...ed, json: e.target.value } : ed))
-                }
+                onFocus={() => {
+                  jsonFocusRef.current = true;
+                }}
+                onBlur={handleJsonBlur}
+                onChange={(e) => handleJsonChange(e.target.value)}
                 className={inputClass + ' resize-y font-mono text-xs leading-relaxed'}
               />
-              <span className="text-[11px] text-text-muted">
-                {tw.editor.specHint}
-              </span>
-            </Field>
-            <CheatSheet />
+              {jsonStatus === 'error' && jsonErrorMsg ? (
+                <p className="text-[11px] text-status-danger break-all">{jsonErrorMsg}</p>
+              ) : (
+                <p className="text-[11px] text-text-muted">
+                  {jsonStatus === 'pending' ? tw.canvas.jsonPending : tw.canvas.jsonSynced}
+                </p>
+              )}
+              <details>
+                <summary className="cursor-pointer select-none text-[11px] text-text-muted hover:text-text-primary">
+                  {tw.canvas.cheatsheetToggle}
+                </summary>
+                <div className="mt-1.5">
+                  <CheatSheet />
+                </div>
+              </details>
+            </div>
           </div>
 
           {editorError && (
@@ -752,7 +919,7 @@ export function WorkflowsPanel() {
             </button>
             <button
               type="button"
-              onClick={() => setEditor(null)}
+              onClick={closeEditor}
               className="rounded border border-card-border px-3 py-1.5 text-xs text-text-secondary hover:bg-card-border/40"
             >
               {tw.editor.cancel}
