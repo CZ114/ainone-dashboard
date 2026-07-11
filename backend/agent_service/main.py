@@ -20,7 +20,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import agents_admin, config_store, rag
+from agent.orchestration import Workflow, WorkflowError
+
+from . import agents_admin, config_store, rag, workflows_admin
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, PermissionBroker
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
@@ -102,6 +104,18 @@ class RagSearchBody(BaseModel):
     collection: str
     query: str
     top_k: int = 5
+
+
+class WorkflowUpsertBody(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    inputs: list[str] | None = None
+    output: str | None = None
+    steps: list[dict]
+
+
+class WorkflowRunBody(BaseModel):
+    inputs: dict = {}
 
 
 # ─── chat 流核心 (neutral 与 compat 共用) ────────────────────────────
@@ -367,6 +381,90 @@ def agents_test(agent_id: str, body: AgentTestBody):
         "provider": agent.client.provider,
         "sample": (text or "")[:300],
     }
+
+
+# ─── multi-agent 工作流 (声明式编排, agent.orchestration) ────────────
+
+def _known_agent_ids():
+    return {a["id"] for a in agents_admin.list_agents(config_store.load())} | {"diary_observer"}
+
+
+@app.get("/api/agent/workflows")
+def workflows_list():
+    return {"workflows": workflows_admin.list_workflows()}
+
+
+@app.get("/api/agent/workflows/{wf_id}")
+def workflows_get(wf_id: str):
+    try:
+        return {"workflow": workflows_admin.get_workflow(wf_id)}
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.put("/api/agent/workflows/{wf_id}")
+def workflows_upsert(wf_id: str, body: WorkflowUpsertBody):
+    try:
+        spec = workflows_admin.upsert_workflow(
+            wf_id, body.model_dump(exclude_none=True), _known_agent_ids())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"workflow": spec}
+
+
+@app.delete("/api/agent/workflows/{wf_id}")
+def workflows_delete(wf_id: str):
+    try:
+        workflows_admin.delete_workflow(wf_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
+
+
+def _load_workflow_or_404(wf_id: str) -> Workflow:
+    try:
+        return Workflow(workflows_admin.get_workflow(wf_id))
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except WorkflowError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/agent/workflows/{wf_id}/run")
+def workflows_run(wf_id: str, body: WorkflowRunBody):
+    """阻塞跑完, 返回 {output, context, trace}。节点 = oneshot agent
+    (无文件工具; 挂了知识库的节点自动有 retrieve)。"""
+    wf = _load_workflow_or_404(wf_id)
+    started = time.time()
+    try:
+        result = wf.run_sync(body.inputs, build_agent=build_oneshot_agent)
+    except WorkflowError as e:
+        raise HTTPException(400, str(e))
+    result["elapsed_ms"] = int((time.time() - started) * 1000)
+    return result
+
+
+@app.post("/api/agent/workflows/{wf_id}/stream")
+def workflows_stream(wf_id: str, body: WorkflowRunBody):
+    """NDJSON 事件流: {type: workflow_start|step_start|step_end|loop_iter|
+    loop_break|route_choice|workflow_end|error, ...}"""
+    wf = _load_workflow_or_404(wf_id)
+
+    def gen():
+        import json as _json
+        try:
+            for kind, payload in wf.run(body.inputs, build_agent=build_oneshot_agent):
+                yield _json.dumps({"type": kind, **payload},
+                                  ensure_ascii=False, default=str) + "\n"
+        except WorkflowError as e:
+            yield _json.dumps({"type": "error", "error": str(e)},
+                              ensure_ascii=False) + "\n"
+        except Exception as e:
+            yield _json.dumps({"type": "error",
+                               "error": f"{type(e).__name__}: {e}"},
+                              ensure_ascii=False) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
 # ─── RAG 管理 (SOD 04 预留已兑现) ────────────────────────────────────

@@ -69,12 +69,22 @@ def build_registry():
         # 原样透传, 只防超长 (executor 还有 output_limit 兜底)
         return {"ok": True, "recordings": data}
 
-    @reg.tool(parallel=False,
-              description="[预留·未实现] 把子任务委派给另一个 agent。multi-agent 编排接口。")
+    @reg.tool(parallel=False, output_limit=20000,
+              description="把子任务委派给另一个已配置的 agent 并返回其回答。"
+                          "适合需要专门能力的子问题 (如挂载知识库的 agent)。"
+                          "agent_id 用设置页 Agents 里的 id。")
     def delegate(agent_id: str, task: str):
-        raise NotImplementedError(
-            "multi-agent 编排尚未实现 — 这是预留接口 (SOD 04-reserved-interfaces.md)"
-        )
+        # 延迟 import 防循环 (factory 顶层 import 本模块的 build_registry)。
+        # 子 agent 用 oneshot 构造 — registry 为空(仅自动注册的 retrieve 等),
+        # 天然没有 delegate 工具 → 委派深度恒为 1, 无递归风险。
+        from .factory import build_oneshot_agent
+        try:
+            sub = build_oneshot_agent(agent_id)
+        except KeyError as e:
+            return {"error": str(e)}
+        answer = sub.send(task)
+        return {"ok": True, "agent": agent_id, "model": sub.client.model,
+                "answer": answer}
 
     return reg
 
