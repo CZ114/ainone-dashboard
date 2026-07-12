@@ -29,7 +29,7 @@ from .bridge import AbortRegistry, HumanInputBroker, PermissionBroker
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import build_client, build_oneshot_agent, resolve_agent_config
 from .sessions import SessionManager, repair_history
-from .wire import new_stream_ctx, serialize, strip_think
+from .wire import iter_strip_think, new_stream_ctx, serialize, strip_think
 
 HUMAN_INPUT_TIMEOUT_S = 600  # workflow human 步骤等真人回答的上限
 
@@ -436,7 +436,9 @@ def agent_voice(body: VoiceBody):
 
     def gen():
         try:
-            for piece in client.think(messages, max_tokens=1024):
+            # iter_strip_think: 推理模型的 <think> 块在语音场景整段吞掉
+            # (没人想听 TTS 朗读推理过程; 代价是开头多等一会儿)
+            for piece in iter_strip_think(client.think(messages, max_tokens=1024)):
                 yield json.dumps({"type": "delta", "text": piece},
                                  ensure_ascii=False) + "\n"
             yield json.dumps({"type": "done"}) + "\n"
@@ -716,8 +718,9 @@ def compat_sessions():
             "sessionId": sid,
             "cwd": str(REPO_ROOT),
             "firstMessage": _first_content(msgs, "user"),
-            "lastMessage": texts[-1]["content"] if texts else "",
-            "firstAssistantMessage": _first_content(msgs, "assistant"),
+            # 摘要是纯文本, 剥掉推理模型的 <think> 块
+            "lastMessage": strip_think(texts[-1]["content"]) if texts else "",
+            "firstAssistantMessage": strip_think(_first_content(msgs, "assistant")),
             "messageCount": len(chat_msgs),
             "updatedAt": meta["updatedAt"],
         })
@@ -734,7 +737,8 @@ def compat_session_messages(session_id: str):
         {
             "type": "message",
             "role": m["role"],
-            "content": m["content"],
+            # 历史回放是纯文本接口, 画不了思考气泡 — 只回正文
+            "content": strip_think(m["content"]) if m["role"] == "assistant" else m["content"],
             "timestamp": m.get("_ts", ""),
         }
         for m in msgs

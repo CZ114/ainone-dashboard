@@ -150,12 +150,20 @@ def build_chat_agent(session_id, agent_id=None):
 
 
 def build_oneshot_agent(agent_id=None, system_prompt=None):
-    """一次性 agent (日记/测试用): 无文件工具、无审计, prompt 由调用方全权控制。
-    挂了知识库的 agent 仍有 retrieve 工具 (Agent.send 自带工具循环)。"""
+    """一次性 agent (日记/测试/工作流节点用): 无文件工具、无审计。
+    挂了知识库的 agent 仍有 retrieve 工具 (Agent.send 自带工具循环)。
+
+    send 包了一层 strip_think: 这些场景的输出都是"最终文本消费方"
+    (日记正文/工作流变量池/测试样例), 推理模型的 <think> 块只会污染下游
+    — 聊天页的思考渲染走的是 wire.split_think, 与此无关。"""
     cfg = resolve_agent_config(agent_id)
-    return Agent(
+    agent = Agent(
         build_client(cfg),
         system_prompt or cfg["system_prompt"],
         registry=create_registry(),
         **_retrieval_kwargs(cfg),
     )
+    from .wire import strip_think
+    _raw_send = agent.send
+    agent.send = lambda text: strip_think(_raw_send(text))
+    return agent

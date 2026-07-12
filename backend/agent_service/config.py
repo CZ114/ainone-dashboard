@@ -25,6 +25,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# 内存自保: OpenBLAS/torch 会按核数开线程、每线程预留大块缓冲 — 这台机器
+# 内存紧张 (实测 bge-m3 加载时 OpenBLAS 分配失败直接崩进程), 线程压到 4。
+# 必须在 numpy/torch 首次 import 之前设置才生效。
+for _tv in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_tv, "4")
+
 SERVICE_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SERVICE_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent

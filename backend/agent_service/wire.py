@@ -34,15 +34,63 @@ def _result_is_error(content):
         return False
 
 
-_THINK_RE = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+_THINK_SPLIT_RE = re.compile(r"^\s*<think>(.*?)</think>\s*", re.DOTALL)
+
+
+def split_think(text):
+    """拆推理模型 (MiniMax-M3 等) 开头的 <think>…</think> 块。
+
+    Returns:
+        (thinking, rest) — 非推理输出时 thinking 为 None, rest 原样。
+    """
+    if not isinstance(text, str) or "<think>" not in text[:16]:
+        return None, text
+    m = _THINK_SPLIT_RE.match(text)
+    if not m:
+        return None, text
+    return m.group(1).strip(), text[m.end():]
 
 
 def strip_think(text):
-    """剥掉推理模型 (MiniMax-M3 等) 开头的 <think>…</think> 块。
-    非推理模型输出原样通过。"""
-    if not isinstance(text, str) or "<think>" not in text[:16]:
-        return text
-    return _THINK_RE.sub("", text)
+    """只要正文不要思考 (日记 oneshot / 工作流变量池等场景)。"""
+    return split_think(text)[1]
+
+
+def iter_strip_think(pieces):
+    """流式剥 <think> (语音场景 — 推理过程不该被 TTS 朗读出来)。
+
+    开头攒缓冲判断是否 <think> 块: 是 → 吞到 </think> 再放行其余;
+    不是 → 原样流出。中途不再检查 (think 块只出现在开头)。
+    """
+    buf, mode = "", "detect"   # detect → think → pass
+    for p in pieces:
+        if mode == "pass":
+            yield p
+            continue
+        buf += p
+        if mode == "detect":
+            s = buf.lstrip()
+            if not s:
+                continue
+            probe = "<think>"
+            if s.startswith(probe):
+                mode = "think"
+            elif probe.startswith(s[:len(probe)]):
+                continue          # 可能是 "<thi" 这种残片, 继续攒
+            else:
+                mode = "pass"
+                yield buf
+                buf = ""
+                continue
+        if mode == "think":
+            end = buf.find("</think>")
+            if end != -1:
+                rest = buf[end + len("</think>"):].lstrip("\n")
+                mode, buf = "pass", ""
+                if rest:
+                    yield rest
+    if buf and mode != "think":
+        yield buf
 
 
 def new_stream_ctx(session_id, model, tool_names):
@@ -118,13 +166,21 @@ def _cj(data):
 def _flush_text(ctx):
     if not ctx["text_buf"]:
         return []
-    text = strip_think("".join(ctx["text_buf"]))
+    raw = "".join(ctx["text_buf"])
     ctx["text_buf"] = []
-    if not text.strip():
+    # 推理模型 (MiniMax-M3 等): <think> 块拆成前端原生支持的 thinking
+    # 内容块 → 聊天页渲染成折叠的"思考气泡", 正文照常
+    thinking, text = split_think(raw)
+    content = []
+    if thinking:
+        content.append({"type": "thinking", "thinking": thinking})
+    if text.strip():
+        content.append({"type": "text", "text": text})
+    if not content:
         return []
     return [_cj({
         "type": "assistant",
-        "message": {"content": [{"type": "text", "text": text}]},
+        "message": {"content": content},
     })]
 
 
