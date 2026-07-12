@@ -11,6 +11,7 @@ error/aborted 由服务层补充)。
 """
 
 import json
+import re
 import time
 
 
@@ -31,6 +32,17 @@ def _result_is_error(content):
         return isinstance(parsed, dict) and "error" in parsed
     except (json.JSONDecodeError, TypeError):
         return False
+
+
+_THINK_RE = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+
+
+def strip_think(text):
+    """剥掉推理模型 (MiniMax-M3 等) 开头的 <think>…</think> 块。
+    非推理模型输出原样通过。"""
+    if not isinstance(text, str) or "<think>" not in text[:16]:
+        return text
+    return _THINK_RE.sub("", text)
 
 
 def new_stream_ctx(session_id, model, tool_names):
@@ -106,8 +118,10 @@ def _cj(data):
 def _flush_text(ctx):
     if not ctx["text_buf"]:
         return []
-    text = "".join(ctx["text_buf"])
+    text = strip_think("".join(ctx["text_buf"]))
     ctx["text_buf"] = []
+    if not text.strip():
+        return []
     return [_cj({
         "type": "assistant",
         "message": {"content": [{"type": "text", "text": text}]},

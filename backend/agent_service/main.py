@@ -29,7 +29,7 @@ from .bridge import AbortRegistry, HumanInputBroker, PermissionBroker
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import build_client, build_oneshot_agent, resolve_agent_config
 from .sessions import SessionManager, repair_history
-from .wire import new_stream_ctx, serialize
+from .wire import new_stream_ctx, serialize, strip_think
 
 HUMAN_INPUT_TIMEOUT_S = 600  # workflow human 步骤等真人回答的上限
 
@@ -263,7 +263,7 @@ def agent_oneshot(body: OneshotBody):
     except NotImplementedError as e:
         raise HTTPException(501, str(e))
     started = time.time()
-    text = agent.send(body.message)
+    text = strip_think(agent.send(body.message))
     return {
         "text": text,
         "model": agent.client.model,

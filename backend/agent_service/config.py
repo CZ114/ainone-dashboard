@@ -34,6 +34,21 @@ REPO_ROOT = BACKEND_DIR.parent
 load_dotenv(REPO_ROOT / ".env")
 load_dotenv(BACKEND_DIR / ".env")
 
+# 设置页 Agents tab 的 Secrets (agents.json secrets 块, UI 粘贴的 key) 也作为
+# 全局环境变量生效 — 否则那里存的 key 只能被 agent env 块的 ${NAME} 引用,
+# 不能当 provider key 用。真实环境变量优先, 不覆盖。
+import json as _json
+
+try:
+    _secrets = _json.loads(
+        (BACKEND_DIR / "data" / "diary" / "agents.json").read_text(encoding="utf-8")
+    ).get("secrets", {})
+    for _k, _v in _secrets.items():
+        if isinstance(_v, str) and _v and not os.getenv(_k):
+            os.environ[_k] = _v
+except (FileNotFoundError, ValueError):
+    pass
+
 # dashboard 的 key 命名惯例 → agent 库 (core/llm.py PROVIDERS 表) 期望的命名
 KEY_ALIASES = {
     "DEEPSEEK_KEY": "DEEPSEEK_API_KEY",
@@ -41,6 +56,7 @@ KEY_ALIASES = {
     "QWEN_KEY": "DASHSCOPE_API_KEY",
     "ZHIPU_KEY": "ZHIPU_API_KEY",
     "VENICE_KEY": "VENICE_API_KEY",
+    "MINIMAX_KEY": "MINIMAX_API_KEY",
 }
 for _alias, _canonical in KEY_ALIASES.items():
     if os.getenv(_alias) and not os.getenv(_canonical):
