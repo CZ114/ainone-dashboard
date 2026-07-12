@@ -30,37 +30,101 @@ function formatTimestamp(timestamp: number): string {
 }
 
 // Collapsible details component for expandable content
-function CollapsibleDetails({
-  label,
-  details,
-  defaultExpanded = false,
-  children,
-}: {
-  label: string;
-  details?: string;
-  defaultExpanded?: boolean;
-  children?: React.ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+/* ── Codex 风格活动呈现原语 ──────────────────────────────────────────
+   调研结论 (ChatGPT o系 / Claude / AI SDK Elements Reasoning):
+   - 折叠态 = 一行无框静音文字 ("Thought for Ns") + 旋转 chevron, 不是卡片
+   - 展开态 = 无背景填充, 仅左侧细线 + 缩进的小号静音文字
+   - 平滑高度过渡 (grid-rows 0fr→1fr), 完成后默认收起, 答案保持视觉主线 */
 
+function Chevron({ open }: { open: boolean }) {
   return (
-    <div className="border border-card-border rounded-lg overflow-hidden mb-2">
+    <svg
+      viewBox="0 0 12 12"
+      className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${
+        open ? 'rotate-90' : ''
+      }`}
+    >
+      <path
+        d="M4.5 2.5 L8 6 L4.5 9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 平滑展开容器 — grid-template-rows 过渡, 内容不测高也能动画 */
+function Reveal({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+/** 单行活动披露: 图标 + 标题 + 元信息(截断) + chevron; 展开 = 左细线缩进块 */
+function ActivityRow({
+  icon,
+  iconClass,
+  title,
+  titleClass,
+  meta,
+  detail,
+  defaultOpen = false,
+}: {
+  icon: string;
+  iconClass?: string;
+  title: string;
+  titleClass?: string;
+  meta?: string;
+  detail?: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const expandable = detail != null;
+  return (
+    <div className="mb-0.5">
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-2 bg-card-bg hover:bg-card-border/30 text-left flex items-center justify-between text-sm transition-colors"
+        type="button"
+        onClick={() => expandable && setOpen(!open)}
+        className={`group flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors ${
+          expandable ? 'hover:bg-card-border/25 cursor-pointer' : 'cursor-default'
+        }`}
       >
-        <span className="font-medium text-text-secondary">{label}</span>
-        <span className="text-text-muted">{expanded ? '▼' : '▶'}</span>
+        <span
+          className={`w-4 shrink-0 text-center font-mono text-[12px] leading-none ${iconClass ?? 'text-text-muted'}`}
+        >
+          {icon}
+        </span>
+        <span
+          className={`shrink-0 font-mono text-[12px] ${titleClass ?? 'text-text-secondary'}`}
+        >
+          {title}
+        </span>
+        {meta && (
+          <span className="min-w-0 truncate font-mono text-[11.5px] text-text-muted">
+            {meta}
+          </span>
+        )}
+        {expandable && (
+          <span className="ml-auto pl-2">
+            <Chevron open={open} />
+          </span>
+        )}
       </button>
-      {expanded && (
-        <div className="px-3 py-2 bg-window-bg">
-          {details && (
-            <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono overflow-x-auto">
-              {details}
-            </pre>
-          )}
-          {children}
-        </div>
+      {expandable && (
+        <Reveal open={open}>
+          <div className="my-1 ml-[13px] border-l-2 border-card-border pl-3">
+            {detail}
+          </div>
+        </Reveal>
       )}
     </div>
   );
@@ -103,30 +167,45 @@ function ChatMessageComponent({ message }: { message: ChatMessage }) {
 function SystemMessageComponent({ message }: { message: SystemMessage }) {
   const t = useT();
   if (message.subtype === 'init') {
+    // 会话连接 = 背景事件, 降级为一行静音披露 (细节仍可展开查看)
     return (
-      <div className="mb-3">
-        <CollapsibleDetails label="Session Info" details={
-          `Model: ${message.model || 'Unknown'}\nSession: ${message.session_id?.slice(0, 8) || 'Unknown'}...\nTools: ${message.tools?.length || 0} available\nCWD: ${message.cwd || 'Unknown'}\nMode: ${message.permissionMode || 'default'}`
-        } />
-      </div>
+      <ActivityRow
+        icon="·"
+        title={t.chat.sysInit(message.model || 'session')}
+        titleClass="text-text-muted"
+        detail={
+          <pre className="whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-text-muted">
+            {`model:   ${message.model || 'unknown'}\nsession: ${message.session_id?.slice(0, 12) || 'unknown'}…\ntools:   ${message.tools?.length || 0}\nmode:    ${message.permissionMode || 'default'}`}
+          </pre>
+        }
+      />
     );
   }
 
   if (message.subtype === 'result') {
+    const secs = message.duration_ms != null
+      ? (message.duration_ms / 1000).toFixed(1)
+      : '?';
+    const cost = message.total_cost_usd
+      ? ` · $${message.total_cost_usd.toFixed(4)}`
+      : '';
     return (
-      <div className="mb-3">
-        <CollapsibleDetails
-          label="Result"
-          details={`Duration: ${message.duration_ms}ms | Cost: $${message.total_cost_usd?.toFixed(4) || '0'}`}
-          defaultExpanded={false}
-        >
-          {message.content && (
-            <div className="mt-2 text-sm text-text-secondary">
+      <ActivityRow
+        icon="✓"
+        iconClass="text-emerald-600"
+        title={t.chat.sysDone(secs)}
+        titleClass="text-text-muted"
+        detail={
+          message.content ? (
+            <div className="text-[12.5px] text-text-muted">
               {message.content}
+              {cost}
             </div>
-          )}
-        </CollapsibleDetails>
-      </div>
+          ) : cost ? (
+            <div className="font-mono text-[11.5px] text-text-muted">{cost.slice(3)}</div>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -212,50 +291,26 @@ function summarizeToolInput(
   return parts.join(', ');
 }
 
-// Tool message (Claude is using a tool) — collapsed by default; expand
-// to inspect the full input JSON that was sent to the tool.
+// Tool call — 活动时间线行: → 工具名 + 参数摘要, 展开看完整入参 JSON
 function ToolMessageComponent({ message }: { message: ToolMessage }) {
-  const [expanded, setExpanded] = useState(false);
   const summary = summarizeToolInput(message.toolName, message.input);
   const fullJson = message.input
     ? JSON.stringify(message.input, null, 2)
     : '(no input)';
 
   return (
-    <div className="flex justify-start mb-3">
-      <div className="max-w-[80%] w-full rounded-lg bg-emerald-500/10 border border-emerald-500/30 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="w-full px-4 py-3 text-left flex items-start gap-2 hover:bg-emerald-500/15 transition-colors"
-        >
-          <span className="text-lg leading-tight">🔧</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-semibold text-emerald-400">{message.toolName}</span>
-              <span className="text-text-muted text-xs ml-auto">{expanded ? '▼' : '▶'}</span>
-            </div>
-            {summary && (
-              <div className="text-xs text-emerald-300/80 mt-1 font-mono break-all">
-                {summary}
-              </div>
-            )}
-          </div>
-        </button>
-        {expanded && (
-          <div className="px-4 py-2 bg-window-bg border-t border-emerald-500/20">
-            <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono overflow-x-auto">
-              {fullJson}
-            </pre>
-            {message.toolUseId && (
-              <div className="text-[10px] text-text-muted mt-2 font-mono">
-                id: {message.toolUseId}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    <ActivityRow
+      icon="→"
+      iconClass="text-accent-soft"
+      title={message.toolName}
+      meta={summary || undefined}
+      detail={
+        <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-text-muted">
+          {fullJson}
+          {message.toolUseId ? `\n\nid: ${message.toolUseId}` : ''}
+        </pre>
+      }
+    />
   );
 }
 
@@ -264,53 +319,26 @@ function ToolMessageComponent({ message }: { message: ToolMessage }) {
 // when is_error so failures stand out.
 function ToolResultMessageComponent({ message }: { message: ToolResultMessage }) {
   const isError = message.isError === true;
-  const [expanded, setExpanded] = useState(isError);
   const text = message.content || '(empty result)';
   // First non-empty line is usually the meaningful summary; truncate.
   const firstLine = text.split('\n').find((l) => l.trim().length > 0) ?? '';
   const preview =
     firstLine.length > 100 ? firstLine.slice(0, 99) + '…' : firstLine;
 
-  const accent = isError
-    ? 'bg-red-500/10 border-red-500/40'
-    : 'bg-slate-500/10 border-slate-500/30';
-  const label = isError
-    ? 'text-red-400'
-    : 'text-slate-300';
-
   return (
-    <div className="flex justify-start mb-3">
-      <div className={`max-w-[80%] w-full rounded-lg border overflow-hidden ${accent}`}>
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="w-full px-4 py-2 text-left flex items-start gap-2 hover:bg-white/5 transition-colors"
-        >
-          <span className="text-base leading-tight">{isError ? '⚠️' : '↩️'}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`font-semibold ${label}`}>
-                {isError ? 'Tool error' : 'Tool result'}
-                {message.toolName ? ` · ${message.toolName}` : ''}
-              </span>
-              <span className="text-text-muted ml-auto">{expanded ? '▼' : '▶'}</span>
-            </div>
-            {!expanded && preview && (
-              <div className="text-xs text-text-secondary mt-1 font-mono truncate">
-                {preview}
-              </div>
-            )}
-          </div>
-        </button>
-        {expanded && (
-          <div className="px-4 py-2 bg-window-bg border-t border-white/5">
-            <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono overflow-x-auto max-h-96">
-              {text}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
+    <ActivityRow
+      icon={isError ? '✗' : '✓'}
+      iconClass={isError ? 'text-red-500' : 'text-emerald-600'}
+      title={message.toolName || (isError ? 'error' : 'result')}
+      titleClass={isError ? 'text-red-500' : undefined}
+      meta={preview || undefined}
+      defaultOpen={isError}
+      detail={
+        <pre className="max-h-96 overflow-x-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-text-muted">
+          {text}
+        </pre>
+      }
+    />
   );
 }
 
@@ -931,15 +959,29 @@ function PermissionRequestComponent({
   );
 }
 
-// Thinking message (Claude's reasoning)
+// Thinking message — Codex 式: 折叠一行 "已思考 N 秒", 展开为左细线静音块
 function ThinkingMessageComponent({ message }: { message: ThinkingMessage }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const label = message.durationSec
+    ? t.chat.thoughtFor(message.durationSec)
+    : t.chat.thoughtLabel;
   return (
-    <div className="mb-3">
-      <CollapsibleDetails
-        label="💭 Reasoning"
-        details={message.content}
-        defaultExpanded={true}
-      />
+    <div className="mb-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-text-muted transition-colors hover:text-text-secondary"
+      >
+        <span className="text-[13px] leading-none">✳</span>
+        <span>{label}</span>
+        <Chevron open={open} />
+      </button>
+      <Reveal open={open}>
+        <div className="my-1 ml-[13px] whitespace-pre-wrap border-l-2 border-card-border pl-3 text-[12.5px] leading-relaxed text-text-muted">
+          {message.content}
+        </div>
+      </Reveal>
     </div>
   );
 }
@@ -986,17 +1028,15 @@ function TodoMessageComponent({ message }: { message: TodoMessage }) {
   );
 }
 
-// Loading indicator
+// Loading indicator — Codex 式: 无框, 慢转星标 + 微光扫过的文字
 export function LoadingIndicator() {
   const t = useT();
   return (
-    <div className="flex justify-start mb-3">
-      <div className="rounded-lg px-4 py-3 bg-card-bg border border-card-border">
-        <div className="flex items-center gap-2 text-sm text-text-secondary">
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          <span className="animate-pulse">{t.chat.thinking}</span>
-        </div>
-      </div>
+    <div className="mb-3 flex items-center gap-1.5 px-1.5 py-1">
+      <span className="animate-[spin_2.6s_linear_infinite] text-[13px] leading-none text-text-muted">
+        ✳
+      </span>
+      <span className="shimmer-text text-[12.5px]">{t.chat.thinking}</span>
     </div>
   );
 }

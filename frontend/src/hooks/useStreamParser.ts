@@ -82,6 +82,9 @@ export function useStreamParser() {
       generator: AsyncGenerator<StreamResponse>,
       requestId?: string,
     ): AsyncGenerator<void> {
+      // 轮次计时: 请求开始 (或上一个工具结果落地) 到 thinking 块到达的间隔,
+      // 近似本轮 LLM 推理耗时 — 渲染成 Codex 式 "已思考 N 秒" 标签。
+      let roundStartedAt = Date.now();
       try {
         for await (const chunk of generator) {
           if (chunk.type === 'claude_json' && chunk.data) {
@@ -147,6 +150,10 @@ export function useStreamParser() {
                     addMessage({
                       type: 'thinking',
                       content: item.thinking,
+                      durationSec: Math.max(
+                        1,
+                        Math.round((Date.now() - roundStartedAt) / 1000),
+                      ),
                     });
                     setIsThinking(true);
                   } else if (item.type === 'text' && item.text) {
@@ -269,6 +276,8 @@ export function useStreamParser() {
                     content: resultText,
                     isError: item.is_error === true,
                   });
+                  // 工具结果落地 = 新一轮推理的起点 (下一个 thinking 块的计时基准)
+                  roundStartedAt = Date.now();
                 }
               }
               continue;

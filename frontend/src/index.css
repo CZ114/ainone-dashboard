@@ -533,3 +533,23 @@ body {
     filter: blur(3px);
   }
 }
+
+/* ── Codex 式思考中微光 (chat 页 LoadingIndicator) ────────────────────
+   文字上一道亮带从右向左扫过; 颜色取主题变量, 亮暗色自动适配。 */
+@keyframes shimmer-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--color-text-muted)) 35%,
+    rgb(var(--color-text-primary)) 50%,
+    rgb(var(--color-text-muted)) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-sweep 2.2s linear infinite;
+}

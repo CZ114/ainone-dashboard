@@ -664,7 +664,11 @@ export const en = {
         'Type your message to the agent... (`/` for commands, drag a recording to attach)',
     },
     loadingConversation: 'Loading conversation…',
-    thinking: 'Agent is thinking...',
+    thinking: 'Thinking…',
+    thoughtFor: (s: number): string => `Thought for ${s}s`,
+    thoughtLabel: 'Reasoning',
+    sysInit: (model: string): string => `${model} · connected`,
+    sysDone: (s: string): string => `Done · ${s}s`,
     empty: {
       title: 'Start a conversation',
       body:
@@ -1341,7 +1345,11 @@ export const zh: Strings = {
       placeholder: '向 Agent 发送消息…（输入 ` / ` 看命令；拖入录音可附加）',
     },
     loadingConversation: '加载对话中…',
-    thinking: 'Agent 思考中…',
+    thinking: '思考中…',
+    thoughtFor: (s: number): string => `已思考 ${s} 秒`,
+    thoughtLabel: '思考过程',
+    sysInit: (model: string): string => `${model} · 已连接`,
+    sysDone: (s: string): string => `完成 · ${s} 秒`,
     empty: {
       title: '开始一段对话',
       body: '向 Agent 发送消息。你可以提问、分析录音数据，或在 ESP32 传感器项目上寻求帮助。',

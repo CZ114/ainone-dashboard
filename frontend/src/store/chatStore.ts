@@ -52,6 +52,8 @@ export interface ThinkingMessage {
   type: 'thinking';
   content: string;
   timestamp: number;
+  /** 本轮推理耗时 (秒), 前端在收到 thinking 块时用轮次起点估算 — Codex 式 "Thought for Ns" 标签用 */
+  durationSec?: number;
 }
 
 export interface TodoItem {
