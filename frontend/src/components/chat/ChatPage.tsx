@@ -19,6 +19,7 @@ import {
 } from 'react-resizable-panels';
 import { NewProjectDialog } from './NewProjectDialog';
 import { RecordingsPanel } from './RecordingsPanel';
+import { ChatWorkflowPanel } from './ChatWorkflowPanel';
 import { EmbeddedTerminal } from '../shell/EmbeddedTerminal';
 import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
@@ -1128,6 +1129,11 @@ function ChatPage() {
           collapsedSize={0}
           className="flex flex-col"
         >
+          {/* Workflow panel — collapsible section pinned above Chat
+              History. Lives inside the right column so it inherits the
+              focus-mode collapse behaviour for free. shrink-0 keeps the
+              resizable history/recordings group below it intact. */}
+          <ChatWorkflowPanel />
           <PanelGroup orientation="vertical" className="flex-1 flex flex-col">
             <Panel id="right-history" defaultSize={55} minSize={20} className="flex flex-col">
               <ChatSidebar

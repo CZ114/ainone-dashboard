@@ -36,7 +36,7 @@ function formatTimestamp(timestamp: number): string {
    - 展开态 = 无背景填充, 仅左侧细线 + 缩进的小号静音文字
    - 平滑高度过渡 (grid-rows 0fr→1fr), 完成后默认收起, 答案保持视觉主线 */
 
-function Chevron({ open }: { open: boolean }) {
+export function Chevron({ open }: { open: boolean }) {
   return (
     <svg
       viewBox="0 0 12 12"
@@ -57,7 +57,7 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /** 平滑展开容器 — grid-template-rows 过渡, 内容不测高也能动画 */
-function Reveal({ open, children }: { open: boolean; children: React.ReactNode }) {
+export function Reveal({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
     <div
       className={`grid transition-[grid-template-rows] duration-300 ease-out ${
@@ -70,7 +70,7 @@ function Reveal({ open, children }: { open: boolean; children: React.ReactNode }
 }
 
 /** 单行活动披露: 图标 + 标题 + 元信息(截断) + chevron; 展开 = 左细线缩进块 */
-function ActivityRow({
+export function ActivityRow({
   icon,
   iconClass,
   title,

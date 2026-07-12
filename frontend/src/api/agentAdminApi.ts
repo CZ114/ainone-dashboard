@@ -118,7 +118,13 @@ export type WorkflowSpec = WorkflowUpsertBody & { id: string };
 
 /** NDJSON 事件流 — 每行一个 JSON，type 判别。 */
 export type WorkflowEvent =
-  | { type: 'workflow_start'; workflow: string; inputs: Record<string, unknown> }
+  | {
+      type: 'workflow_start';
+      workflow: string;
+      inputs: Record<string, unknown>;
+      /** 关联持久化历史（GET /workflow-runs/{run_id}）。 */
+      run_id?: string;
+    }
   | { type: 'step_start'; step: string; agent: string; iteration?: number }
   | {
       type: 'step_end';
@@ -130,12 +136,57 @@ export type WorkflowEvent =
     }
   | { type: 'loop_iter'; loop: string; iteration: number }
   | { type: 'loop_break'; loop: string; reason: string }
-  | { type: 'route_choice'; step: string; choice: string }
+  | {
+      type: 'route_choice';
+      step: string;
+      choice: string;
+      /** 服务端字段名可能不同版本有出入 — 渲染方取存在的那个。 */
+      decision?: string;
+      branch?: string;
+    }
   | { type: 'human_ask'; step: string; prompt: string; iteration?: number }
   /** 流在此暂停 — 前端渲染输入框，POST /workflows/input 后继续（服务端 600s 超时）。 */
   | { type: 'human_input_required'; input_id: string; prompt: string; step?: string }
   | { type: 'workflow_end'; output: string; context: Record<string, unknown> }
   | { type: 'error'; error: string };
+
+// ---- workflow runs (持久化运行历史) ----
+
+export type WorkflowRunStatus = 'done' | 'error' | 'aborted';
+
+/** GET /workflow-runs 列表项 — 概要，events 走 GET 单个。 */
+export interface WorkflowRunSummary {
+  run_id: string;
+  workflow_id: string;
+  name: string;
+  status: WorkflowRunStatus;
+  started_at: string | number;
+  elapsed_ms: number;
+  steps: number;
+  output_preview: string;
+}
+
+/**
+ * 回放事件 — 与流式 WorkflowEvent 同形 + t_ms 相对时间戳。字段按
+ * 不透明处理（type 判别，渲染方取存在的键）。
+ */
+export interface WorkflowRunEvent {
+  type: string;
+  t_ms?: number;
+  [extra: string]: unknown;
+}
+
+export interface WorkflowRunDetail {
+  run_id: string;
+  workflow_id: string;
+  name: string;
+  status: WorkflowRunStatus;
+  inputs: Record<string, string>;
+  started_at: string | number;
+  elapsed_ms: number;
+  output: string;
+  events: WorkflowRunEvent[];
+}
 
 // ---- MCP servers (外部工具源, SOD 07 §3) ----
 
@@ -358,6 +409,30 @@ export const agentAdminApi = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, value }),
       }),
+    );
+  },
+
+  // ---- workflow runs (持久化运行历史) ----
+  async listWorkflowRuns(limit = 20): Promise<{ runs: WorkflowRunSummary[] }> {
+    return asJson(
+      await fetch(
+        `${API_BASE}/api/agent/workflow-runs?limit=${encodeURIComponent(limit)}`,
+      ),
+    );
+  },
+  async getWorkflowRun(runId: string): Promise<{ run: WorkflowRunDetail }> {
+    return asJson(
+      await fetch(
+        `${API_BASE}/api/agent/workflow-runs/${encodeURIComponent(runId)}`,
+      ),
+    );
+  },
+  async deleteWorkflowRun(runId: string): Promise<{ ok: boolean }> {
+    return asJson(
+      await fetch(
+        `${API_BASE}/api/agent/workflow-runs/${encodeURIComponent(runId)}`,
+        { method: 'DELETE' },
+      ),
     );
   },
 
