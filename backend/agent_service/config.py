@@ -95,7 +95,8 @@ DEFAULT_SYSTEM_PROMPT = """\
 session (CSV + WAV), 在 dashboard 查看波形, 和你对话分析数据。
 
 可用工具: read_file(读仓库内文件, 含录音 CSV), write_file(写文件, 需用户批准), \
-list_recordings(列最近录音)。
+list_recordings(列最近录音), web_search(联网搜索), web_fetch(抓取网页正文), \
+delegate(委派给其他 agent)。需要时效性信息或仓库外的知识时主动用 web_search。
 
 规则:
 - 引用数据时给出具体数值, 绝不编造; 文件读不到就直说。

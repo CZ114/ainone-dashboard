@@ -69,6 +69,15 @@ def build_registry():
         # 原样透传, 只防超长 (executor 还有 output_limit 兜底)
         return {"ok": True, "recordings": data}
 
+    # 网络搜索: 直接复用 agent 库自带的 web.py (Tavily 搜索 + trafilatura 正文提取,
+    # 用户 Phase 6 external-retrieval 时已写好并配了 TAVILY_API_KEY — 库 import 时
+    # 从 agent/.env 自动加载)。key 缺失/依赖缺失时跳过, 不挡服务启动。
+    try:
+        from agent.tools.web import register_web_tools
+        register_web_tools(reg)
+    except Exception as e:
+        print(f"[agent_service] web 工具未挂载 (可选): {type(e).__name__}: {e}")
+
     @reg.tool(parallel=False, output_limit=20000,
               description="把子任务委派给另一个已配置的 agent 并返回其回答。"
                           "适合需要专门能力的子问题 (如挂载知识库的 agent)。"
