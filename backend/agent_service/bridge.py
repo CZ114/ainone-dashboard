@@ -98,6 +98,11 @@ class HumanInputBroker:
         return pending.value
 
 
+# 模块级单例: 聊天服务端点与 run_workflow 工具共用同一个 broker,
+# 前端 POST /api/agent/workflows/input 才能唤醒任一来源的 human 步骤
+human_inputs = HumanInputBroker()
+
+
 class AbortRegistry:
     def __init__(self):
         self._flags = {}

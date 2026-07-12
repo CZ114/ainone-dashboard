@@ -78,6 +78,69 @@ def build_registry():
     except Exception as e:
         print(f"[agent_service] web 工具未挂载 (可选): {type(e).__name__}: {e}")
 
+    # 对话式启动 multi-agent 工作流 — LLM 判断用户请求匹配某工作流时自主调用。
+    # 运行事件进 run_history 活跃追踪 → 聊天页工作流面板轮询发现并自动直播。
+    # 工具描述里的清单是本次会话构建时的快照 (新会话自动刷新)。
+    def _workflow_catalog_line():
+        try:
+            from . import workflows_admin
+            items = workflows_admin.list_workflows()
+            return "; ".join(
+                f"{w['id']}(输入: {', '.join(w.get('inputs') or []) or '无'})"
+                f" = {w.get('name', '')}"
+                for w in items) or "(暂无已定义的工作流)"
+        except Exception:
+            return "(工作流清单读取失败)"
+
+    @reg.tool(parallel=False, output_limit=30000,
+              description="启动一个预定义的多智能体工作流, 等待完成并返回最终输出。"
+                          "当用户请求匹配某个工作流的场景时应主动使用, 运行过程会"
+                          "实时显示在用户界面的工作流面板里。"
+                          f"可用工作流: {_workflow_catalog_line()}。"
+                          "inputs 传对象, 键为该工作流的输入名, 值从用户请求中提取。")
+    def run_workflow(workflow_id: str, inputs: dict):
+        from agent.orchestration import Workflow, WorkflowError
+
+        from . import run_history, workflows_admin
+        from .bridge import human_inputs
+        from .factory import build_oneshot_agent
+        try:
+            spec = workflows_admin.get_workflow(workflow_id)
+            wf = Workflow(spec)
+        except (KeyError, Exception) as e:
+            return {"error": f"工作流加载失败: {e}"}
+
+        handle = run_history.start_run(
+            workflow_id, spec.get("name") or workflow_id, inputs or {})
+
+        def ask_human(prompt: str) -> str:
+            p = human_inputs.create()
+            handle.add_event({"type": "human_input_required",
+                              "input_id": p.id, "prompt": prompt})
+            value = human_inputs.wait(p, 600)
+            if value is None:
+                raise WorkflowError("等待人工输入超时 (600s)")
+            return value
+
+        output = None
+        try:
+            for kind, payload in wf.run(inputs or {},
+                                        build_agent=build_oneshot_agent,
+                                        ask_human=ask_human):
+                event = {"type": kind, **(payload or {})}
+                if kind == "workflow_start":
+                    event["run_id"] = handle.run_id
+                handle.add_event(event)
+                if kind == "workflow_end":
+                    output = payload.get("output")
+        except WorkflowError as e:
+            handle.add_event({"type": "error", "error": str(e)})
+            return {"error": str(e), "run_id": handle.run_id}
+        finally:
+            handle.finish()
+        return {"ok": True, "run_id": handle.run_id,
+                "output": (output or "")[:8000]}
+
     @reg.tool(parallel=False, output_limit=20000,
               description="把子任务委派给另一个已配置的 agent 并返回其回答。"
                           "适合需要专门能力的子问题 (如挂载知识库的 agent)。"

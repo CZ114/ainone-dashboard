@@ -28,7 +28,7 @@ from datetime import datetime
 from . import (agents_admin, config_store, mcp_admin, rag, run_history,
                skills_admin, workflows_admin)
 from .agent_tools import build_registry
-from .bridge import AbortRegistry, HumanInputBroker, PermissionBroker
+from .bridge import AbortRegistry, PermissionBroker, human_inputs
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import build_client, build_oneshot_agent, resolve_agent_config
 from .sessions import SessionManager, repair_history
@@ -41,7 +41,7 @@ app = FastAPI(title="agent_service", version="0.1.0")
 broker = PermissionBroker()
 aborts = AbortRegistry()
 manager = SessionManager()
-human_inputs = HumanInputBroker()
+# human_inputs 单例已移至 bridge.py (run_workflow 工具与端点共用)
 
 
 # ─── 请求模型 ────────────────────────────────────────────────────────
@@ -527,9 +527,7 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
     """
     wf = _load_workflow_or_404(wf_id)
     q: queue.Queue = queue.Queue()
-    run_id = run_history.new_run_id()
-    started = time.time()
-    recorded: list[dict] = []
+    handle = run_history.start_run(wf_id, wf.spec.get("name") or wf_id, body.inputs)
 
     def ask_human(prompt: str) -> str:
         p = human_inputs.create()
@@ -552,47 +550,22 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
         finally:
             q.put(("__end__", None))
 
-    def _archive():
-        """归档在消费端做 — recorded 只被 gen 线程写, 无竞态。
-        正常结束与客户端中途断开 (finally) 都会走到, saved 防重。"""
-        status = "error" if any(e["type"] == "error" for e in recorded) else (
-            "done" if any(e["type"] == "workflow_end" for e in recorded)
-            else "aborted")
-        final = next((e for e in recorded if e["type"] == "workflow_end"), {})
-        try:
-            run_history.save_run({
-                "run_id": run_id,
-                "workflow_id": wf_id,
-                "name": wf.spec.get("name") or wf_id,
-                "status": status,
-                "inputs": body.inputs,
-                "started_at": datetime.fromtimestamp(started).isoformat(),
-                "elapsed_ms": int((time.time() - started) * 1000),
-                "output": final.get("output"),
-                "events": recorded,
-            })
-        except Exception:
-            pass  # 归档失败不影响运行本身
-
     def gen():
         threading.Thread(target=worker, daemon=True,
                          name=f"workflow-{wf_id}").start()
-        saved = False
         try:
             while True:
                 kind, payload = q.get()
                 if kind == "__end__":
-                    saved = True
-                    _archive()
                     return
                 event = {"type": kind, **(payload or {})}
                 if kind == "workflow_start":
-                    event["run_id"] = run_id   # 前端据此关联历史记录
-                recorded.append({**event, "t_ms": int((time.time() - started) * 1000)})
+                    event["run_id"] = handle.run_id   # 前端据此关联历史记录
+                handle.add_event(event)   # 活跃追踪 + 归档共用一份
                 yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
         finally:
-            if not saved:
-                _archive()   # 客户端断开: 归档已收到的部分, status=aborted
+            # 正常结束/客户端断开统一走这里; finish 幂等, 按事件判定状态归档
+            handle.finish()
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
@@ -603,6 +576,20 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
 @app.get("/api/agent/workflow-runs")
 def workflow_runs_list(limit: int = 30):
     return {"runs": run_history.list_runs(max(1, min(limit, 100)))}
+
+
+@app.get("/api/agent/workflow-runs/active")
+def workflow_runs_active():
+    """进行中的运行 (含聊天 agent 经 run_workflow 工具启动的) — 面板轮询用。"""
+    return {"active": run_history.list_active()}
+
+
+@app.get("/api/agent/workflow-runs/active/{run_id}")
+def workflow_runs_active_get(run_id: str):
+    try:
+        return {"run": run_history.get_active(run_id)}
+    except KeyError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.get("/api/agent/workflow-runs/{run_id}")

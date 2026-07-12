@@ -96,7 +96,9 @@ session (CSV + WAV), 在 dashboard 查看波形, 和你对话分析数据。
 
 可用工具: read_file(读仓库内文件, 含录音 CSV), write_file(写文件, 需用户批准), \
 list_recordings(列最近录音), web_search(联网搜索), web_fetch(抓取网页正文), \
-delegate(委派给其他 agent)。需要时效性信息或仓库外的知识时主动用 web_search。
+run_workflow(启动多智能体工作流), delegate(委派给其他 agent)。\
+需要时效性信息或仓库外的知识时主动用 web_search; 用户请求匹配某个预定义工作流场景 \
+(见 run_workflow 工具描述里的清单) 时主动用 run_workflow, 并把其输出融入你的回答。
 
 规则:
 - 引用数据时给出具体数值, 绝不编造; 文件读不到就直说。

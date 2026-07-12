@@ -188,6 +188,28 @@ export interface WorkflowRunDetail {
   events: WorkflowRunEvent[];
 }
 
+// ---- active workflow runs (服务端在跑、浏览器侧没有流 — 如对话 agent 的
+//      run_workflow 工具触发的运行；结束后 404 并转入常规历史) ----
+
+/** GET /workflow-runs/active 列表项。 */
+export interface ActiveWorkflowRunSummary {
+  run_id: string;
+  workflow_id: string;
+  name: string;
+  started_at: string | number;
+  n_events: number;
+}
+
+/** GET /workflow-runs/active/{run_id} — events 与流式/回放同形。 */
+export interface ActiveWorkflowRunDetail {
+  run_id: string;
+  workflow_id: string;
+  name: string;
+  status: 'running';
+  started_at: string | number;
+  events: WorkflowRunEvent[];
+}
+
 // ---- MCP servers (外部工具源, SOD 07 §3) ----
 
 export type McpTransport = 'stdio' | 'url';
@@ -410,6 +432,21 @@ export const agentAdminApi = {
         body: JSON.stringify({ id, value }),
       }),
     );
+  },
+
+  // ---- active workflow runs (自动发现对话触发的运行) ----
+  async listActiveWorkflowRuns(): Promise<{ active: ActiveWorkflowRunSummary[] }> {
+    return asJson(await fetch(`${API_BASE}/api/agent/workflow-runs/active`));
+  },
+  /** 运行结束后端点返回 404 — 此处映射为 null，调用方转 getWorkflowRun 拿终态。 */
+  async getActiveWorkflowRun(
+    runId: string,
+  ): Promise<{ run: ActiveWorkflowRunDetail } | null> {
+    const res = await fetch(
+      `${API_BASE}/api/agent/workflow-runs/active/${encodeURIComponent(runId)}`,
+    );
+    if (res.status === 404) return null;
+    return asJson(res);
   },
 
   // ---- workflow runs (持久化运行历史) ----

@@ -12,6 +12,8 @@ SOD 07 §7 曾把"运行历史持久化"列为不做 — 2026-07-12 用户点名
 import json
 import os
 import tempfile
+import threading
+import time
 import uuid
 from datetime import datetime
 
@@ -89,3 +91,92 @@ def delete_run(run_id: str) -> None:
     if not path.is_file():
         raise KeyError(f"未知运行记录: {run_id}")
     path.unlink()
+
+
+# ─── 活跃运行追踪 (对话式自动启动的直播数据源) ───────────────────────
+# 聊天 agent 通过 run_workflow 工具启动的运行没有自己的 HTTP 流 —
+# 前端工作流面板轮询这里发现"有工作流在跑"并直播其事件。
+# /workflows/{id}/stream 手动运行也登记, 两条路径共用一套追踪。
+
+_active: dict = {}
+_active_lock = threading.Lock()
+
+
+class RunHandle:
+    """一次运行的追踪句柄: add_event 累积, finish 归档并摘除。"""
+
+    def __init__(self, run_id, workflow_id, name, inputs):
+        self.run_id = run_id
+        self.workflow_id = workflow_id
+        self.name = name
+        self.inputs = inputs
+        self.started = time.time()
+        self.events: list[dict] = []
+        self._lock = threading.Lock()
+
+    def add_event(self, event: dict) -> None:
+        with self._lock:
+            self.events.append(
+                {**event, "t_ms": int((time.time() - self.started) * 1000)})
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "run_id": self.run_id,
+                "workflow_id": self.workflow_id,
+                "name": self.name,
+                "status": "running",
+                "started_at": datetime.fromtimestamp(self.started).isoformat(),
+                "events": list(self.events),
+            }
+
+    def finish(self) -> None:
+        """按事件判定状态, 落盘, 从活跃表摘除。幂等。"""
+        with _active_lock:
+            if _active.pop(self.run_id, None) is None:
+                return
+        status = "error" if any(e["type"] == "error" for e in self.events) else (
+            "done" if any(e["type"] == "workflow_end" for e in self.events)
+            else "aborted")
+        final = next((e for e in self.events if e["type"] == "workflow_end"), {})
+        try:
+            save_run({
+                "run_id": self.run_id,
+                "workflow_id": self.workflow_id,
+                "name": self.name,
+                "status": status,
+                "inputs": self.inputs,
+                "started_at": datetime.fromtimestamp(self.started).isoformat(),
+                "elapsed_ms": int((time.time() - self.started) * 1000),
+                "output": final.get("output"),
+                "events": self.events,
+            })
+        except Exception:
+            pass
+
+
+def start_run(workflow_id: str, name: str, inputs: dict) -> RunHandle:
+    h = RunHandle(new_run_id(), workflow_id, name, inputs)
+    with _active_lock:
+        _active[h.run_id] = h
+    return h
+
+
+def list_active() -> list[dict]:
+    with _active_lock:
+        handles = list(_active.values())
+    return [{
+        "run_id": h.run_id,
+        "workflow_id": h.workflow_id,
+        "name": h.name,
+        "started_at": datetime.fromtimestamp(h.started).isoformat(),
+        "n_events": len(h.events),
+    } for h in handles]
+
+
+def get_active(run_id: str) -> dict:
+    with _active_lock:
+        h = _active.get(run_id)
+    if h is None:
+        raise KeyError(f"运行不在进行中: {run_id}")
+    return h.snapshot()

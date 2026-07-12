@@ -451,6 +451,9 @@ function HistoryRunRow({
 
 type PanelStatus = 'idle' | 'running' | 'done' | 'error';
 
+/** 现场时间线的来源 — 手动流式 vs 对话触发（轮询发现）；同时至多一条。 */
+type LiveSource = 'manual' | 'auto' | null;
+
 export function ChatWorkflowPanel() {
   const t = useT();
   const tw = t.chat.workflowPanel;
@@ -475,6 +478,15 @@ export function ChatWorkflowPanel() {
       return next;
     });
   };
+  /** 程序化展开 + 持久化 — 自动发现对话触发的运行时用。 */
+  const openPanel = useCallback(() => {
+    setOpen(true);
+    try {
+      localStorage.setItem(OPEN_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // ---- 工作流列表 + 运行入参 ----
   const [workflows, setWorkflows] = useState<WorkflowSummary[] | null>(null);
@@ -492,6 +504,19 @@ export function ChatWorkflowPanel() {
   );
   const abortRef = useRef<AbortController | null>(null);
   const running = status === 'running';
+
+  // ---- 现场时间线来源（手动/自动）----
+  // ref 与 state 同步写：轮询回调里读 ref（不受闭包过期影响），渲染用 state。
+  const [liveSource, setLiveSourceState] = useState<LiveSource>(null);
+  const liveSourceRef = useRef<LiveSource>(null);
+  const setLiveSource = useCallback((v: LiveSource) => {
+    liveSourceRef.current = v;
+    setLiveSourceState(v);
+  }, []);
+  /** 手动运行的 run_id（来自流的 workflow_start）— 自动发现时跳过，防双显。 */
+  const manualRunIdRef = useRef<string | null>(null);
+  /** 当前追踪的对话触发运行 — state 驱动 2s 事件轮询 effect 的建/拆。 */
+  const [autoRunId, setAutoRunId] = useState<string | null>(null);
 
   // ---- 历史运行 ----
   const [runs, setRuns] = useState<WorkflowRunSummary[] | null>(null);
@@ -536,6 +561,89 @@ export function ChatWorkflowPanel() {
   // 卸载时断开直播流（服务端把局部运行记为 aborted）。
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // ---- 自动发现：对话 agent 在服务端启动的运行（浏览器侧没有流）----
+  // 面板挂载期间每 2.5s 轮一次 active 列表；已有现场时间线（手动优先）或
+  // 页面不可见时跳过；in-flight 防重入；卸载清 interval。
+  useEffect(() => {
+    let disposed = false;
+    let inflight = false;
+    const tick = async () => {
+      if (inflight || document.hidden) return;
+      if (liveSourceRef.current !== null) return; // 至多一条现场时间线
+      inflight = true;
+      try {
+        const r = await agentAdminApi.listActiveWorkflowRuns();
+        if (disposed || liveSourceRef.current !== null) return;
+        // 跳过自己手动跑的（含 abort 后服务端仍在收尾的那条）；
+        // 多条并发只取第一条，其余结束后进历史。
+        const found = r.active.find((a) => a.run_id !== manualRunIdRef.current);
+        if (!found) return;
+        setLiveSource('auto');
+        setAutoRunId(found.run_id);
+        setStatus('running');
+        setRunName(found.name || found.workflow_id);
+        setLiveEvents([]);
+        setHumanStates({});
+        openPanel(); // 对话触发 — 自动展开面板让用户看见
+      } catch {
+        /* 轮询失败静默 — 下一轮再试 */
+      } finally {
+        inflight = false;
+      }
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), 2500);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [openPanel, setLiveSource]);
+
+  // ---- 自动运行直播：每 2s 全量重拉事件（事件量小，整拉即可）；
+  //      404 = 运行已结束 → 拉一次终态记录落定时间线并刷新历史。
+  useEffect(() => {
+    if (!autoRunId) return;
+    let disposed = false;
+    let inflight = false;
+    const settle = async () => {
+      try {
+        const r = await agentAdminApi.getWorkflowRun(autoRunId);
+        if (disposed) return;
+        setLiveEvents(r.run.events);
+        setStatus(r.run.status === 'error' ? 'error' : 'done');
+      } catch {
+        if (disposed) return;
+        setStatus('done'); // 终态记录暂不可得 — 保留已拉到的事件
+      }
+      setAutoRunId(null);
+      setLiveSource(null);
+      void refreshHistory();
+    };
+    const tick = async () => {
+      if (inflight || document.hidden) return;
+      inflight = true;
+      try {
+        const r = await agentAdminApi.getActiveWorkflowRun(autoRunId);
+        if (disposed) return;
+        if (r === null) {
+          await settle(); // 404 — 运行已结束
+          return;
+        }
+        setLiveEvents(r.run.events);
+      } catch {
+        /* 网络抖动 — 保留现有时间线，下一轮再试 */
+      } finally {
+        inflight = false;
+      }
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), 2000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [autoRunId, refreshHistory, setLiveSource]);
+
   // done 徽标短暂显示后自动归位（✓ 一闪即收）。
   useEffect(() => {
     if (status !== 'done') return;
@@ -558,6 +666,8 @@ export function ChatWorkflowPanel() {
     if (!selected || running) return;
     const controller = new AbortController();
     abortRef.current = controller;
+    manualRunIdRef.current = null;
+    setLiveSource('manual'); // 手动优先 — 发现轮询在此期间不认领新运行
     setStatus('running');
     setRunName(selected.name || selected.id);
     setLiveEvents([]);
@@ -568,6 +678,10 @@ export function ChatWorkflowPanel() {
         selected.id,
         inputValues,
         (e: WorkflowEvent) => {
+          // 记下自己的 run_id — 发现轮询据此跳过本条（防双显）。
+          if (e.type === 'workflow_start' && e.run_id) {
+            manualRunIdRef.current = e.run_id;
+          }
           if (e.type === 'error') sawError = true;
           setLiveEvents((prev) => [...prev, e as WorkflowRunEvent]);
         },
@@ -587,6 +701,7 @@ export function ChatWorkflowPanel() {
       }
     }
     abortRef.current = null;
+    setLiveSource(null); // 手动流结束 — 发现轮询恢复认领
     // 直播结束（含中止/失败）→ 刷新历史列表，新纪录立刻可见。
     void refreshHistory();
   };
@@ -643,6 +758,11 @@ export function ChatWorkflowPanel() {
           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-amber-500">
             <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-500" />
             <span className="truncate font-mono">{runName}</span>
+            {liveSource === 'auto' && (
+              <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4">
+                {tw.autoTag}
+              </span>
+            )}
           </span>
         )}
         {status === 'done' && (
@@ -703,7 +823,7 @@ export function ChatWorkflowPanel() {
               >
                 {running ? tw.running : tw.run}
               </button>
-              {running && (
+              {running && liveSource === 'manual' && (
                 <button
                   type="button"
                   onClick={stopRun}
