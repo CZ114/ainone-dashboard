@@ -30,7 +30,8 @@ from . import (agents_admin, config_store, mcp_admin, rag, run_history,
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, PermissionBroker, human_inputs
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
-from .factory import build_client, build_oneshot_agent, resolve_agent_config
+from .factory import (build_client, build_oneshot_agent, resolve_agent_config,
+                      tracking_build_agent)
 from .sessions import SessionManager, repair_history
 from .wire import iter_strip_think, new_stream_ctx, serialize, strip_think
 
@@ -537,10 +538,14 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
             raise WorkflowError(f"等待人工输入超时 ({HUMAN_INPUT_TIMEOUT_S}s)")
         return value
 
+    def _emit_ref(ev: dict):
+        ev = dict(ev)
+        q.put((ev.pop("type"), ev))
+
     def worker():
         try:
             for kind, payload in wf.run(body.inputs,
-                                        build_agent=build_oneshot_agent,
+                                        build_agent=tracking_build_agent(_emit_ref),
                                         ask_human=ask_human):
                 q.put((kind, payload))
         except WorkflowError as e:

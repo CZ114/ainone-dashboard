@@ -11,9 +11,11 @@ import type {
   TodoMessage,
   TodoItem,
   PermissionRequestMessage,
+  WorkflowChatMessage,
 } from '../../store/chatStore';
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
+import { agentAdminApi } from '../../api/agentAdminApi';
 import { MessageMarkdown } from './MessageMarkdown';
 import { useT } from '../../contexts/LanguageContext';
 
@@ -1028,6 +1030,200 @@ function TodoMessageComponent({ message }: { message: TodoMessage }) {
   );
 }
 
+/* ── Workflow messages — 工作流事件进聊天流 ──────────────────────────
+   分区原则: 侧栏 = 状态指示器(流程图), 聊天 = 交互与产出。这里渲染
+   转发进来的四类事件块。共享外观: 全宽块 + 左侧强调线 + 10.5px 大写
+   角标行「🔁 {工作流} · {步骤}」— 比用户/agent 气泡更安静, 一眼可辨
+   不属于常规对话。 */
+
+function WorkflowBadgeRow({
+  message,
+  accentClass,
+}: {
+  message: WorkflowChatMessage;
+  accentClass?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-1 text-[10.5px] uppercase tracking-wide ${
+        accentClass ?? 'text-text-muted'
+      }`}
+    >
+      <span aria-hidden>🔁</span>
+      <span className="min-w-0 truncate">
+        {message.workflowName || 'workflow'} · {message.step || message.subtype}
+      </span>
+    </div>
+  );
+}
+
+// human_ask — 运行暂停等待人工输入; 追问与回答都发生在聊天里。
+// 提交走 submitWorkflowInput(inputId), 成功后 markWorkflowAnswered 落定;
+// 已回答状态: 提示词收成暗淡单行, 显示 ✓ + 提交的文本。
+function WorkflowHumanAskComponent({ message }: { message: WorkflowChatMessage }) {
+  const t = useT();
+  const tw = t.chat.workflowPanel;
+  const markWorkflowAnswered = useChatStore((s) => s.markWorkflowAnswered);
+  const [value, setValue] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const answered = message.answered === true;
+  const disabled = answered || submitting || !message.inputId;
+
+  const submit = async () => {
+    if (disabled || !value.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await agentAdminApi.submitWorkflowInput(message.inputId!, value);
+      markWorkflowAnswered(message.id, value);
+    } catch (err) {
+      setError(tw.submitFailed(err instanceof Error ? err.message : String(err)));
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="mb-2 w-full space-y-1.5 rounded-r-md border-l-2 border-amber-500 bg-amber-500/5 px-2.5 py-2">
+      <WorkflowBadgeRow
+        message={message}
+        accentClass="text-amber-600 dark:text-amber-400"
+      />
+      <p
+        className={
+          answered
+            ? 'truncate text-[12.5px] text-text-muted'
+            : 'whitespace-pre-wrap break-words text-[12.5px] text-text-secondary'
+        }
+      >
+        {message.content}
+      </p>
+      {!answered && (
+        <>
+          <textarea
+            rows={2}
+            value={value}
+            disabled={disabled}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={tw.humanPlaceholder}
+            className="w-full rounded border border-card-border bg-window-bg p-1.5 font-mono text-[12px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none disabled:opacity-50"
+          />
+          <button
+            type="button"
+            disabled={disabled || !value.trim()}
+            onClick={() => void submit()}
+            className="rounded bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          >
+            {tw.submit}
+          </button>
+        </>
+      )}
+      {answered && (
+        <p className="text-[12px] text-emerald-600">
+          ✓ {tw.answered}
+          {message.answer ? (
+            <span className="ml-1.5 font-mono text-[11.5px] text-text-muted">
+              {message.answer}
+            </span>
+          ) : null}
+        </p>
+      )}
+      {error && <p className="break-all text-[11px] text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+// 步骤产出 / 知识库引用 — ActivityRow 风格, 折叠一行 + 可展开详情。
+// references 回答「答案根据哪个文件」: 每条命中 = 来源 + 相似度 + 预览。
+function WorkflowMessageComponent({ message }: { message: WorkflowChatMessage }) {
+  const t = useT();
+  const tw = t.chat.workflowPanel;
+
+  if (message.subtype === 'human_ask') {
+    return <WorkflowHumanAskComponent message={message} />;
+  }
+
+  if (message.subtype === 'status') {
+    // 终态一行: ✓ 完成 / ✗ 失败 / ⏸ 已中止 — 完整输出由对话回复承载,不重复。
+    return (
+      <div className="mb-2 w-full border-l-2 border-accent-soft py-0.5 pl-2.5">
+        <WorkflowBadgeRow message={message} />
+        <p className="mt-0.5 break-words text-[11.5px] text-text-muted">
+          {message.content}
+        </p>
+      </div>
+    );
+  }
+
+  if (message.subtype === 'references') {
+    const refs = message.refs ?? [];
+    const query = (message.query ?? '').replace(/\s+/g, ' ').trim();
+    const queryMeta =
+      query.length > 0
+        ? tw.refsQuery(query.length > 60 ? query.slice(0, 59) + '…' : query)
+        : undefined;
+    return (
+      <div className="mb-2 w-full border-l-2 border-accent-soft pl-1">
+        <div className="pl-1.5 pt-0.5">
+          <WorkflowBadgeRow message={message} />
+        </div>
+        <ActivityRow
+          icon="📚"
+          title={tw.refsTitle(message.agent || 'agent')}
+          meta={queryMeta}
+          detail={
+            refs.length > 0 ? (
+              <div className="space-y-1.5">
+                {refs.map((r, i) => (
+                  <div key={i}>
+                    <div className="break-all font-mono text-[11.5px] text-text-secondary">
+                      {r.source || '?'}
+                      {typeof r.score === 'number'
+                        ? ` — ${tw.refsScore(r.score.toFixed(2))}`
+                        : ''}
+                    </div>
+                    {r.preview && (
+                      <div className="whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-text-muted">
+                        {r.preview}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  }
+
+  // output — step_end 的完整产出: ✓ + 步骤名 + 首行摘要, 展开看全文。
+  const text = message.content || '';
+  const first = text.split('\n').find((l) => l.trim().length > 0) ?? '';
+  const preview = first.length > 100 ? first.slice(0, 99) + '…' : first;
+  return (
+    <div className="mb-2 w-full border-l-2 border-accent-soft pl-1">
+      <div className="pl-1.5 pt-0.5">
+        <WorkflowBadgeRow message={message} />
+      </div>
+      <ActivityRow
+        icon="✓"
+        iconClass="text-emerald-600"
+        title={message.step || 'step'}
+        meta={preview || undefined}
+        detail={
+          text ? (
+            <pre className="max-h-96 overflow-x-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-text-muted">
+              {text}
+            </pre>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+}
+
 // Loading indicator — Codex 式: 无框, 慢转星标 + 微光扫过的文字
 export function LoadingIndicator() {
   const t = useT();
@@ -1078,6 +1274,8 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
             return <ThinkingMessageComponent key={msg.id} message={msg} />;
           case 'todo':
             return <TodoMessageComponent key={msg.id} message={msg} />;
+          case 'workflow':
+            return <WorkflowMessageComponent key={msg.id} message={msg} />;
           default:
             return null;
         }

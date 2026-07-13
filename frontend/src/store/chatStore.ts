@@ -115,6 +115,30 @@ export interface PermissionRequestMessage {
   timestamp: number;
 }
 
+// Workflow run events forwarded into the conversation (SIDEBAR = state
+// indicator, CHAT = interaction & outputs). Emitted by ChatWorkflowPanel's
+// event forwarder for both manual streams and auto-discovered runs:
+// - human_ask:   the run is paused on a human step — answer inline in chat
+// - output:      a step's full output (step_end)
+// - references:  which knowledge-base documents grounded an agent's answer
+// - status:      terse end-of-run line (done / failed / aborted) only
+export interface WorkflowChatMessage {
+  id: string;
+  type: 'workflow';
+  timestamp: number;
+  subtype: 'human_ask' | 'output' | 'references' | 'status';
+  runId: string;
+  workflowName?: string;
+  step?: string;
+  agent?: string;
+  content: string;              // human prompt / step output / status text
+  inputId?: string;             // human_ask: for submitWorkflowInput
+  answered?: boolean;           // human_ask: set true after submit
+  answer?: string;              // human_ask: the submitted text (shown after ✓)
+  refs?: { source?: string; score?: number; preview?: string }[]; // references
+  query?: string;               // references
+}
+
 export type AllMessage =
   | ChatMessage
   | SystemMessage
@@ -123,7 +147,8 @@ export type AllMessage =
   | ThinkingMessage
   | TodoMessage
   | PlanMessage
-  | PermissionRequestMessage;
+  | PermissionRequestMessage
+  | WorkflowChatMessage;
 
 // Message input types (without id and timestamp)
 export type ChatMessageInput = Omit<ChatMessage, 'id' | 'timestamp'>;
@@ -136,6 +161,7 @@ export type PermissionRequestMessageInput = Omit<
   PermissionRequestMessage,
   'id' | 'timestamp'
 >;
+export type WorkflowChatMessageInput = Omit<WorkflowChatMessage, 'id' | 'timestamp'>;
 
 export type MessageInput =
   | ChatMessageInput
@@ -144,7 +170,8 @@ export type MessageInput =
   | ToolResultMessageInput
   | ThinkingMessageInput
   | TodoMessageInput
-  | PermissionRequestMessageInput;
+  | PermissionRequestMessageInput
+  | WorkflowChatMessageInput;
 
 // Session summary from backend
 export interface SessionSummary {
@@ -342,6 +369,9 @@ interface ChatState {
     permissionId: string,
     decided: PermissionDecidedStatus,
   ) => void;
+  // Mark a workflow human_ask bubble as answered (after submitWorkflowInput
+  // succeeded). Optional `answer` keeps the submitted text for display.
+  markWorkflowAnswered: (messageId: string, answer?: string) => void;
   setInput: (input: string) => void;
   setIsLoading: (loading: boolean) => void;
   setIsThinking: (thinking: boolean) => void;
@@ -424,6 +454,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       return { messages };
     }),
+
+  markWorkflowAnswered: (messageId, answer) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.type === 'workflow' && m.id === messageId
+          ? { ...m, answered: true, ...(answer !== undefined ? { answer } : {}) }
+          : m,
+      ),
+    })),
 
   setInput: (input) => set({ input }),
 

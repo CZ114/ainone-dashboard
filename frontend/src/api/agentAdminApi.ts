@@ -147,8 +147,17 @@ export type WorkflowEvent =
   | { type: 'human_ask'; step: string; prompt: string; iteration?: number }
   /** 流在此暂停 — 前端渲染输入框，POST /workflows/input 后继续（服务端 600s 超时）。 */
   | { type: 'human_input_required'; input_id: string; prompt: string; step?: string }
+  /** 知识库检索引用 — 在做检索的那一步的 step_end 之前发出（直播与回放都有）。 */
+  | { type: 'references'; agent: string; query: string; hits: WorkflowReferenceHit[] }
   | { type: 'workflow_end'; output: string; context: Record<string, unknown> }
   | { type: 'error'; error: string };
+
+/** references 事件里的单条命中 — 字段防御性可选（不同 embedder/版本）。 */
+export interface WorkflowReferenceHit {
+  source?: string;
+  score?: number;
+  preview?: string;
+}
 
 // ---- workflow runs (持久化运行历史) ----
 

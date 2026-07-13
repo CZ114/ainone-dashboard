@@ -103,7 +103,7 @@ def build_registry():
 
         from . import run_history, workflows_admin
         from .bridge import human_inputs
-        from .factory import build_oneshot_agent
+        from .factory import tracking_build_agent
         try:
             spec = workflows_admin.get_workflow(workflow_id)
             wf = Workflow(spec)
@@ -125,7 +125,7 @@ def build_registry():
         output = None
         try:
             for kind, payload in wf.run(inputs or {},
-                                        build_agent=build_oneshot_agent,
+                                        build_agent=tracking_build_agent(handle.add_event),
                                         ask_human=ask_human):
                 event = {"type": kind, **(payload or {})}
                 if kind == "workflow_start":

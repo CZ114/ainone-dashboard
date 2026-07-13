@@ -149,6 +149,49 @@ def build_chat_agent(session_id, agent_id=None):
     )
 
 
+def tracking_build_agent(emit):
+    """workflow 节点专用 build_agent: 在 oneshot agent 外再包一层,
+    每次 send 后扫描本轮新增消息里的 retrieve 工具结果, 以 references
+    事件交给 emit(dict) — 前端据此显示"答案查了哪个知识库/哪些文档"。
+
+    emit 由调用方适配: run_workflow 工具传 handle.add_event (轮询可见);
+    /workflows/{id}/stream 传 q 适配器 (NDJSON 流可见, 消费端再入追踪)。"""
+    import json as _json
+
+    def build(name):
+        agent = build_oneshot_agent(name)
+        raw_send = agent.send
+
+        def send(text):
+            before = len(agent.messages)
+            out = raw_send(text)
+            refs, query = [], None
+            for m in agent.messages[before:]:
+                if m.get("role") != "tool":
+                    continue
+                try:
+                    data = _json.loads(m.get("content") or "")
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(data, dict) and isinstance(data.get("hits"), list):
+                    query = data.get("query") or query
+                    for h in data["hits"]:
+                        refs.append({
+                            "source": h.get("source"),
+                            "score": h.get("score"),
+                            "preview": (h.get("text") or "")[:150],
+                        })
+            if refs:
+                emit({"type": "references", "agent": name,
+                      "query": query, "hits": refs[:8]})
+            return out
+
+        agent.send = send
+        return agent
+
+    return build
+
+
 def build_oneshot_agent(agent_id=None, system_prompt=None):
     """一次性 agent (日记/测试/工作流节点用): 无文件工具、无审计。
     挂了知识库的 agent 仍有 retrieve 工具 (Agent.send 自带工具循环)。
