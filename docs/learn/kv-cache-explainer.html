@@ -257,6 +257,130 @@
 })();
 </script>
 
+<h2>② 终 · 指纹接龙 — 服务器凭什么知道"这块算过" <span class="en">chained block hashing · 按 vLLM 官方设计文档还原</span></h2>
+<style>
+  .fp-reglabel { font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-bottom: 6px; }
+  .fp-reg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .regc { font-family: var(--mono); font-size: 10.5px; border: 1.5px dashed var(--border-strong); border-radius: 8px; padding: 3px 8px; background: var(--bg); color: var(--muted); transition: all .25s; }
+  .regc b { color: var(--blue); font-weight: 600; }
+  .regc.on { border-color: var(--green); border-style: solid; background: var(--green-bg); color: var(--green); }
+  .regc.on b { color: var(--green); }
+  .regc.bad { border-color: var(--red); border-style: solid; background: var(--red-bg); color: var(--red); transform: scale(1.08); }
+  .regc.bad b { color: var(--red); }
+  .evi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  @media (max-width: 800px) { .evi-grid { grid-template-columns: 1fr; } }
+  .evi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; font-size: 12.5px; }
+  .evi .src { font-weight: 700; font-size: 13px; }
+  .evi .src a { color: var(--accent); text-decoration: none; }
+  .evi .src a:hover { text-decoration: underline; }
+  .evi blockquote { font-family: var(--mono); font-size: 11px; color: var(--muted); border-left: 3px solid var(--border-strong); padding: 4px 10px; margin: 7px 0; line-height: 1.55; }
+  .evi .tk b { color: var(--accent); }
+</style>
+<p class="sub">关键认知：<b>模型自己对缓存一无所知</b>——比对发生在模型前向计算之前，由推理引擎（vLLM / SGLang / 各家 API 网关）做簿记。核心是 vLLM 官方设计文档里的一条公式：<code>block_hash = hash(parent_hash, block_tokens)</code>——每块指纹掺入<b>父块的指纹</b>，于是指纹天然编码了"从序列开头到我为止的全部前缀"，和 KV 依赖全部前文的物理性质严格对齐（git 的 commit hash 同理：内容相同、父提交不同 → 哈希不同）。</p>
+<div class="panel">
+  <div class="fp-reglabel">服务器登记表 — 第 N 轮留下的（指纹 → 显存 KV 块）映射</div>
+  <div class="fp-reg" id="fpReg"></div>
+  <div class="fp-reglabel" style="margin-top:14px">第 N+1 轮请求（注入尾置布局）→ 逐块盖指纹、查表</div>
+  <div class="cmp-strip" id="fpStrip"></div>
+  <div class="cmp-note" id="fpNote">点「播放指纹接龙」。每块指纹 = hash(前块指纹 + 本块 token)。</div>
+  <div class="stat-row">
+    <div class="stat good" id="fpHit"><b>—</b><span>查表命中（直接加载 KV 张量）</span></div>
+    <div class="stat mid" id="fpRedo"><b>—</b><span>重算块（其中断链后的 3 块连表都不用查）</span></div>
+  </div>
+  <div class="playrow" style="margin-top:12px">
+    <button class="ctl primary" id="fpPlay">▶ 播放指纹接龙</button>
+    <button class="ctl" id="fpReset">↺ 重置</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  // 登记表: 第 N 轮的链 (注入尾置: ... 注入₁ 消息₁)
+  const REG = [['system','#9a01'],['tools','#d44c'],['历史1','#08b7'],['历史2','#7c2e'],['历史3','#f130'],['注入₁','#55e9'],['消息₁','#b6a2']];
+  // 本轮块: [名, 本轮算出的指纹, 父指纹]。前 5 块与上轮链完全一致 → 指纹相同
+  const REQ = [
+    ['system','#9a01','∅'],['tools','#d44c','#9a01'],['历史1','#08b7','#d44c'],['历史2','#7c2e','#08b7'],['历史3','#f130','#7c2e'],
+    ['消息₁','#3c8d','#f130'],['回复₁','',''],['注入₂','',''],['消息₂','','']
+  ];
+  const MISS = 5;      // 消息₁: 内容同、父指纹不同 → 指纹不同 → 查不到
+  let ph = -1, timer = null;   // ph: -1 未开始; 0..MISS 扫描中; 99 完结
+
+  function render() {
+    $('fpReg').innerHTML = REG.map((r, i) => {
+      let cls = '';
+      if (ph > -1 && i < Math.min(ph, MISS)) cls = 'on';               // 被命中的登记项
+      if (ph >= MISS && i === 6) cls = 'bad';                          // 消息₁ 的旧指纹: 有名无实
+      return `<span class="regc ${cls}">${r[0]} <b>${r[1]}</b></span>`;
+    }).join('');
+    $('fpStrip').innerHTML = REQ.map((b, i) => {
+      let cls = '', sub = '?';
+      if (ph > -1 && i < Math.min(ph, MISS)) { cls = 'hit'; sub = b[1]; }
+      else if (ph > -1 && i === ph && ph < MISS) { cls = 'scan'; sub = '算指纹…'; }
+      else if (ph >= MISS && i === MISS) { cls = 'mism'; sub = b[1] + '≠#b6a2'; }
+      else if (ph >= 99 && i > MISS) { cls = 'redo'; sub = '免查'; }
+      return `<div class="cb ${cls}">${b[0]}<small>${sub}</small></div>`;
+    }).join('');
+    if (ph === -1) $('fpNote').innerHTML = '点「播放指纹接龙」。每块指纹 = hash(前块指纹 + 本块 token)——vLLM 官方公式。';
+    else if (ph < MISS) {
+      const b = REQ[ph];
+      $('fpNote').innerHTML = `🔍 第 ${ph + 1} 块：hash(${b[2]} + ${b[0]}) = <b>${b[1]}</b> → 查登记表：<b style="color:var(--green)">有</b> → 这块的 KV 直接从显存加载，零计算。`;
+    } else {
+      let t = `⚡ 第 6 块：hash(#f130 + 消息₁) = <b>#3c8d</b> → 查表：<b style="color:var(--red)">没有</b>。注意登记表里明明有"消息₁"——但它登记的是 <b>#b6a2</b> = hash(<b>#55e9</b>(注入₁) + 消息₁)。<b>内容一个字没变，父指纹变了 ⇒ 指纹必然不同</b>。上一节"前缀变了、内容没变也失效"，在数据结构层就是这一行公式实现的。`;
+      if (ph >= 99) t += `<br><br>🏁 断链即止：后面每块的指纹都要掺入 #3c8d 这个新指纹，<b>必然不在表里</b>——服务器不再查表，直接从这里整段重新 prefill。整个匹配只是 O(块数) 次哈希查表，微秒级，换回的是秒级的 GPU prefill。`;
+      $('fpNote').innerHTML = t;
+    }
+    $('fpHit').firstElementChild.textContent = ph === -1 ? '—' : String(Math.min(ph, MISS));
+    $('fpRedo').firstElementChild.textContent = ph >= 99 ? String(REQ.length - MISS) : '—';
+  }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } }
+  $('fpPlay').onclick = () => {
+    stop(); ph = 0; render();
+    timer = setInterval(() => {
+      if (ph < MISS) { ph++; render(); }
+      else { ph = 99; render(); stop(); }
+    }, 750);
+  };
+  $('fpReset').onclick = () => { stop(); ph = -1; render(); };
+  render();
+})();
+</script>
+
+<h2>② 证 · 官方文献对照 <span class="en">primary sources — 每条都可点开核对原文</span></h2>
+<p class="sub">本页所有机制说法的官方出处（引文为文档原文，检索于 2026-07-13）。面试被追问"你从哪知道的"，直接引这些。</p>
+<div class="evi-grid">
+  <div class="evi">
+    <div class="src">🧱 vLLM 官方设计文档 · <a href="https://docs.vllm.ai/en/latest/design/prefix_caching.html" target="_blank">Automatic Prefix Caching</a></div>
+    <blockquote>hash(tuple[components]) … Parent hash value: The hash value of the parent hash block. Block tokens: A tuple of tokens in this block.</blockquote>
+    <div class="tk"><b>链式指纹的直接出处</b>：每块哈希 = 父块哈希 + 本块 token（还可掺 LoRA ID、多模态输入哈希保证唯一）。上面动画照抄的就是这条公式。</div>
+  </div>
+  <div class="evi">
+    <div class="src">🌲 SGLang 论文 · <a href="https://arxiv.org/abs/2312.07104" target="_blank">RadixAttention（arXiv:2312.07104）</a></div>
+    <blockquote>we utilize a radix tree to manage a mapping between sequences of tokens, and their corresponding KV cache tensors … a simple LRU eviction policy that evicts the least recently used leaf first</blockquote>
+    <div class="tk"><b>登记表的另一种实现</b>：基数树（前缀树），键 = token 序列、值 = KV 张量，公共前缀自动共享；显存满了从最久未用的叶子开始淘汰。</div>
+  </div>
+  <div class="evi">
+    <div class="src">📜 Anthropic 官方文档 · <a href="https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching" target="_blank">Prompt caching</a></div>
+    <blockquote>Exact matching: Cache hits require 100% identical prompt segments … the cache follows the hierarchy: tools → system → messages. Changes at each level invalidate that level and all subsequent levels.</blockquote>
+    <div class="tk"><b>前缀逐字匹配 + 层级失效</b>的官方表述。配套定价原文：读 0.1×、5 分钟写 1.25×，默认 TTL 5 分钟且命中免费续期——"写小贵读大惠"引导你把断点打在稳定前缀上。</div>
+  </div>
+  <div class="evi">
+    <div class="src">📗 OpenAI 官方文档 · <a href="https://developers.openai.com/api/docs/guides/prompt-caching" target="_blank">Prompt caching</a></div>
+    <blockquote>Cache hits are only possible for exact prefix matches within a prompt. … Place static content like instructions and examples at the beginning of your prompt, and put variable content, such as user-specific information, at the end.</blockquote>
+    <div class="tk"><b>"静态在前、动态在后"是 OpenAI 官方原话</b>——本页"注入尾置"策略的厂商背书。全自动，≥1024 token 起缓存。</div>
+  </div>
+  <div class="evi">
+    <div class="src">🐋 DeepSeek 官方文档 · <a href="https://api-docs.deepseek.com/guides/kv_cache" target="_blank">Context Caching</a></div>
+    <blockquote>A subsequent request can only hit the cache if it fully matches a cache prefix unit. … prompt_cache_hit_tokens: The number of tokens in the input of this request that resulted in a cache hit.</blockquote>
+    <div class="tk"><b>全自动 + KV 落盘</b>（磁盘分层，默认开启无需改代码）。账单里的 <code>prompt_cache_hit_tokens</code> 字段是<b>验证你的布局改造是否生效的直接观测点</b>——改成尾置后看它是否逼近全部历史长度。</div>
+  </div>
+  <div class="evi">
+    <div class="src">🧪 本项目的落地位置</div>
+    <blockquote>agent/core/agent.py · _build_messages_for_invoke()</blockquote>
+    <div class="tk">动态注入从 L2 固定位改为<b>插在最后一条 user 消息之前</b>（不拆开 assistant(tool_calls)+tool 块），正是按上面 OpenAI/Anthropic 的官方建议做的布局改造——保住 system+tools+历史 这段最长稳定前缀。</div>
+  </div>
+</div>
+
 <h2>③ 定量武器库 <span class="en">numbers you can cite</span></h2>
 <div class="panel">
   <b style="font-size:14px">KV cache 每 token 占多大？（追问率极高）</b>
@@ -270,7 +394,7 @@
     <tr><th>服务商</th><th>缓存机制</th><th>命中价格</th><th>TTL / 备注</th></tr>
     <tr><td>Anthropic</td><td class="mono">cache_control 显式断点</td><td>读 0.1× · 写 1.25×</td><td>5 min（命中续期），可选 1h</td></tr>
     <tr><td>DeepSeek</td><td>全自动，KV 落盘（SSD 分层）</td><td>≈ 0.1×</td><td>小时级，跨请求共享集群</td></tr>
-    <tr><td>OpenAI</td><td>自动，≥1024 token 起、128 粒度</td><td>0.5×</td><td>分钟~小时</td></tr>
+    <tr><td>OpenAI</td><td>自动，≥1024 token 起（官方文档）</td><td>0.5×</td><td>分钟~小时</td></tr>
     <tr><td>本地 vLLM / SGLang</td><td class="mono">Automatic Prefix Caching / RadixAttention</td><td>—（省的是自己的 GPU 时间）</td><td>同一机制，非远程独有</td></tr>
   </table>
 </div>
