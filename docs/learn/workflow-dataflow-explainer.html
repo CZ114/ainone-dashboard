@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据流显微镜 — agent 怎么选中工作流 & 消息怎么在 agent 间流动</title>
+<style>
+  :root {
+    --bg: #f7f2ea; --card: #fffdf9; --border: #e6dccc; --border-strong: #d4c5ab;
+    --text: #3d3629; --muted: #8a7d68; --accent: #b0713f; --accent-soft: #c4854f;
+    --accent-bg: #f5e6d3; --green: #3d8b5f; --green-bg: #e8f3ec;
+    --red: #b8503d; --blue: #4a6fa5; --blue-bg: #e8eef7;
+    --purple: #7a5ba6; --purple-bg: #efe9f7;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 30px 18px 80px; }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  h1 { font-size: 25px; margin-bottom: 6px; }
+  h2 { font-size: 18px; margin: 38px 0 10px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .9em; background: var(--accent-bg); padding: 1px 5px; border-radius: 4px; }
+  .fx { display: block; margin-top: 8px; padding: 8px 12px; background: var(--accent-bg); border-left: 3px solid var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 13px; }
+  .fx::before { content: "🏷️ 打个比方 — "; font-weight: 700; color: var(--accent); }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px; }
+  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
+
+  /* 答案速览 */
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+  .two b { color: var(--accent); }
+  .two .panel { font-size: 13.5px; }
+
+  /* ── ① 识别区 ─────────────────────── */
+  .utter-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .utter { flex: 1; min-width: 230px; text-align: left; background: var(--card); border: 1.5px solid var(--border-strong); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; transition: all .15s; }
+  .utter:hover { border-color: var(--accent); }
+  .utter.on { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 2px 10px rgba(176,113,63,.18); }
+  .utter .tag { display: block; font-size: 10.5px; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: .05em; }
+  .decide-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .decide-grid { grid-template-columns: 1fr; } }
+  pre.payload { font-family: var(--mono); font-size: 12px; line-height: 1.75; background: #2e2a24; color: #d8cdb8; border-radius: 10px; padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; }
+  pre.payload .k { color: #9db8d8; }
+  pre.payload .s { color: #a8d8b4; }
+  pre.payload .dim { color: #7d766a; }
+  pre.payload .hot { background: rgba(255,202,133,.2); outline: 1.5px solid #c4854f; border-radius: 4px; padding: 0 2px; }
+  pre.payload .menu { background: rgba(122,91,166,.25); outline: 1.5px solid #9b7fc4; border-radius: 4px; padding: 0 2px; }
+  .decision { border-left: 4px solid var(--accent); }
+  .decision .think { font-size: 12.5px; color: var(--muted); font-style: italic; background: var(--blue-bg); border-radius: 8px; padding: 7px 11px; margin-bottom: 9px; }
+  .decision .think::before { content: "🧠 模型内心: "; font-style: normal; font-weight: 700; color: var(--blue); }
+  .decision pre { font-family: var(--mono); font-size: 12.5px; background: #2e2a24; color: #e8ddc8; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; line-height: 1.7; }
+  .decision pre .hot { color: #ffca85; font-weight: 700; }
+  .decision .verdict { margin-top: 8px; font-size: 13px; }
+  .decision .verdict b { color: var(--accent); }
+
+  /* ── ② 传递区 三视图 ─────────────────── */
+  .flow-grid { display: grid; grid-template-columns: 1.15fr .95fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 980px) { .flow-grid { grid-template-columns: 1fr; } }
+  /* 模板→渲染 */
+  .tpl { font-family: var(--mono); font-size: 12px; line-height: 1.9; background: #2e2a24; color: #d8cdb8; border-radius: 10px; padding: 11px 13px; white-space: pre-wrap; min-height: 150px; }
+  .slot { border-radius: 5px; padding: 0 4px; font-weight: 700; transition: all .3s; }
+  .slot.empty { outline: 1.5px dashed; }
+  .slot.filled { outline: 1.5px solid; }
+  .c0 { color: #e0a878; outline-color: #e0a878 !important; background: rgba(224,168,120,.14); }
+  .c1 { color: #a8d8b4; outline-color: #a8d8b4 !important; background: rgba(168,216,180,.14); }
+  .c2 { color: #9db8d8; outline-color: #9db8d8 !important; background: rgba(157,184,216,.14); }
+  .c3 { color: #d8a8cf; outline-color: #d8a8cf !important; background: rgba(216,168,207,.14); }
+  .c4 { color: #c9b6e8; outline-color: #c9b6e8 !important; background: rgba(201,182,232,.16); }
+  .tpl-note { margin-top: 7px; font-size: 11.5px; color: var(--muted); }
+  /* 变量池 */
+  .pool { display: flex; flex-direction: column; gap: 7px; min-height: 150px; }
+  .pv { border: 1.5px solid var(--border-strong); border-radius: 9px; padding: 6px 10px; background: var(--bg); transition: all .3s; }
+  .pv .k { font-family: var(--mono); font-size: 12px; font-weight: 800; }
+  .pv .v { font-size: 11.5px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv.fresh { animation: poolin .8s ease-out; outline: 2px solid var(--accent-soft); }
+  .pv.reading { outline: 2px solid var(--blue); box-shadow: 0 0 10px rgba(74,111,165,.3); }
+  .pv.overwritten { animation: flip .6s ease; }
+  @keyframes poolin { 0% { transform: translateY(-14px); opacity: 0; } 100% { transform: none; opacity: 1; } }
+  @keyframes flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+  .pv .k.k0 { color: #b07a3f; } .pv .k.k1 { color: #3d8b5f; } .pv .k.k2 { color: #4a6fa5; } .pv .k.k3 { color: #a6588f; } .pv .k.k4 { color: #7a5ba6; }
+  .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
+  /* 私有笔记本 */
+  .notebooks { display: flex; flex-direction: column; gap: 9px; min-height: 150px; }
+  .nb { border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 7px 10px; transition: all .3s; }
+  .nb.active { border-style: solid; border-color: var(--accent); background: var(--accent-bg); }
+  .nb .who { font-family: var(--mono); font-size: 12px; font-weight: 800; }
+  .nb .msgs { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+  .nb .m { font-size: 10.8px; font-family: var(--mono); padding: 2px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nb .m.new { outline: 1.5px solid var(--accent-soft); animation: poolin .5s; }
+  .nb .m .r { font-weight: 800; }
+  .nb .m .r.u { color: var(--blue); } .nb .m .r.a { color: var(--green); } .nb .m .r.s { color: var(--muted); }
+
+  /* 解说卡 + 控制 */
+  .explain { border-left: 4px solid var(--accent); margin-top: 12px; }
+  .explain .no { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 700; }
+  .explain .ttl { font-weight: 800; font-size: 16px; margin: 2px 0 5px; }
+  .explain .dsc { font-size: 13.5px; }
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  button.ctl { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); padding: 8px 18px; font-size: 14px; }
+  button.ctl:hover { border-color: var(--accent); }
+  button.ctl.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  button.ctl.primary:hover { background: var(--accent-soft); }
+  button.ctl:disabled { opacity: .4; cursor: default; }
+  .progress { flex: 1; min-width: 130px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); transition: width .3s; }
+  .kbd { font-size: 11.5px; color: var(--muted); }
+
+  .truth { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+  .truth b { color: var(--accent); }
+  .truth .panel { font-size: 13px; }
+  .src { font-family: var(--mono); font-size: 12px; background: #2e2a24; color: #e8ddc8; border-radius: 8px; padding: 10px 13px; line-height: 1.8; margin-top: 8px; white-space: pre; overflow-x: auto; }
+  .src .hot { color: #ffca85; font-weight: 700; }
+  .src .cm { color: #8a7d68; }
+  .foot { margin-top: 28px; color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🔬 数据流显微镜 — 两个"怎么"</h1>
+<p class="sub">系列第四篇。这次对准两个最容易想歪的机制，先给一句话答案，再让你亲手拨动数据看它流动。</p>
+
+<div class="two">
+  <div class="panel"><b>Q1 · agent 怎么知道该启动哪个工作流？</b><br>
+    没有分类器、没有关键词匹配代码——<code>run_workflow</code> 工具的<b>描述文字里印着一份工作流目录</b>（id+输入名+名称），这份目录随每一次 LLM 请求寄出。<b>是模型自己读目录、对号入座、从你的话里抽取输入填单。</b>
+    <span class="fx">服务员的随身手册里印着套餐菜单。客人说"来个双视角的"，服务员翻手册对上"双视角并行综述"，把客人的问题抄进点单栏——判断力在服务员（模型）脑子里，不在收银机（代码）里。</span></div>
+  <div class="panel"><b>Q2 · 工作流里 agent 之间怎么传消息？</b><br>
+    <b>就是字符串替换进提示词。</b>上一步的输出存进变量池 <code>context[步骤id]</code>；下一步的 prompt 模板里 <code>{diagnosis}</code> 这种占位符被<b>整段原文替换</b>，渲染结果作为一条普通 user 消息发给下一个 agent。agent 之间零直连——变量池+模板是唯一的桥。
+    <span class="fx">厨师们从不隔灶台喊话：做完把成品贴到公告板（变量池），下一位的菜谱上写着"取板上的{诊断}"，他抄进自己的工作单再开工。</span></div>
+</div>
+
+<h2>① 识别现场 — 点一句话，看模型对着"菜单"做决定</h2>
+<p class="sub">下面是<b>每次请求真实寄给 LLM 的包裹</b>（简化展示）。注意紫色高亮：工作流目录不是单独发的——它就藏在 <code>tools</code> 里 run_workflow 的描述文字中，每次都在。点三句不同的话，看右边模型怎么裁决。</p>
+
+<div class="utter-row">
+  <button class="utter" data-u="0"><span class="tag">明确点名</span>"用模拟问诊工作流处理这个病例：患者男 24 岁，夜间干咳两周…"</button>
+  <button class="utter" data-u="1"><span class="tag">没点名，只有语义</span>"帮我从正反两个角度分析：咖啡因对呼吸训练的影响"</button>
+  <button class="utter" data-u="2"><span class="tag">不相干的闲聊</span>"顺便问下，蓝牙连不上一般是什么原因？"</button>
+</div>
+
+<div class="decide-grid">
+  <div class="panel">
+    <h3>📤 寄给 LLM 的请求（每一轮都长这样）</h3>
+    <pre class="payload">{
+  <span class="k">"model"</span>: <span class="s">"MiniMax-M3"</span>,
+  <span class="k">"messages"</span>: [
+    { <span class="dim">system: "你是平台内置助手…用户请求匹配某个
+      预定义工作流场景时主动用 run_workflow…"</span> },
+    { <span class="k">"role"</span>: <span class="k">"user"</span>, <span class="k">"content"</span>: <span class="s hot" id="uSlot">（点上面任意一句话）</span> }
+  ],
+  <span class="k">"tools"</span>: [
+    <span class="dim">read_file… write_file… web_search…</span>
+    { <span class="k">"name"</span>: <span class="s">"run_workflow"</span>,
+      <span class="k">"description"</span>: <span class="s">"启动一个预定义的多智能体工作流…
+      <span class="menu">可用工作流: reflect_write(输入: task) = 写作反思循环;
+      dual_review(输入: question) = 双视角并行综述;
+      plan_confirm(输入: task) = 计划确认(人机协同);
+      clinic_sim(输入: complaint) = 模拟问诊(分诊→追问→诊断→核验)</span>
+      …inputs 传对象, 值从用户请求中提取"</span> }
+  ]
+}</pre>
+    <p class="tpl-note">紫色 = "菜单"。它是构建会话时从 workflows.json 生成的快照文字，<b>新定义的工作流对新会话自动出现在这里</b>。</p>
+  </div>
+  <div class="panel decision">
+    <h3>📥 模型的裁决</h3>
+    <div class="think" id="dThink">等待输入…</div>
+    <pre id="dOut"><span class="dim">—</span></pre>
+    <div class="verdict" id="dVerdict"></div>
+  </div>
+</div>
+
+<h2>② 传递现场 — 变量池 · 模板渲染 · 私有笔记本 三视图联动</h2>
+<p class="sub">用你跑过的 <code>clinic_sim</code> 真实数据走一遍。盯住三件事：<b>占位符被池里的值填充</b>（同色对应）、渲染结果<b>作为 user 消息写进该 agent 自己的笔记本</b>、输出<b>回流入池</b>（修订时旧值被覆盖）。</p>
+
+<div class="flow-grid">
+  <div class="panel">
+    <h3 id="tplTitle">📄 当前步骤的 prompt 模板</h3>
+    <div class="tpl" id="tplBox">（按「下一步」开始）</div>
+    <p class="tpl-note" id="tplNote"></p>
+  </div>
+  <div class="panel">
+    <h3>🗂 变量池 context（公告板）</h3>
+    <div class="pool" id="poolBox"><span class="empty-hint">仅有工作流输入</span></div>
+  </div>
+  <div class="panel">
+    <h3>📓 各 agent 的私有笔记本（互相看不见）</h3>
+    <div class="notebooks" id="nbBox"></div>
+  </div>
+</div>
+
+<div class="panel explain">
+  <div class="no" id="sNo"></div>
+  <div class="ttl" id="sTtl"></div>
+  <div class="dsc" id="sDsc"></div>
+  <div class="fx" id="sFx"></div>
+</div>
+
+<div class="controls">
+  <button class="ctl primary" id="btnNext">下一步 ▸</button>
+  <button class="ctl" id="btnAuto">▶ 自动播放</button>
+  <button class="ctl" id="btnReset">↺ 重置</button>
+  <div class="progress"><i id="prog" style="width:0%"></i></div>
+  <span class="kbd" id="progTxt"></span>
+</div>
+
+<h2>③ 三条底层真相（对照真实源码）</h2>
+<div class="truth">
+  <div class="panel"><b>1 · 传递 = 渲染 + send，就两行</b>
+    <div class="src"><span class="cm"># workflow.py — 所谓"消息传递"的全部实现</span>
+prompt = <span class="hot">render_template(step["prompt"], context)</span>
+output = node(step["agent"])<span class="hot">.send(prompt)</span>
+<span class="hot">context[step["id"]] = output</span>   <span class="cm"># 回流入池, 同名覆盖</span></div></div>
+  <div class="panel"><b>2 · agent 之间零直连</b><br>
+    doctor 从没"听见"triage 说话——它只是收到了一条 user 消息，里面恰好抄着 triage 的输出。两个 agent 的笔记本完全隔离；跨 agent 的信息想过去，必须走 <b>池→模板</b> 这一条明桥。好处：每一步收到什么、依据什么，全部可审计（RUN HISTORY 里的原文就是证据）。</div>
+  <div class="panel"><b>3 · 同一 agent 跨轮有两条通道</b><br>
+    修订轮的 doctor 是<b>同一个实例</b>（节点缓存），所以它有：①自己的私有记忆（上一轮完整对话还在笔记本里）+ ②模板注入的 <code>{review}</code>（池通道）。这就是为什么修订版能"逐条回应"核验意见而不需要把初诊全文再喂一遍。</div>
+</div>
+
+<div class="foot">系列：① agent-integration（房子怎么盖）② workflow-engine（引擎怎么转）③ json-message-flow（数据怎么进出）④ 本篇（决策与传递的显微镜）。源码：<code>agent/orchestration/workflow.py</code> 的 render_template / _run_agent_step；目录生成在 <code>agent_service/agent_tools.py</code> 的 run_workflow 描述。</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ═══════════ ① 识别互动 ═══════════ */
+const UTTERS = [
+  {
+    text: '用模拟问诊工作流处理这个病例：患者男 24 岁，夜间干咳两周…',
+    think: '用户明说了"模拟问诊工作流"→ 对照菜单第 4 项 clinic_sim；它要的输入叫 complaint → 把病例描述抄进去。',
+    out: `<span class="hot">tool_call</span> {
+  "name": "run_workflow",
+  "arguments": {
+    "workflow_id": <span class="hot">"clinic_sim"</span>,
+    "inputs": { "complaint":
+      <span class="hot">"患者男 24 岁，夜间干咳两周…"</span> }
+  }
+}`,
+    verdict: '<b>直接命中。</b>关键词帮了忙，但真正的动作是模型把你的自然语言拆成了结构化参数——workflow_id 选对 + complaint 提取干净。'
+  },
+  {
+    text: '帮我从正反两个角度分析：咖啡因对呼吸训练的影响',
+    think: '没提任何工作流名。但"正反两个角度分析"≈ 菜单第 2 项"双视角并行综述"的场景描述 → 语义匹配 dual_review；输入名是 question。',
+    out: `<span class="hot">tool_call</span> {
+  "name": "run_workflow",
+  "arguments": {
+    "workflow_id": <span class="hot">"dual_review"</span>,
+    "inputs": { "question":
+      <span class="hot">"咖啡因对呼吸训练的影响"</span> }
+  }
+}`,
+    verdict: '<b>语义命中——这才是"识别"的本体。</b>不靠字面，靠模型理解"你想要什么"和"菜单里有什么"的对应关系。菜单描述写得越清楚，这一步越稳。'
+  },
+  {
+    text: '顺便问下，蓝牙连不上一般是什么原因？',
+    think: '扫一遍菜单：写作反思？双视角？问诊？都不沾边。这是个普通技术问题 → 不调 run_workflow，直接回答（顶多用 web_search 查查）。',
+    out: `<span class="dim">（没有 tool_call — 普通文本回复）</span>
+"蓝牙连不上常见三类原因：
+ 1. 设备未进入配对模式…
+ 2. 缓存的旧配对记录冲突…"`,
+    verdict: '<b>不命中就不启动。</b>工具是"可用"不是"必用"——菜单在手边，但模型判断这单不需要开工作流。误启动率低的关键也在菜单描述的边界写清楚。'
+  },
+];
+document.querySelectorAll('.utter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.utter').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    const u = UTTERS[+btn.dataset.u];
+    $('uSlot').textContent = '"' + u.text + '"';
+    $('dThink').textContent = u.think;
+    $('dOut').innerHTML = u.out;
+    $('dVerdict').innerHTML = u.verdict;
+  });
+});
+
+/* ═══════════ ② 传递互动 ═══════════ */
+// 变量池键 → 颜色号
+const KEYS = ['complaint', 'triage', 'answers', 'diagnosis', 'review'];
+const kc = k => 'k' + KEYS.indexOf(k);
+const sc = k => 'c' + KEYS.indexOf(k);
+
+const VALS = {
+  complaint: '患者男，24 岁…夜间反复干咳，打篮球后胸闷…既往过敏性鼻炎…',
+  triage: '【紧急度】Ⅲ 亚紧急…【结构化摘要】…【追问】1.咳嗽与运动… 2.夜间细节… 3.过敏与家族…',
+  answers: '1.打半场就胸闷，冷空气易发作… 2.凌晨两三点咳醒，能平卧… 3.母亲有哮喘，没做过肺功能…',
+  diagnosis: '【鉴别诊断】1.咳嗽变异性哮喘/运动诱发… 2.上气道咳嗽综合征… 【建议检查】肺功能+激发试验…',
+  diagnosis2: '# 核验意见逐条回应…【鉴别诊断】(修订) 补充 FeNO 三档切点、VCD/EILO 独立鉴别…',
+  review: '发现若干需修正问题：1.FeNO 切点未分档 2.舒张试验表述与 GINA 不一致 …共 9 条',
+  review2: 'PASS — v2 已针对全部 9 项意见做出实质性修订…',
+};
+// 模板定义: 段落数组, {k:'complaint'} 为槽位
+const TPL = {
+  triage: [ '患者主诉与病史:\n', {k:'complaint'} ],
+  human:  [ '【分诊台】\n', {k:'triage'}, '\n\n请扮演患者, 按编号回答【追问】…' ],
+  doctor: [ '患者主诉:\n', {k:'complaint'}, '\n\n分诊结果:\n', {k:'triage'}, '\n\n患者对追问的回答:\n', {k:'answers'}, '\n\n请先检索知识库, 再输出诊断分析。' ],
+  verify: [ '请核验以下诊断分析。\n患者主诉: ', {k:'complaint'}, '\n患者补充: ', {k:'answers'}, '\n\n诊断分析:\n', {k:'diagnosis'} ],
+  revise: [ '核验医师对你上一版诊断的意见:\n', {k:'review'}, '\n\n请逐条回应并输出修订后的完整诊断分析。' ],
+};
+
+// 每拍状态
+const STEPS2 = [
+  { no:'第 0 拍', ttl:'开场：池里只有工作流输入', tpl:null, tplTitle:'📄 prompt 模板', note:'',
+    pool:{complaint:'complaint'}, reading:[], fresh:['complaint'], nbs:{},
+    dsc:'run(inputs) 把你聊天里给的病例存为 {complaint}。此刻三个 agent 都还没被创建——节点实例是"首次用到才构建"。',
+    fx:'开工前，公告板上只钉着客人的原始点单。' },
+  { no:'第 1 拍', ttl:'triage 步：一个槽位的最小示范', tpl:'triage', tplTitle:'📄 triage 步的模板', note:'{complaint} 被池中原文整段替换 → 渲染结果作为 user 消息写进 triage 的笔记本（右侧）。',
+    pool:{complaint:'complaint'}, reading:['complaint'], fresh:[],
+    nbs:{ triage:{active:1, msgs:[['s','system: 你是分诊医师…'],['u','user: 患者主诉与病史: 患者男24岁…','new']]} },
+    dsc:'看三栏联动：池里 {complaint} 亮蓝（被读取）→ 模板槽位同色填充 → triage 笔记本多了一条 user 消息。对 agent 来说这就是一条普通对话，它不知道"工作流"的存在。',
+    fx:'厨师拿到的工作单上，客人点单已经被誊写进去——他不必知道单子是谁抄的。' },
+  { no:'第 2 拍', ttl:'输出回流：{triage} 入池', tpl:'triage', tplTitle:'📄 triage 步的模板', note:'',
+    pool:{complaint:'complaint', triage:'triage'}, reading:[], fresh:['triage'],
+    nbs:{ triage:{msgs:[['s','system: 你是分诊医师…'],['u','user: 患者主诉与病史…'],['a','assistant: 【紧急度】Ⅲ…【追问】…','new']]} },
+    dsc:'triage 的回答一字不动存进 context["triage"]。注意池条目的键就是步骤 id——这就是后续模板里 {triage} 能取到它的原因。',
+    fx:'成品贴上公告板，标签写着工位号。' },
+  { no:'第 3 拍', ttl:'human 步：你也是一个"节点"', tpl:'human', tplTitle:'📄 human 步的模板', note:'{triage} 填进提问模板 → 这就是聊天里那张琥珀色追问卡的全文来源。',
+    pool:{complaint:'complaint', triage:'triage', answers:'answers'}, reading:['triage'], fresh:['answers'],
+    nbs:{ triage:{msgs:[['s','system: 分诊…'],['u','user: 患者主诉…'],['a','assistant: 【紧急度】…']]} },
+    dsc:'human 步没有笔记本——你的回答直接以 {answers} 入池。人类和 agent 在数据流里地位完全一样：都是"收到渲染后的提示 → 交回一段文本"。',
+    fx:'公告板不问贴条的是厨师还是客人——是内容就上板。' },
+  { no:'第 4 拍', ttl:'doctor 步：三个槽位同时取货', tpl:'doctor', tplTitle:'📄 doctor 步的模板（三槽）', note:'{complaint}{triage}{answers} 三段原文拼进同一条 user 消息——这就是"上游全部上下文"的物理形态。',
+    pool:{complaint:'complaint', triage:'triage', answers:'answers'}, reading:['complaint','triage','answers'], fresh:[],
+    nbs:{ triage:{msgs:[['s','…'],['u','…'],['a','…']]}, doctor:{active:1, msgs:[['s','system: 你是诊断医师, 必须先检索…'],['u','user: 患者主诉:…分诊结果:…回答:…','new']]} },
+    dsc:'doctor 首次登场（实例此刻才构建）。它收到的那条 user 消息里，triage 的话是"转述"不是"对话"——两个 agent 从头到尾没说过话。',
+    fx:'新厨师上岗，工作单上抄好了板上三张条子。前一位厨师人都下班了。' },
+  { no:'第 5 拍', ttl:'诊断入池 → verifier 引用它', tpl:'verify', tplTitle:'📄 verifier 步的模板', note:'{diagnosis} 槽位取的是 doctor 刚入池的完整诊断。',
+    pool:{complaint:'complaint', triage:'triage', answers:'answers', diagnosis:'diagnosis'}, reading:['complaint','answers','diagnosis'], fresh:['diagnosis'],
+    nbs:{ doctor:{msgs:[['s','…'],['u','user: 患者主诉…'],['a','assistant: 【鉴别诊断】…','new']]}, verifier:{active:1, msgs:[['s','system: 你是核验医师…'],['u','user: 请核验以下诊断分析…','new']]} },
+    dsc:'verifier 拿到的也只是文本。它给出 9 条修正意见 → {review} 入池（下一拍）。到这里数据流形成了链：complaint → triage → answers → diagnosis → review。',
+    fx:'质检员对着公告板上的成品挑毛病，意见照样贴回板上。' },
+  { no:'第 6 拍', ttl:'修订轮：两条通道 + 覆盖写入', tpl:'revise', tplTitle:'📄 修订步的模板（注意只注入 {review}）', note:'模板只带 {review}——初诊内容呢？在 doctor 自己的笔记本里！',
+    pool:{complaint:'complaint', triage:'triage', answers:'answers', diagnosis:'diagnosis2', review:'review'}, reading:['review'], fresh:['review'], overwrite:['diagnosis'],
+    nbs:{ doctor:{active:1, msgs:[['s','…'],['u','user: 患者主诉…(第一轮)'],['a','assistant: 初诊…(第一轮)'],['u','user: 核验意见: 9条…','new'],['a','assistant: 逐条回应+修订版…','new']]}, verifier:{msgs:[['s','…'],['u','…'],['a','assistant: 9条意见']]} },
+    dsc:'关键一拍：修订的 doctor 是同一个实例——①它记得初诊全过程（私有记忆通道），②{review} 从池里注入（公告板通道）。修订输出的步骤 id 还叫 diagnosis → 池里旧值被覆盖（看 diagnosis 条目翻转动画）。',
+    fx:'同一位厨师返工：他记得自己怎么做的（不用重抄），只需看质检条。改好的成品盖掉板上旧的那份。' },
+  { no:'第 7 拍', ttl:'终局：PASS 跳出，output 取终值', tpl:null, tplTitle:'📄 output 模板: "{diagnosis}"', note:'',
+    pool:{complaint:'complaint', triage:'triage', answers:'answers', diagnosis:'diagnosis2', review:'review2'}, reading:['diagnosis'], fresh:['review'],
+    nbs:{ doctor:{msgs:[['s','…'],['u','…'],['a','…'],['u','…'],['a','修订版 ✓']]}, verifier:{msgs:[['s','…'],['u','…'],['a','…'],['u','user: 请核验(v2)…'],['a','assistant: PASS — v2…','new']]} },
+    dsc:'verifier 复验 → {review} 更新为 PASS → break_if 命中跳出循环。最后 output 模板 "{diagnosis}" 从池里取的自然是修订版（覆盖语义的意义所在）。整条链的每一环都躺在 RUN HISTORY 里可回放。',
+    fx:'质检盖章，公告板上最新那份成品端给客人。板上的贴条历史，就是这道菜的全部履历。' },
+];
+
+let cur2 = -1, timer2 = null;
+function renderTpl(name) {
+  if (!name) { $('tplBox').innerHTML = '<span style="color:#7d766a">（本拍无模板渲染）</span>'; return; }
+  const s = STEPS2[cur2];
+  $('tplBox').innerHTML = TPL[name].map(part => {
+    if (typeof part === 'string') return part.replace(/</g,'&lt;');
+    const filled = s.reading.includes(part.k);
+    const cls = sc(part.k) + (filled ? ' slot filled' : ' slot empty');
+    const val = VALS[s.pool[part.k]] || '';
+    return `<span class="${cls}">${filled ? '{'+part.k+'}→ ' + val.slice(0, 26) + '…' : '{'+part.k+'}'}</span>`;
+  }).join('');
+}
+function render2() {
+  const s = STEPS2[cur2];
+  $('sNo').textContent = s.no + ' / 共 ' + STEPS2.length + ' 拍';
+  $('sTtl').textContent = s.ttl;
+  $('sDsc').textContent = s.dsc;
+  $('sFx').textContent = s.fx;
+  $('tplTitle').textContent = s.tplTitle;
+  $('tplNote').textContent = s.note;
+  renderTpl(s.tpl);
+  // 池
+  $('poolBox').innerHTML = Object.entries(s.pool).map(([k, vkey]) => {
+    const cls = ['pv',
+      s.fresh.includes(k) ? 'fresh' : '',
+      s.reading.includes(k) ? 'reading' : '',
+      (s.overwrite||[]).includes(k) ? 'overwritten' : ''].join(' ');
+    return `<div class="${cls}"><div class="k ${kc(k)}">{${k}}${(s.overwrite||[]).includes(k) ? ' <span style="font-size:10px;color:var(--red)">已覆盖 v1→v2</span>' : ''}</div><div class="v">${VALS[vkey]}</div></div>`;
+  }).join('') || '<span class="empty-hint">空</span>';
+  // 笔记本
+  const order = ['triage','doctor','verifier'];
+  $('nbBox').innerHTML = order.filter(n => s.nbs[n]).map(n => {
+    const nb = s.nbs[n];
+    return `<div class="nb ${nb.active ? 'active' : ''}"><div class="who">🤖 ${n}${nb.active ? ' · 工作中' : ''}</div><div class="msgs">${
+      nb.msgs.map(m => `<div class="m ${m[2]||''}"><span class="r ${m[0]}">${m[0]==='u'?'👤':m[0]==='a'?'🗣':'⚙'}</span> ${m[1]}</div>`).join('')
+    }</div></div>`;
+  }).join('') || '<span class="empty-hint">还没有 agent 被构建（首次用到才创建实例）</span>';
+  $('prog').style.width = ((cur2+1)/STEPS2.length*100) + '%';
+  $('progTxt').textContent = '空格=下一步, R=重置';
+  $('btnNext').disabled = cur2 >= STEPS2.length - 1;
+  if (cur2 >= STEPS2.length - 1) stopAuto2();
+}
+function next2() { if (cur2 < STEPS2.length - 1) { cur2++; render2(); } }
+function reset2() { stopAuto2(); cur2 = 0; render2(); }
+function stopAuto2() { if (timer2) { clearInterval(timer2); timer2 = null; $('btnAuto').textContent = '▶ 自动播放'; } }
+$('btnNext').onclick = next2;
+$('btnReset').onclick = reset2;
+$('btnAuto').onclick = () => {
+  if (timer2) { stopAuto2(); return; }
+  if (cur2 >= STEPS2.length - 1) cur2 = -1;
+  $('btnAuto').textContent = '⏸ 暂停';
+  next2(); timer2 = setInterval(next2, 4200);
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); next2(); }
+  if (e.key === 'r' || e.key === 'R') reset2();
+});
+reset2();
+</script>
+</body>
+</html>
