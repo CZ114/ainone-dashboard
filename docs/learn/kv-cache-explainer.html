@@ -139,6 +139,124 @@
   <div class="exp-note" id="expNote"></div>
 </div>
 
+<h2>② 续 · 跨轮动态对比 — 上一轮已有内容，下一轮从哪开始重算 <span class="en">turn-over-turn recompute</span></h2>
+<p class="sub">单轮视角看不出缓存的真实工作方式——它是<b>拿本轮请求和服务器里上一轮留下的 KV 笔记逐块比对</b>。点「播放对比」看扫描指针从左到右走：能对上的复用（绿），<b>第一个对不上的位置</b>就是重算起点（⚡），其后全部重新 prefill（橙）。切换布局看差异。</p>
+
+<style>
+  .cmp-toggle { display: flex; gap: 8px; margin: 10px 0; }
+  .cmp-rows { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+  .cmp-row-label { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+  .cmp-strip { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cb { min-width: 62px; text-align: center; border-radius: 8px; border: 2px solid var(--border-strong); padding: 4px 6px; font-family: var(--mono); font-size: 10.5px; background: var(--bg); transition: all .25s; position: relative; }
+  .cb small { display: block; font-size: 9px; opacity: .8; font-family: system-ui; }
+  .cb.cached { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+  .cb.ghosted { opacity: .35; border-style: dashed; }
+  .cb.hit { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .cb.scan { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); animation: scanp .5s infinite alternate; }
+  @keyframes scanp { to { transform: translateY(-2px); } }
+  .cb.mism { background: var(--red-bg); border-color: var(--red); color: var(--red); transform: scale(1.06); }
+  .cb.redo { background: var(--accent-bg); border-color: var(--accent-soft); color: var(--accent); }
+  .cb.dynb { outline: 2px dashed var(--accent); outline-offset: 2px; }
+  .cmp-note { margin-top: 10px; font-size: 13px; border-left: 3px solid var(--blue); background: var(--blue-bg); padding: 7px 11px; border-radius: 0 8px 8px 0; min-height: 40px; }
+  .cmp-stats { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+</style>
+
+<div class="preset-row cmp-toggle">
+  <button class="preset on" id="cmpNew">新布局 · 注入尾置（现状）</button>
+  <button class="preset" id="cmpOld">旧布局 · 注入放 L2</button>
+</div>
+<div class="panel">
+  <div class="cmp-rows">
+    <div>
+      <div class="cmp-row-label">第 N 轮请求（已服务完 — 这些块的 KV 躺在服务器缓存里）</div>
+      <div class="cmp-strip" id="rowA"></div>
+    </div>
+    <div>
+      <div class="cmp-row-label">第 N+1 轮请求（到达 → 与缓存逐块比对前缀）</div>
+      <div class="cmp-strip" id="rowB"></div>
+    </div>
+  </div>
+  <div class="cmp-note" id="cmpNote">点「播放对比」开始。</div>
+  <div class="cmp-stats stat-row">
+    <div class="stat" id="cmpHit"><b>—</b><span>复用块（直接加载 KV）</span></div>
+    <div class="stat" id="cmpRedo"><b>—</b><span>重算块（重新 prefill）</span></div>
+  </div>
+  <div class="playrow" style="margin-top:12px">
+    <button class="ctl primary" id="cmpPlay">▶ 播放对比</button>
+    <button class="ctl" id="cmpReset">↺ 重置</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  // 布局数据: A=上一轮序列, B=本轮序列, mism=B中第一个对不上的下标
+  const LAYOUTS = {
+    tail: {
+      A: [['system',''],['tools',''],['历史1',''],['历史2',''],['历史3',''],['注入₁','每轮变',1],['消息₁','上轮新']],
+      B: [['system',''],['tools',''],['历史1',''],['历史2',''],['历史3',''],['消息₁','上轮的'],['回复₁','上轮的'],['注入₂','每轮变',1],['消息₂','本轮新']],
+      mism: 5,
+      mismWhy: '⚡ 分歧点：缓存里这个位置是<b>注入₁</b>（上一轮的动态块），本轮同位置是<b>消息₁</b>——对不上。注意妙处：<b>消息₁ 内容一个字没变，也要重算</b>，因为它的前缀变了（注入₁消失了），而 KV 依赖前文全部内容。这就是"易失注入"的固有代价——但它被刻意排到了序列尾部，所以只殃及尾巴几块。',
+      done: '重算的 4 块里，回复₁/注入₂/消息₂ 本来就是新内容必然要算——真正的"额外代价"只有消息₁ 一块。对比旧布局：这就是尾置的全部意义。',
+    },
+    l2: {
+      A: [['system',''],['tools',''],['注入₁','每轮变',1],['历史1',''],['历史2',''],['历史3',''],['消息₁','上轮新']],
+      B: [['system',''],['tools',''],['注入₂','每轮变',1],['历史1',''],['历史2',''],['历史3',''],['消息₁','上轮的'],['回复₁','上轮的'],['消息₂','本轮新']],
+      mism: 2,
+      mismWhy: '⚡ 分歧点：同一位置上，上一轮是<b>注入₁</b>、本轮是<b>注入₂</b>——位置没变但<b>内容变了</b>（时间戳/最新数据），哈希对不上。它身后的整段历史虽然一个字没动，KV 也全部作废。',
+      done: '重算 7 块，其中历史 1-3 + 消息₁ 共 4 块是"无辜躺枪"——内容全没变，只因排在变化点之后。每一轮都要为全部历史重新付费，会话越长越亏。',
+    },
+  };
+  let mode = 'tail', timer = null, phase = -1;   // phase: -1 未开始; 0..len 扫描位置; 99 完结
+
+  function blockHtml(b, cls) {
+    return `<div class="cb ${cls} ${b[2] ? 'dynb' : ''}">${b[0]}<small>${b[1] || '&nbsp;'}</small></div>`;
+  }
+  function render() {
+    const L = LAYOUTS[mode];
+    $('rowA').innerHTML = L.A.map((b, i) => {
+      let cls = 'cached';
+      if (phase >= L.mism && i === L.mism) cls += ' ghosted mism';   // 分歧位的旧块虚化展示
+      return blockHtml(b, cls);
+    }).join('');
+    $('rowB').innerHTML = L.B.map((b, i) => {
+      let cls = '';
+      if (phase === -1) cls = '';
+      else if (i < Math.min(phase, L.mism)) cls = 'hit';
+      else if (i === phase && phase < L.mism) cls = 'scan';
+      else if (phase >= L.mism && i === L.mism) cls = 'mism';
+      else if (phase >= 99 && i > L.mism) cls = 'redo';
+      return blockHtml(b, cls);
+    }).join('');
+    // 说明与统计
+    if (phase === -1) { $('cmpNote').innerHTML = '点「播放对比」开始。上排蓝色 = 服务器里已有的 KV 笔记。'; }
+    else if (phase < L.mism) { $('cmpNote').innerHTML = `🔍 逐块比对中… 第 ${phase + 1} 块与缓存<b>逐字一致</b> → 直接复用其 KV，零计算。`; }
+    else if (phase < 99) { $('cmpNote').innerHTML = L.mismWhy; }
+    else { $('cmpNote').innerHTML = L.mismWhy + '<br><br>🏁 ' + L.done; }
+    const hits = phase === -1 ? '—' : String(Math.min(phase >= 99 ? L.mism : Math.min(phase, L.mism), L.mism));
+    const redo = phase >= 99 ? String(L.B.length - L.mism) : '—';
+    $('cmpHit').className = 'stat good'; $('cmpHit').firstElementChild.textContent = hits;
+    $('cmpRedo').className = 'stat ' + (mode === 'tail' ? 'mid' : 'bad');
+    $('cmpRedo').firstElementChild.textContent = redo;
+    $('cmpNew').classList.toggle('on', mode === 'tail');
+    $('cmpOld').classList.toggle('on', mode === 'l2');
+  }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } }
+  $('cmpPlay').onclick = () => {
+    stop(); phase = 0; render();
+    timer = setInterval(() => {
+      const L = LAYOUTS[mode];
+      if (phase < L.mism) { phase++; render(); }
+      else if (phase < 99) { phase = 99; render(); stop(); }
+    }, 550);
+  };
+  $('cmpReset').onclick = () => { stop(); phase = -1; render(); };
+  $('cmpNew').onclick = () => { stop(); mode = 'tail'; phase = -1; render(); };
+  $('cmpOld').onclick = () => { stop(); mode = 'l2'; phase = -1; render(); };
+  render();
+})();
+</script>
+
 <h2>③ 定量武器库 <span class="en">numbers you can cite</span></h2>
 <div class="panel">
   <b style="font-size:14px">KV cache 每 token 占多大？（追问率极高）</b>
