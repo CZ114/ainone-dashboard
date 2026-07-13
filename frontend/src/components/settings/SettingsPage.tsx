@@ -12,18 +12,16 @@ import { ThemeToggle } from '../ThemeToggle';
 import { ThemePicker } from '../ThemePicker';
 import { ExtensionCard } from './ExtensionCard';
 import { ModelRoutingPanel } from './ModelRoutingPanel';
-import { AgentsPanel } from './AgentsPanel';
 import { KnowledgePanel } from './KnowledgePanel';
-import { WorkflowsPanel } from './WorkflowsPanel';
+import { OrchestrationPanel } from './OrchestrationPanel';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 import { useT } from '../../contexts/LanguageContext';
 
 type Tab =
   | 'extensions'
   | 'model'
-  | 'agents'
+  | 'orchestration'
   | 'knowledge'
-  | 'workflows'
   | 'diary'
   | 'appearance'
   | 'about';
@@ -31,9 +29,8 @@ type Tab =
 const TAB_IDS: readonly Tab[] = [
   'extensions',
   'model',
-  'agents',
+  'orchestration',
   'knowledge',
-  'workflows',
   'diary',
   'appearance',
   'about',
@@ -44,8 +41,10 @@ export function SettingsPage() {
   const t = useT();
   const [searchParams] = useSearchParams();
   const initialTab: Tab = (() => {
-    const t = searchParams.get('tab');
-    if (t && (TAB_IDS as readonly string[]).includes(t)) return t as Tab;
+    const q = searchParams.get('tab');
+    // 向后兼容：旧的 ?tab=agents / ?tab=workflows 都归入合并后的「编排」tab。
+    if (q === 'agents' || q === 'workflows') return 'orchestration';
+    if (q && (TAB_IDS as readonly string[]).includes(q)) return q as Tab;
     return 'extensions';
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -107,14 +106,14 @@ export function SettingsPage() {
         <TabButton active={activeTab === 'model'} onClick={() => setActiveTab('model')}>
           🧠 {t.settings.tabs.model}
         </TabButton>
-        <TabButton active={activeTab === 'agents'} onClick={() => setActiveTab('agents')}>
-          🤖 {t.settings.tabs.agents}
+        <TabButton
+          active={activeTab === 'orchestration'}
+          onClick={() => setActiveTab('orchestration')}
+        >
+          🎭 {t.settings.tabs.orchestration}
         </TabButton>
         <TabButton active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')}>
           📚 {t.settings.tabs.knowledge}
-        </TabButton>
-        <TabButton active={activeTab === 'workflows'} onClick={() => setActiveTab('workflows')}>
-          🔁 {t.settings.tabs.workflows}
         </TabButton>
         <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
           📓 {t.settings.tabs.diary}
@@ -127,11 +126,11 @@ export function SettingsPage() {
         </TabButton>
       </nav>
 
-      {/* Body — workflows 的可视化画布需要并排的 JSON 侧栏, 给更宽的容器 */}
+      {/* Body — 编排 tab 的可视化画布需要并排的 JSON 侧栏, 给更宽的容器 */}
       <main className="flex-1 overflow-y-auto">
         <div
           className={`${
-            activeTab === 'workflows' ? 'max-w-7xl' : 'max-w-3xl'
+            activeTab === 'orchestration' ? 'max-w-7xl' : 'max-w-3xl'
           } mx-auto w-full px-6 py-6`}
         >
           {activeTab === 'extensions' && (
@@ -143,9 +142,10 @@ export function SettingsPage() {
             />
           )}
           {activeTab === 'model' && <ModelRoutingPanel />}
-          {activeTab === 'agents' && <AgentsPanel />}
+          {activeTab === 'orchestration' && (
+            <OrchestrationPanel onGoToKnowledge={() => setActiveTab('knowledge')} />
+          )}
           {activeTab === 'knowledge' && <KnowledgePanel />}
-          {activeTab === 'workflows' && <WorkflowsPanel />}
           {activeTab === 'diary' && <DiarySettingsPanel />}
           {activeTab === 'appearance' && <ThemePicker />}
           {activeTab === 'about' && <AboutTabBody />}

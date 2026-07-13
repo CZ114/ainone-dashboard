@@ -12,6 +12,7 @@ import {
   type WorkflowUpsertBody,
 } from '../../api/agentAdminApi';
 import { useT } from '../../contexts/LanguageContext';
+import { onEditWorkflow } from '../../lib/orchestrationBus';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import {
   newSpecTemplate,
@@ -199,6 +200,34 @@ export function WorkflowsPanel() {
     }
     setEditorOpening(null);
   };
+
+  // ---- 编排 tab 跨面板跳转（orch:edit-workflow，见 lib/orchestrationBus） ----
+  // AgentsPanel 卡片上的「用于 🔁 wf」chips 派发此事件 → 打开该工作流的
+  // 编辑器并滚动到位。监听器只挂一次，经 ref 始终调用最新的 openEdit。
+
+  const editorRef = useRef<HTMLElement | null>(null);
+  const scrollEditorRef = useRef(false);
+  const openEditRef = useRef<(id: string) => void>(() => {});
+  openEditRef.current = (id: string) => {
+    scrollEditorRef.current = true;
+    void openEdit(id);
+  };
+
+  useEffect(
+    () =>
+      onEditWorkflow((id) => {
+        if (id) openEditRef.current(id);
+      }),
+    [],
+  );
+
+  // 经跳转打开的编辑器滚动到位（普通点「编辑」不滚）。
+  useEffect(() => {
+    if (editor && scrollEditorRef.current) {
+      scrollEditorRef.current = false;
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [editor]);
 
   /** 画布/表单侧的改动：更新 spec，并在侧栏「干净」时重排版 JSON 文本。 */
   const applyCanvasSpec = (next: SpecDraft) => {
@@ -792,7 +821,10 @@ export function WorkflowsPanel() {
       {/* Editor — inline expanding panel（同 AgentsPanel）：
           顶部字段行 → 左画布 + 右 JSON 同步栏（窄屏 flex-wrap 换行下堆） */}
       {editor && spec && (
-        <section className="rounded-lg border border-accent/40 bg-card-bg/40 p-4 space-y-3">
+        <section
+          ref={editorRef}
+          className="rounded-lg border border-accent/40 bg-card-bg/40 p-4 space-y-3"
+        >
           <h3 className="text-sm font-semibold text-text-primary">
             {editor.isNew ? tw.editor.titleNew : tw.editor.titleEdit(editor.id)}
           </h3>

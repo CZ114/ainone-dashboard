@@ -2,7 +2,7 @@
 // 以及网关侧 secrets 管理（agent env 通过 ${NAME} 引用）。
 // default agent 是运行时配置的只读镜像，只能测试，不能编辑/删除。
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   agentAdminApi,
   type AgentDef,
@@ -13,8 +13,10 @@ import {
   type ProviderInfo,
   type RagCollection,
   type SecretEntry,
+  type WorkflowSummary,
 } from '../../api/agentAdminApi';
 import { useT } from '../../contexts/LanguageContext';
+import { dispatchEditWorkflow, onEditAgent } from '../../lib/orchestrationBus';
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{1,39}$/;
 
@@ -63,6 +65,9 @@ export function AgentsPanel() {
   // providers / collections 仅供编辑器下拉；加载失败时静默降级。
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [collections, setCollections] = useState<RagCollection[]>([]);
+  // 反向引用：每张 agent 卡片显示「用于哪些工作流」chips（编排 tab 的
+  // 概念链可视化）。只在挂载时拉一次；失败静默降级为不显示。
+  const [usageWorkflows, setUsageWorkflows] = useState<WorkflowSummary[]>([]);
 
   const [testState, setTestState] = useState<Record<string, TestUiState>>({});
   const [editor, setEditor] = useState<{ isNew: boolean; draft: AgentDraft } | null>(
@@ -70,6 +75,10 @@ export function AgentsPanel() {
   );
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
+  // orch:edit-agent 跳转的滚动配合：卡片按 id 记 ref；编辑器打开后滚到位。
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const editorRef = useRef<HTMLElement | null>(null);
+  const scrollEditorRef = useRef(false);
 
   // secrets
   const [secrets, setSecrets] = useState<SecretEntry[]>([]);
@@ -132,6 +141,10 @@ export function AgentsPanel() {
     void agentAdminApi
       .listCollections()
       .then((r) => setCollections(r.collections))
+      .catch(() => {});
+    void agentAdminApi
+      .listWorkflows()
+      .then((r) => setUsageWorkflows(r.workflows))
       .catch(() => {});
   }, [refreshAgents, refreshSecrets, refreshMcp]);
 
@@ -220,6 +233,53 @@ export function AgentsPanel() {
   const patchDraft = (patch: Partial<AgentDraft>) => {
     setEditor((e) => (e ? { ...e, draft: { ...e.draft, ...patch } } : e));
   };
+
+  // ---- 编排 tab 跨面板跳转（orch:edit-agent，见 lib/orchestrationBus） ----
+
+  /** 最新闭包引用 — 监听器只挂一次，处理逻辑始终读到当前 agents/openEdit。 */
+  const editAgentByIdRef = useRef<(agentId: string) => void>(() => {});
+  editAgentByIdRef.current = (agentId: string) => {
+    const agent = agents.find((a) => a.id === agentId);
+    if (agent?.builtin) {
+      // builtin 是只读镜像 — 不开编辑器，滚动到卡片即可。
+      cardRefs.current[agentId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      return;
+    }
+    scrollEditorRef.current = true;
+    if (agent) {
+      openEdit(agent);
+    } else {
+      // 未定义的 agent id → 预填 id 的新建编辑器（画布侧「+ 创建」入口）。
+      setEditor({
+        isNew: true,
+        draft: {
+          id: agentId,
+          name: '',
+          description: '',
+          provider: '',
+          model: '',
+          system_prompt: '',
+          temperature: '',
+          collection: '',
+          topK: '5',
+        },
+      });
+      setEditorError(null);
+    }
+  };
+
+  useEffect(() => onEditAgent((id) => editAgentByIdRef.current(id)), []);
+
+  // 经跳转打开的编辑器滚动到位（普通点「编辑」不滚）。
+  useEffect(() => {
+    if (editor && scrollEditorRef.current) {
+      scrollEditorRef.current = false;
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [editor]);
 
   const handleEditorSave = async () => {
     if (!editor) return;
@@ -469,9 +529,16 @@ export function AgentsPanel() {
             agent.provider || agent.model
               ? `${agent.provider ?? '—'} / ${agent.model ?? '—'}`
               : t.settings.agents.followDefault;
+          // 反向引用：引用了本 agent 的工作流 id（点击跳到工作流编辑器）。
+          const usedBy = usageWorkflows
+            .filter((w) => w.agents.includes(agent.id))
+            .map((w) => w.id);
           return (
             <div
               key={agent.id}
+              ref={(el) => {
+                cardRefs.current[agent.id] = el;
+              }}
               className="p-4 rounded-lg bg-card-bg border border-card-border"
             >
               <div className="flex items-start justify-between gap-3">
@@ -503,6 +570,23 @@ export function AgentsPanel() {
                     </p>
                   )}
                   <p className="mt-1 text-[11px] text-text-muted font-mono">{route}</p>
+                  {usedBy.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      <span className="text-[11px] text-text-muted">
+                        {t.settings.orchestration.usedBy}:
+                      </span>
+                      {usedBy.map((wid) => (
+                        <button
+                          key={wid}
+                          type="button"
+                          onClick={() => dispatchEditWorkflow(wid)}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent-soft border border-accent/30 font-mono hover:border-accent"
+                        >
+                          🔁 {wid}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-1 shrink-0">
@@ -571,7 +655,10 @@ export function AgentsPanel() {
 
       {/* Editor — inline expanding panel */}
       {editor && (
-        <section className="rounded-lg border border-accent/40 bg-card-bg/40 p-4 space-y-3">
+        <section
+          ref={editorRef}
+          className="rounded-lg border border-accent/40 bg-card-bg/40 p-4 space-y-3"
+        >
           <h3 className="text-sm font-semibold text-text-primary">
             {editor.isNew
               ? t.settings.agents.editor.titleNew

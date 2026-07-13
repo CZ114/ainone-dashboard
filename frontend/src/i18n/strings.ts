@@ -58,12 +58,24 @@ export const en = {
     tabs: {
       extensions: 'Extensions',
       model: 'Model routing',
-      agents: 'Agents',
+      orchestration: 'Orchestration',
       knowledge: 'Knowledge',
-      workflows: 'Workflows',
       diary: 'Diary',
       appearance: 'Appearance',
       about: 'About',
+    },
+    // 「编排」tab — Workflows + Agents 合并页：顶部图例 + 跨面板跳转。
+    orchestration: {
+      legendWorkflow: 'Workflow · orchestration script',
+      legendRefs: 'references',
+      legendAgent: 'Agent · role (model + prompt + tools)',
+      legendMounts: 'mounts',
+      legendKnowledge: 'Knowledge base',
+      legendKnowledgeTitle: 'Open the Knowledge tab',
+      editAgent: 'edit agent',
+      createAgent: '+ create',
+      unknownAgent: 'unknown agent id',
+      usedBy: 'used by',
     },
     extensions: {
       heading: 'Extensions',
@@ -806,12 +818,24 @@ export const zh: Strings = {
     tabs: {
       extensions: '扩展',
       model: '模型路由',
-      agents: 'Agent 管理',
+      orchestration: '编排',
       knowledge: '知识库',
-      workflows: '工作流',
       diary: '日记',
       appearance: '外观',
       about: '关于',
+    },
+    // 「编排」tab — 工作流 + Agent 合并页：顶部图例 + 跨面板跳转。
+    orchestration: {
+      legendWorkflow: '工作流 · 编排剧本',
+      legendRefs: '引用',
+      legendAgent: 'Agent · 角色（模型+提示词+工具）',
+      legendMounts: '挂载',
+      legendKnowledge: '知识库',
+      legendKnowledgeTitle: '打开「知识库」标签页',
+      editAgent: '编辑 agent',
+      createAgent: '+ 创建',
+      unknownAgent: '未定义的 agent',
+      usedBy: '用于',
     },
     extensions: {
       heading: '扩展',

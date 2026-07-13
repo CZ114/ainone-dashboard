@@ -13,6 +13,7 @@
 
 import { Fragment, createContext, useContext, useRef, useState } from 'react';
 import { useT } from '../../contexts/LanguageContext';
+import { dispatchEditAgent } from '../../lib/orchestrationBus';
 import {
   COND_MODES,
   STEP_TYPES,
@@ -58,6 +59,8 @@ type DragPayload =
 
 interface CanvasOps {
   spec: SpecDraft;
+  /** 已知 agent id 列表（datalist 候选）— 抽屉用它判定「未定义的 agent」。 */
+  agents: string[];
   selectedKey: string | null;
   select: (path: Path | null) => void;
   patchStep: (path: Path, patch: Record<string, unknown>) => void;
@@ -138,6 +141,7 @@ export function WorkflowCanvas({
 
   const ops: CanvasOps = {
     spec,
+    agents,
     selectedKey: selected ? pathKey(selected) : null,
     select: setSelected,
     patchStep,
@@ -523,6 +527,10 @@ function LeafDrawer({
   const ctx = useCanvas();
   const t = useT();
   const tc = t.settings.workflows.canvas;
+  const to = t.settings.orchestration;
+  const agentVal = asString(step.agent);
+  // 「未定义」判定基于 datalist 同源的已知 agent 列表（ctx.agents）。
+  const agentUnknown = showAgent && agentVal !== '' && !ctx.agents.includes(agentVal);
   return (
     <div
       className="mt-1 space-y-2 rounded-lg border border-accent/40 bg-card-bg/70 p-2"
@@ -540,15 +548,38 @@ function LeafDrawer({
           <MiniField label="agent" className="min-w-[130px] flex-1">
             <input
               list={AGENT_DATALIST_ID}
-              value={asString(step.agent)}
+              value={agentVal}
               onChange={(e) => ctx.patchStep(path, { agent: e.target.value })}
               title={tc.agentHint}
               className={miniInput + ' font-mono'}
             />
           </MiniField>
         )}
+        {showAgent && (
+          <button
+            type="button"
+            disabled={agentVal === ''}
+            onClick={() => dispatchEditAgent(agentVal)}
+            title={to.editAgent}
+            className="mb-0.5 shrink-0 rounded border border-card-border px-1.5 py-0.5 text-[11px] text-text-muted hover:border-accent/50 hover:text-text-primary disabled:opacity-40"
+          >
+            ✎ {to.editAgent}
+          </button>
+        )}
         <DeleteBtn onClick={() => ctx.deleteStep(path)} className="mb-0.5 ml-auto" />
       </div>
+      {agentUnknown && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-status-danger">
+          <span>{to.unknownAgent}</span>
+          <button
+            type="button"
+            onClick={() => dispatchEditAgent(agentVal)}
+            className="rounded border border-status-danger/40 px-1.5 py-0.5 text-[10px] hover:bg-status-danger/10"
+          >
+            {to.createAgent}
+          </button>
+        </p>
+      )}
       <MiniField label="prompt">
         <textarea
           rows={5}
