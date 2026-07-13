@@ -126,8 +126,8 @@
 
 <div class="preset-row">
   <button class="preset" data-p="0">A · 动态内容写进 system（最差）</button>
-  <button class="preset on" data-p="1">B · 动态注入放 L2（我的框架现状）</button>
-  <button class="preset" data-p="2">C · 动态内容尾置（Claude Code 式，最优）</button>
+  <button class="preset on" data-p="1">B · 动态注入放 L2（我的框架旧布局）</button>
+  <button class="preset" data-p="2">C · 动态内容尾置（Claude Code 式 — 现已采用）</button>
 </div>
 <div class="panel">
   <div class="blocks" id="blocks"></div>
@@ -177,7 +177,7 @@
 
 <h2>⑥ 把它讲成你自己的项目故事</h2>
 <div class="panel story">
-  <b>面试官最爱的收尾：你在真实系统里怎么用它。</b>可以这样讲——"我做了一个多 agent 的传感器平台，自研框架的消息装配是四层：system 人设、动态上下文注入、对话历史、新消息。设计注入层时我刻意<b>不让动态内容进 system</b>、也<b>不落入持久历史</b>（每轮现算、独立成一条带 <code>&lt;system-reminder&gt;</code> 标签的假 user 消息）——一是防指令混淆，二是保住 system+工具定义这段最长稳定前缀的 KV 缓存。后来复盘发现还能再进一步：把注入点从历史头部挪到尾部，可以连历史的缓存一起保住——这是我从 Claude Code 的 harness 逆向学到的布局。多轮会话下，命中与否在成本和首字延迟上差接近一个数量级。"
+  <b>面试官最爱的收尾：你在真实系统里怎么用它。</b>可以这样讲——"我做了一个多 agent 的传感器平台，自研框架的消息装配是四层：system 人设、动态上下文注入、对话历史、新消息。设计注入层时我刻意<b>不让动态内容进 system</b>、也<b>不落入持久历史</b>（每轮现算、独立成一条带 <code>&lt;system-reminder&gt;</code> 标签的假 user 消息）——一是防指令混淆，二是保住 system+工具定义这段最长稳定前缀的 KV 缓存。后来我复盘缓存命中率，发现注入放 L2 会拖累整段历史的 KV——于是照 Claude Code 的 harness 布局把注入点挪到了尾部（插在最新 user 消息之前，特意避开工具轮的 tool 消息块以免破坏协议顺序），改完 system、工具定义、全部历史的前缀都能跨轮命中。多轮会话下，这一处装配顺序的改动在成本和首字延迟上差接近一个数量级。"
 </div>
 
 <div class="foot">系列：①房子怎么盖 ②引擎怎么转 ③数据怎么进出 ④决策与传递显微镜 ⑤本篇（推理性能与缓存）。相关源码：<code>agent/core/context/injection.py</code>（注入层）· <code>agent/core/agent.py</code> 的消息装配。</div>
@@ -230,14 +230,14 @@ const LAYOUTS = [
       { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
       { l:'新消息', s:'本轮' },
     ] },
-  { note: '我的框架现状：动态注入是 system 之后的独立假 user 消息（L2）。<b>保住了 system+tools</b>（最长的稳定段），但注入每轮内容变 → 它身后的历史 KV 仍然失效。比 A 好，比 C 差。',
+  { note: '我的框架旧布局（已于 2026-07 改造为 C）：动态注入是 system 之后的独立假 user 消息（L2）。<b>保住了 system+tools</b>（最长的稳定段），但注入每轮内容变 → 它身后的历史 KV 仍然失效。比 A 好，比 C 差。',
     blocks: [
       { l:'system', s:'人设' }, { l:'tools', s:'工具定义' }, { l:'tools', s:'工具定义' },
       { l:'L2注入', s:'每轮变', dyn:1 },
       { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
       { l:'新消息', s:'本轮' },
     ] },
-  { note: 'Claude Code 式布局：动态注入附着在消息流<b>尾部</b>（新消息旁）。变化点排在最后 → system、tools、全部历史统统命中，只为尾部两块付全价。<b>多轮长会话下成本与 TTFT 差近一个数量级</b>。',
+  { note: 'Claude Code 式布局（<b>我的框架现已采用</b>——注入插在最后一条 user 消息之前，工具轮次不撕开 tool 块）：变化点排在最后 → system、tools、全部历史统统命中，只为尾部两块付全价。<b>多轮长会话下成本与 TTFT 差近一个数量级</b>。',
     blocks: [
       { l:'system', s:'人设' }, { l:'tools', s:'工具定义' }, { l:'tools', s:'工具定义' },
       { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
