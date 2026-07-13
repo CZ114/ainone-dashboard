@@ -401,6 +401,9 @@ export const en = {
         deleteStep: 'Delete this step',
         unknownHint: 'Unknown step type — edit it in the JSON panel, or delete it.',
         agentHint: 'pick one of your agents, or type any agent id',
+        pickAgent: 'Pick an agent…',
+        searchAgent: 'Search agents…',
+        useTyped: (v: string): string => `Use "${v}" (not defined yet)`,
         regexHint:
           'Tip: for approval loops an anchored regex like ^\\s*APPROVED\\b beats contains — a review merely mentioning the word won’t misfire.',
         maxItersTitle: 'max_iters — loop cap (1–20)',
@@ -1148,6 +1151,9 @@ export const zh: Strings = {
         deleteStep: '删除该步骤',
         unknownHint: '未知步骤类型——请在右侧 JSON 面板里编辑，或直接删除。',
         agentHint: '从已有 agent 里选，也可以直接输入任意 agent id',
+        pickAgent: '选择 agent…',
+        searchAgent: '搜索 agent…',
+        useTyped: (v: string): string => `使用 "${v}"（尚未定义）`,
         regexHint:
           '提示：审批循环用锚定 regex（如 ^\\s*APPROVED\\b）比 contains 稳——评审意见里只是提到该词不会误触发。',
         maxItersTitle: 'max_iters——循环上限（1–20）',

@@ -11,8 +11,9 @@
 // - 所有结构操作走 workflowSpecUtils 的不可变路径工具；单一 spec 状态由
 //   父组件（WorkflowsPanel）持有，本组件只上报 onChange。
 
-import { Fragment, createContext, useContext, useRef, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useT } from '../../contexts/LanguageContext';
+import { agentAdminApi, type AgentDef } from '../../api/agentAdminApi';
 import { dispatchEditAgent } from '../../lib/orchestrationBus';
 import {
   COND_MODES,
@@ -40,7 +41,6 @@ import {
 
 const MIME_MOVE = 'application/x-wf-move';
 const MIME_NEW = 'application/x-wf-new';
-const AGENT_DATALIST_ID = 'wf-canvas-agent-options';
 
 const STEP_ICONS: Record<StepType, string> = {
   agent: '🤖',
@@ -244,11 +244,6 @@ export function WorkflowCanvas({
           </div>
         </div>
       </div>
-      <datalist id={AGENT_DATALIST_ID}>
-        {agents.map((a) => (
-          <option key={a} value={a} />
-        ))}
-      </datalist>
     </CanvasCtx.Provider>
   );
 }
@@ -514,6 +509,134 @@ function LeafBlock({
   );
 }
 
+/** 可搜索的 agent 选择框 — 点开列出全部已定义 agent (名称 + 📚 知识库徽标),
+    输入即过滤; 允许「使用自定义值」兜底 (走既有的未定义红提示 + 创建流程)。 */
+function AgentCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const t = useT();
+  const tc = t.settings.workflows.canvas;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [agents, setAgents] = useState<AgentDef[]>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    agentAdminApi
+      .listAgents()
+      .then((r) => alive && setAgents(r.agents))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = agents.filter(
+    (a) =>
+      !q ||
+      a.id.toLowerCase().includes(q) ||
+      (a.name || '').toLowerCase().includes(q),
+  );
+  const pick = (v: string) => {
+    onChange(v);
+    setOpen(false);
+    setQuery('');
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(!open);
+          setQuery('');
+        }}
+        className={miniInput + ' flex w-full items-center gap-1 text-left font-mono'}
+      >
+        <span className={`flex-1 truncate ${value ? '' : 'text-text-muted'}`}>
+          {value || tc.pickAgent}
+        </span>
+        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 shrink-0 text-text-muted">
+          <path
+            d="M2.5 4.5 L6 8 L9.5 4.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-60 rounded-lg border border-card-border bg-card-bg shadow-lg">
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && filtered[0]) pick(filtered[0].id);
+              if (e.key === 'Escape') setOpen(false);
+            }}
+            placeholder={tc.searchAgent}
+            className="w-full border-b border-card-border bg-transparent px-2.5 py-1.5 font-mono text-[12px] text-text-primary outline-none placeholder:text-text-muted"
+          />
+          <div className="max-h-52 overflow-y-auto py-1">
+            {filtered.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => pick(a.id)}
+                className={`flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-[12px] transition-colors hover:bg-card-border/30 ${
+                  a.id === value ? 'bg-accent/10' : ''
+                }`}
+              >
+                <span className="shrink-0 font-mono text-text-primary">{a.id}</span>
+                {a.name && a.name !== a.id && (
+                  <span className="min-w-0 truncate text-[11px] text-text-muted">
+                    {a.name}
+                  </span>
+                )}
+                {a.retrieval?.collection && (
+                  <span className="ml-auto shrink-0 rounded-full border border-emerald-600/30 bg-emerald-500/10 px-1.5 text-[10px] leading-4 text-emerald-700">
+                    📚 {a.retrieval.collection}
+                  </span>
+                )}
+              </button>
+            ))}
+            {q && !agents.some((a) => a.id === query.trim()) && (
+              <button
+                type="button"
+                onClick={() => pick(query.trim())}
+                className="w-full px-2.5 py-1 text-left font-mono text-[11.5px] text-text-muted hover:bg-card-border/30"
+              >
+                {tc.useTyped(query.trim())}
+              </button>
+            )}
+            {filtered.length === 0 && !q && (
+              <div className="px-2.5 py-1 text-[11px] text-text-muted">—</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** agent/human 的属性抽屉；route 头部也复用（id + agent + prompt）。 */
 function LeafDrawer({
   step,
@@ -545,13 +668,10 @@ function LeafDrawer({
           />
         </MiniField>
         {showAgent && (
-          <MiniField label="agent" className="min-w-[130px] flex-1">
-            <input
-              list={AGENT_DATALIST_ID}
+          <MiniField label="agent" className="min-w-[150px] flex-1">
+            <AgentCombobox
               value={agentVal}
-              onChange={(e) => ctx.patchStep(path, { agent: e.target.value })}
-              title={tc.agentHint}
-              className={miniInput + ' font-mono'}
+              onChange={(v) => ctx.patchStep(path, { agent: v })}
             />
           </MiniField>
         )}
