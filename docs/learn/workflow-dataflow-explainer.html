@@ -202,7 +202,158 @@
   <span class="kbd" id="progTxt"></span>
 </div>
 
-<h2>③ 三条底层真相（对照真实源码）</h2>
+<h2>③ 变量分配全景图 — 每个变量的一生，一眼看完</h2>
+<p class="sub">上面是逐拍显微镜，这里是整卷底片：<b>行 = 步骤（执行顺序自上而下），列 = 变量泳道</b>。<code>●</code> 出生（写入池）· <code>◄</code> 被读取（注入模板）· <code>▲</code> 被覆盖（同名重写）· 竖线 = 存活在池中。<b>点任意列头看该变量的一生，点任意步骤行看它的读写清单</b>，再点一次取消。</p>
+
+<style>
+  .lifegrid { display: grid; grid-template-columns: 215px repeat(5, 1fr); gap: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 10px; font-size: 12px; }
+  .lg-cell { position: relative; padding: 7px 6px; border-top: 1px solid var(--border); min-height: 34px; display: flex; align-items: center; justify-content: center; transition: opacity .25s; }
+  .lg-head { border-top: none; background: var(--bg); font-family: var(--mono); font-weight: 800; font-size: 12.5px; cursor: pointer; user-select: none; padding: 9px 6px; }
+  .lg-head:hover { background: var(--accent-bg); }
+  .lg-head.sel { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-bg); }
+  .lg-step { justify-content: flex-start; gap: 6px; padding-left: 12px; cursor: pointer; font-family: var(--mono); font-size: 12px; }
+  .lg-step:hover { background: var(--accent-bg); }
+  .lg-step.sel { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-bg); }
+  .lg-step .em { font-size: 13px; }
+  .lg-step .lbl b { font-weight: 800; }
+  .lg-step .lbl small { display: block; font-size: 10px; color: var(--muted); font-family: system-ui; }
+  .lg-step.inloop { padding-left: 24px; border-left: 3px dashed var(--purple); }
+  .lg-loopmark { grid-column: 1 / -1; background: var(--purple-bg); border-top: 1px solid var(--border); padding: 4px 12px; font-size: 11px; color: var(--purple); font-family: var(--mono); }
+  /* 泳道竖线 */
+  .lg-cell.alive::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); opacity: .3; }
+  .lg-cell.alive.v0::before { background: #b07a3f; } .lg-cell.alive.v1::before { background: #3d8b5f; }
+  .lg-cell.alive.v2::before { background: #4a6fa5; } .lg-cell.alive.v3::before { background: #a6588f; }
+  .lg-cell.alive.v4::before { background: #7a5ba6; }
+  .glyph { position: relative; z-index: 1; font-family: var(--mono); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 1px 8px; background: var(--card); }
+  .glyph.w  { color: #fff; }
+  .glyph.w.v0 { background: #b07a3f; } .glyph.w.v1 { background: #3d8b5f; } .glyph.w.v2 { background: #4a6fa5; }
+  .glyph.w.v3 { background: #a6588f; } .glyph.w.v4 { background: #7a5ba6; }
+  .glyph.r { border: 1.5px solid; background: var(--card); }
+  .glyph.r.v0 { color: #b07a3f; } .glyph.r.v1 { color: #3d8b5f; } .glyph.r.v2 { color: #4a6fa5; }
+  .glyph.r.v3 { color: #a6588f; } .glyph.r.v4 { color: #7a5ba6; }
+  .lifegrid.hasSel .lg-cell:not(.hl), .lifegrid.hasSel .lg-step:not(.sel):not(.hl-row) { opacity: .22; }
+  .lg-caption { margin-top: 9px; min-height: 22px; font-size: 13px; }
+  .lg-caption b { color: var(--accent); }
+  .lg-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+</style>
+
+<div class="lifegrid" id="lifegrid"></div>
+<div class="lg-caption" id="lgCaption">👆 点列头或步骤行试试。</div>
+<div class="lg-legend">
+  <span><span class="glyph w v3" style="font-size:11px">●</span> 写入 (诞生)</span>
+  <span><span class="glyph r v3" style="font-size:11px">◄</span> 读取 (注入模板)</span>
+  <span><span class="glyph w v3" style="font-size:11px">▲</span> 覆盖 (同名重写)</span>
+  <span>│ 竖线 = 存活在池中</span>
+  <span style="border-left:3px dashed var(--purple); padding-left:8px">紫色虚线 = 循环体内步骤</span>
+</div>
+
+<script>
+(() => {
+  const VARS = ['complaint', 'triage', 'answers', 'diagnosis', 'review'];
+  // rows: step 标签 + 读写; over=覆盖
+  const ROWS = [
+    { em:'📥', b:'run(inputs)', s:'工作流启动', writes:[{k:'complaint'}], reads:[] },
+    { em:'🤖', b:'triage', s:'分诊 (triage)', reads:['complaint'], writes:[{k:'triage'}] },
+    { em:'🙋', b:'answers', s:'human · 你扮演患者', reads:['triage'], writes:[{k:'answers'}] },
+    { em:'🤖', b:'diagnosis', s:'初诊 (doctor · 📚med_kb)', reads:['complaint','triage','answers'], writes:[{k:'diagnosis'}] },
+    { loop:'🔁 revise 循环 · 最多 3 轮 (这次实跑 2 轮)' },
+    { em:'🤖', b:'review', s:'核验 #1 (verifier)', reads:['complaint','answers','diagnosis'], writes:[{k:'review'}], inloop:1 },
+    { em:'◇', b:'break_if', s:'review 含 PASS? → 否, 继续', reads:['review'], writes:[], inloop:1 },
+    { em:'🤖', b:'diagnosis', s:'修订 (doctor · +私有记忆)', reads:['review'], writes:[{k:'diagnosis', over:1}], inloop:1 },
+    { em:'🤖', b:'review', s:'核验 #2 (verifier)', reads:['complaint','answers','diagnosis'], writes:[{k:'review', over:1}], inloop:1 },
+    { em:'◇', b:'break_if', s:'PASS → 跳出循环 ✓', reads:['review'], writes:[], inloop:1 },
+    { em:'📤', b:'output', s:'"{diagnosis}" 取终值', reads:['diagnosis'], writes:[] },
+  ];
+  // 变量出生行号 (竖线从此行开始画)
+  const born = {};
+  ROWS.forEach((r, i) => (r.writes||[]).forEach(w => { if (!(w.k in born)) born[w.k] = i; }));
+
+  const grid = document.getElementById('lifegrid');
+  const caption = document.getElementById('lgCaption');
+  let sel = null; // {type:'var',k} | {type:'row',i}
+
+  function stepRowsFor(k) {
+    const writers = [], readers = [];
+    ROWS.forEach((r, i) => {
+      if (r.loop) return;
+      if ((r.writes||[]).some(w => w.k === k)) writers.push(r);
+      if ((r.reads||[]).includes(k)) readers.push(r);
+    });
+    return { writers, readers };
+  }
+
+  function render() {
+    grid.innerHTML = '';
+    grid.classList.toggle('hasSel', !!sel);
+    // 表头
+    const corner = document.createElement('div');
+    corner.className = 'lg-cell lg-head';
+    corner.style.cursor = 'default';
+    corner.textContent = '步骤 ＼ 变量泳道';
+    corner.style.fontFamily = 'system-ui'; corner.style.fontWeight = '600'; corner.style.fontSize = '11px'; corner.style.color = 'var(--muted)';
+    grid.appendChild(corner);
+    VARS.forEach((k, vi) => {
+      const h = document.createElement('div');
+      h.className = 'lg-cell lg-head' + (sel?.type === 'var' && sel.k === k ? ' sel' : '') +
+                    (sel?.type === 'var' && sel.k === k ? ' hl' : '');
+      h.innerHTML = `<span class="glyph r v${vi}" style="border:none">{${k}}</span>`;
+      h.onclick = () => { sel = (sel?.type === 'var' && sel.k === k) ? null : { type: 'var', k }; render(); };
+      if (sel && !(sel.type === 'var' && sel.k === k)) h.classList.remove('hl');
+      grid.appendChild(h);
+    });
+    // 行
+    ROWS.forEach((r, i) => {
+      if (r.loop) {
+        const m = document.createElement('div');
+        m.className = 'lg-loopmark';
+        m.textContent = r.loop;
+        grid.appendChild(m);
+        return;
+      }
+      const rowSel = sel?.type === 'row' && sel.i === i;
+      const rowRelevant = sel?.type === 'var'
+        ? ((r.writes||[]).some(w => w.k === sel.k) || (r.reads||[]).includes(sel.k))
+        : rowSel;
+      const stepEl = document.createElement('div');
+      stepEl.className = 'lg-cell lg-step' + (r.inloop ? ' inloop' : '') + (rowSel ? ' sel' : '') + (rowRelevant ? ' hl-row hl' : '');
+      stepEl.innerHTML = `<span class="em">${r.em}</span><span class="lbl"><b>${r.b}</b><small>${r.s}</small></span>`;
+      stepEl.onclick = () => { sel = rowSel ? null : { type: 'row', i }; render(); };
+      grid.appendChild(stepEl);
+      VARS.forEach((k, vi) => {
+        const c = document.createElement('div');
+        const alive = born[k] !== undefined && i >= born[k];
+        const w = (r.writes||[]).find(x => x.k === k);
+        const rd = (r.reads||[]).includes(k);
+        let cls = 'lg-cell' + (alive ? ` alive v${vi}` : '');
+        const cellRelevant =
+          (sel?.type === 'var' && sel.k === k && (w || rd || alive)) ||
+          (sel?.type === 'row' && sel.i === i && (w || rd));
+        if (cellRelevant) cls += ' hl';
+        c.className = cls;
+        if (w) c.innerHTML = `<span class="glyph w v${vi}">${w.over ? '▲ v2' : '●'}</span>`;
+        else if (rd) c.innerHTML = `<span class="glyph r v${vi}">◄</span>`;
+        grid.appendChild(c);
+      });
+    });
+    // 说明文字
+    if (!sel) caption.innerHTML = '👆 点列头或步骤行试试。';
+    else if (sel.type === 'var') {
+      const { writers, readers } = stepRowsFor(sel.k);
+      const overs = ROWS.filter(r => (r.writes||[]).some(w => w.k === sel.k && w.over));
+      caption.innerHTML = `<b>{${sel.k}}</b> 的一生：诞生于 <b>${writers[0].b}</b>（${writers[0].s}）` +
+        (overs.length ? `，被 <b>${overs.map(o => o.s).join('、')}</b> 覆盖 ${overs.length} 次` : '，从未被覆盖') +
+        `；被 <b>${readers.length}</b> 个步骤读取${readers.length ? '（' + readers.map(x => x.b + (x.em === '◇' ? '·条件' : '')).join(' → ') + '）' : ''}。`;
+    } else {
+      const r = ROWS[sel.i];
+      caption.innerHTML = `<b>${r.b}</b>（${r.s}）：读取 ${r.reads.length ? r.reads.map(k => `<b>{${k}}</b>`).join(' ') : '无'} → ` +
+        (r.writes.length ? `写入 ${r.writes.map(w => `<b>{${w.k}}</b>${w.over ? '（覆盖）' : ''}`).join(' ')}` : '不写入（条件判断/输出）');
+    }
+  }
+  render();
+})();
+</script>
+
+<h2>④ 三条底层真相（对照真实源码）</h2>
 <div class="truth">
   <div class="panel"><b>1 · 传递 = 渲染 + send，就两行</b>
     <div class="src"><span class="cm"># workflow.py — 所谓"消息传递"的全部实现</span>
