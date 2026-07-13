@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV Cache 与 Prompt Caching — 面试级技术总结</title>
+<style>
+  :root {
+    --bg: #f7f2ea; --card: #fffdf9; --border: #e6dccc; --border-strong: #d4c5ab;
+    --text: #3d3629; --muted: #8a7d68; --accent: #b0713f; --accent-soft: #c4854f;
+    --accent-bg: #f5e6d3; --green: #3d8b5f; --green-bg: #e8f3ec;
+    --red: #b8503d; --red-bg: #f7e8e4; --blue: #4a6fa5; --blue-bg: #e8eef7;
+    --purple: #7a5ba6; --purple-bg: #efe9f7;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 30px 18px 80px; }
+  .wrap { max-width: 1150px; margin: 0 auto; }
+  h1 { font-size: 25px; margin-bottom: 6px; }
+  h2 { font-size: 18px; margin: 36px 0 10px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .9em; background: var(--accent-bg); padding: 1px 5px; border-radius: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .en { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* 电梯卡 */
+  .elevator { border-left: 4px solid var(--accent); font-size: 14.5px; margin-top: 12px; }
+  .elevator b { color: var(--accent); }
+  .elevator .tag { display: inline-block; font-size: 10.5px; background: var(--accent); color: #fff; border-radius: 6px; padding: 1px 8px; margin-bottom: 6px; letter-spacing: .05em; }
+
+  /* 两阶段 */
+  .phase-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 800px) { .phase-grid { grid-template-columns: 1fr; } }
+  .phase h4 { font-size: 14.5px; margin-bottom: 4px; }
+  .phase .bound { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 8px; margin-left: 6px; }
+  .bound.compute { background: var(--blue-bg); color: var(--blue); }
+  .bound.mem { background: var(--purple-bg); color: var(--purple); }
+  .tok-strip { display: flex; gap: 3px; flex-wrap: wrap; margin: 10px 0 6px; min-height: 26px; }
+  .tok { width: 22px; height: 22px; border-radius: 5px; border: 1.5px solid var(--border-strong); background: var(--bg); transition: all .12s; }
+  .tok.kv { background: var(--blue); border-color: var(--blue); }
+  .tok.dec { background: var(--green); border-color: var(--green); width: auto; padding: 0 6px; color: #fff; font-size: 11px; font-family: var(--mono); display: flex; align-items: center; }
+  .phase small { color: var(--muted); font-size: 12px; display: block; }
+  .playrow { margin-top: 10px; }
+
+  /* 失效实验台 */
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .preset { font: inherit; font-size: 12.5px; background: var(--card); border: 1.5px solid var(--border-strong); border-radius: 9px; padding: 6px 12px; cursor: pointer; }
+  .preset:hover { border-color: var(--accent); }
+  .preset.on { border-color: var(--accent); background: var(--accent-bg); font-weight: 700; }
+  .blocks { display: flex; gap: 4px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .blk { min-width: 58px; text-align: center; border-radius: 8px; border: 2px solid var(--border-strong); padding: 5px 6px; font-family: var(--mono); font-size: 10.5px; cursor: pointer; background: var(--bg); transition: all .2s; user-select: none; }
+  .blk small { display: block; font-size: 9px; color: inherit; opacity: .75; font-family: system-ui; }
+  .blk.hit { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .blk.miss { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .blk.dyn { outline: 2.5px dashed var(--accent); outline-offset: 2px; }
+  .blk:hover { transform: translateY(-2px); }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { flex: 1; min-width: 160px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .stat b { display: block; font-size: 21px; font-family: var(--mono); }
+  .stat span { font-size: 11.5px; color: var(--muted); }
+  .stat.good b { color: var(--green); } .stat.bad b { color: var(--red); } .stat.mid b { color: var(--accent); }
+  .exp-note { margin-top: 10px; font-size: 13px; border-left: 3px solid var(--accent-soft); background: var(--accent-bg); padding: 7px 11px; border-radius: 0 8px 8px 0; }
+
+  /* 公式/表格 */
+  .formula { font-family: var(--mono); font-size: 13.5px; background: #2e2a24; color: #e8ddc8; border-radius: 10px; padding: 12px 15px; margin: 10px 0; overflow-x: auto; line-height: 1.9; }
+  .formula .hot { color: #ffca85; font-weight: 700; }
+  .formula .cm { color: #8a7d68; }
+  table.tt { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  table.tt th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 1.5px solid var(--border-strong); padding: 5px 8px; }
+  table.tt td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  table.tt td:first-child { font-weight: 700; }
+  table.tt .mono { font-family: var(--mono); font-size: 12px; }
+
+  /* 面试卡 */
+  .qa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  @media (max-width: 800px) { .qa-grid { grid-template-columns: 1fr; } }
+  details.qa { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0; overflow: hidden; }
+  details.qa summary { cursor: pointer; padding: 10px 14px; font-size: 13.5px; font-weight: 700; list-style: none; }
+  details.qa summary::before { content: "Q · "; color: var(--accent); }
+  details.qa summary:hover { background: var(--accent-bg); }
+  details.qa[open] summary { border-bottom: 1px solid var(--border); }
+  details.qa .a { padding: 10px 14px; font-size: 13px; }
+  details.qa .a b { color: var(--accent); }
+
+  .story { border-left: 4px solid var(--green); margin-top: 12px; font-size: 13.5px; }
+  .story b { color: var(--green); }
+  .foot { margin-top: 28px; color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 12px; }
+  button.ctl { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--card); padding: 7px 16px; font-size: 13.5px; }
+  button.ctl:hover { border-color: var(--accent); }
+  button.ctl.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>⚡ KV Cache 与 Prompt Caching — 面试级技术总结</h1>
+<p class="sub">系列第五篇 · 面向面试场景：每个概念给中英术语、公式和数字；两个互动可以当场演示；结尾是追问速答卡。</p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版 — 开场就背这段</span><br>
+  LLM 推理分 <b>prefill</b>（并行处理全部输入、为每个 token 算出 attention 的 Key/Value 张量）和 <b>decode</b>（逐 token 生成）两阶段。<b>KV 张量对相同的（输入 token 序列 × 模型权重）是确定性的</b>，所以推理服务把它按<b>内容寻址</b>（分块哈希）缓存：下次请求只要前缀逐字节相同，直接复用 KV、跳过这段 prefill。由于 causal attention 里第 i 个 token 的 KV 依赖其前全部 token，<b>缓存命中是"最长公共前缀"语义——变化点之后全部失效</b>。工程含义：把稳定内容（system、工具定义）放序列前部、易变内容（时间戳、动态注入）尽量尾置。收益是三重的：省 prefill 算力（各家 API 缓存命中价约为原价 <b>1/10~1/2</b>）、降 TTFT（首字延迟正比于未命中 token 数）、这一切在无状态 HTTP 上照样成立。
+</div>
+
+<h2>① 两阶段推理 <span class="en">prefill vs decode</span></h2>
+<div class="phase-grid">
+  <div class="panel phase">
+    <h4>Prefill（预填充）<span class="bound compute">compute-bound 算力瓶颈</span></h4>
+    <small>并行处理全部 N 个输入 token；attention 计算量 ~O(N²·d)；产物 = 每层每头的 K/V 张量（KV cache）。TTFT ≈ prefill 时间。</small>
+    <div class="tok-strip" id="pfStrip"></div>
+    <small id="pfLabel">输入 token → 逐个算出 KV（蓝 = 已入缓存）</small>
+  </div>
+  <div class="panel phase">
+    <h4>Decode（解码）<span class="bound mem">memory-bound 带宽瓶颈</span></h4>
+    <small>逐 token 生成；每步要从显存<b>读出全部</b> KV cache + 权重做一次 attention——瓶颈是 HBM 带宽而非算力。TPOT（每 token 时延）由此决定。</small>
+    <div class="tok-strip" id="dcStrip"></div>
+    <small id="dcLabel">生成 token（绿）逐个出现, 每个都要"回读"左边全部 KV</small>
+  </div>
+</div>
+<div class="playrow">
+  <button class="ctl primary" id="btnPlay">▶ 播放两阶段</button>
+  <span class="en" style="margin-left:10px">面试点: 为什么 prefill 吃算力、decode 吃带宽 — 前者大矩阵并行乘, 后者每步都要搬运整个 KV</span>
+</div>
+
+<h2>② 失效实验台 <span class="en">prefix invalidation — 面试可以现场演示这个</span></h2>
+<p class="sub">下面是一次 agent 请求的 token 序列（每块 ≈500 token，共 ~8k）。<b>点任意块把它设为"本轮变化点"</b>——由于 causal attention，它之后的所有块 KV 一并失效。三个预设对应动态内容的三种放置策略：</p>
+
+<div class="preset-row">
+  <button class="preset" data-p="0">A · 动态内容写进 system（最差）</button>
+  <button class="preset on" data-p="1">B · 动态注入放 L2（我的框架现状）</button>
+  <button class="preset" data-p="2">C · 动态内容尾置（Claude Code 式，最优）</button>
+</div>
+<div class="panel">
+  <div class="blocks" id="blocks"></div>
+  <div class="stat-row">
+    <div class="stat" id="stHit"><b>—</b><span>缓存命中率（前缀块 / 总块）</span></div>
+    <div class="stat" id="stCost"><b>—</b><span>本轮输入成本（按命中 0.1× 计）</span></div>
+    <div class="stat" id="stTtft"><b>—</b><span>TTFT 相对加速（∝ 1/未命中量）</span></div>
+  </div>
+  <div class="exp-note" id="expNote"></div>
+</div>
+
+<h2>③ 定量武器库 <span class="en">numbers you can cite</span></h2>
+<div class="panel">
+  <b style="font-size:14px">KV cache 每 token 占多大？（追问率极高）</b>
+  <div class="formula">bytes/token = 2 <span class="cm">(K和V)</span> × n_layers × n_kv_heads × head_dim × dtype_bytes
+
+<span class="cm">例: 32 层 · GQA 8 个 KV 头 · head_dim 128 · fp16(2B):</span>
+  = 2 × 32 × 8 × 128 × 2 = <span class="hot">128 KB / token</span>
+<span class="cm">→ 50k token 的会话 ≈ </span><span class="hot">6.4 GB 显存</span><span class="cm"> — 这就是为什么缓存有 TTL、
+  为什么 DeepSeek 把 KV 下沉到 SSD、为什么 GQA/MQA 存在（砍 n_kv_heads）。</span></div>
+  <table class="tt">
+    <tr><th>服务商</th><th>缓存机制</th><th>命中价格</th><th>TTL / 备注</th></tr>
+    <tr><td>Anthropic</td><td class="mono">cache_control 显式断点</td><td>读 0.1× · 写 1.25×</td><td>5 min（命中续期），可选 1h</td></tr>
+    <tr><td>DeepSeek</td><td>全自动，KV 落盘（SSD 分层）</td><td>≈ 0.1×</td><td>小时级，跨请求共享集群</td></tr>
+    <tr><td>OpenAI</td><td>自动，≥1024 token 起、128 粒度</td><td>0.5×</td><td>分钟~小时</td></tr>
+    <tr><td>本地 vLLM / SGLang</td><td class="mono">Automatic Prefix Caching / RadixAttention</td><td>—（省的是自己的 GPU 时间）</td><td>同一机制，非远程独有</td></tr>
+  </table>
+</div>
+
+<h2>④ 无状态 HTTP 上怎么实现 <span class="en">content-addressed caching</span></h2>
+<div class="panel" style="font-size:13.5px">
+  请求进来 → tokenize → 按<b>块（block/page，数十到上百 token）</b>计算链式哈希（每块哈希包含其前缀的哈希）→ 在缓存索引里找<b>最长连续命中的块链</b> → 命中的块直接加载 KV 张量，只对剩余后缀做 prefill。<br><br>
+  <b>三个面试要点：</b>①不需要会话 ID——按内容指纹归档，协议无状态但推理层有一个内容寻址的状态库；②集群要么做<b>缓存亲和路由</b>（把你路由到持有 KV 的机器），要么把 KV 放共享存储（DeepSeek 的 SSD 方案）；③改 <code>temperature/top_p</code> <b>不会</b>破坏缓存（采样参数只作用于 decode 的 logits，不改输入 token），但改 system、改工具定义顺序、换模型版本都会——因为它们改了被哈希的 token 序列。
+</div>
+
+<h2>⑤ 追问速答卡 <span class="en">rapid-fire Q&A — 点开对答案</span></h2>
+<div class="qa-grid">
+  <details class="qa"><summary>为什么 decode 是带宽瓶颈而不是算力瓶颈？</summary><div class="a">decode 每步只算 1 个新 token 的 attention——计算量很小，但必须把<b>整个 KV cache 和模型权重从 HBM 搬进计算单元</b>。搬运字节数 ≫ 浮点运算数，算术强度（FLOPs/byte）极低，GPU 算力空转等内存。批量推理（batching）与 PagedAttention 都是为了摊薄这个搬运成本。</div></details>
+  <details class="qa"><summary>为什么改前缀中间一个字，后面全部失效？</summary><div class="a">causal attention 下，第 i 个 token 的 K/V 由它<b>及其之前所有 token</b> 经各层变换算出。位置 k 变了 → 所有 i ≥ k 的隐状态与 KV 都变。所以缓存命中语义是<b>最长公共前缀</b>，块哈希做成链式（含前缀哈希）正是为了表达这一点。</div></details>
+  <details class="qa"><summary>GQA / MQA 和 KV cache 什么关系？</summary><div class="a">KV 大小正比于 <code>n_kv_heads</code>。MQA 所有 query 头共享 1 组 KV，GQA 分组共享（如 32 个 Q 头共享 8 组 KV）→ KV 显存直接砍到 1/4~1/32，代价是轻微质量损失。这是"为长上下文省 KV"的<b>模型结构侧</b>手段，与 prompt caching（<b>服务侧</b>复用）正交互补。</div></details>
+  <details class="qa"><summary>Anthropic 的 cache write 为什么要加价 25%？</summary><div class="a">写入意味着服务商要<b>为你占住显存/存储并维护索引</b>（TTL 内随时可读）——存储承诺有成本。定价设计成"写小贵、读大惠（0.1×）"：只有真的会被重复读的前缀才值得显式标记，引导用户把断点打在稳定前缀上。</div></details>
+  <details class="qa"><summary>怎么在 agent 系统设计里最大化命中率？</summary><div class="a">一条原则：<b>让会变的东西尽量靠后站</b>。具体：①system 与工具定义内容和<b>序列化顺序</b>都要稳定（别在 system 里放时间戳）；②动态上下文（时钟、传感器快照）附着在消息流尾部而非开头；③会话历史 append-only 不回改；④多 agent 场景让同类请求复用同一前缀模板。我在自己的项目里把动态注入设计成独立于 system 的注入层，正是为了保住 system+tools 这段最长稳定前缀。</div></details>
+  <details class="qa"><summary>本地部署（vLLM）和远程 API 的缓存有何异同？</summary><div class="a">机制同源：vLLM 的 Automatic Prefix Caching / SGLang 的 RadixAttention 就是同一件事的开源实现（PagedAttention 把 KV 切页、按哈希/基数树共享）。差异在<b>受益者</b>：本地省的是自己的 GPU 时间与并发容量；远程由服务商省算力、以 0.1×~0.5× 价格返还，且有 TTL 和（多数厂商的）租户隔离。</div></details>
+  <details class="qa"><summary>缓存命中对延迟的影响有多大？</summary><div class="a">TTFT ≈ 未命中 token 数 ÷ prefill 吞吐。50k 历史全命中时只需 prefill 新增几百 token——首字延迟从秒级降到百毫秒级，<b>近一个数量级</b>。对多轮 agent（每轮都背全量历史）这是体感差异最大的一项。</div></details>
+  <details class="qa"><summary>哪些常见操作会悄悄打破缓存？</summary><div class="a">①在 system 里嵌当前时间/随机 ID；②每轮重排工具列表（JSON 序列化顺序不稳定）；③框架自动改写历史（截断、压缩、注入位置前移）；④模型版本升级；⑤负载均衡把请求打到无缓存副本（无亲和路由时）。排查思路：对比相邻两轮请求体，找<b>第一个差异字节</b>的位置。</div></details>
+</div>
+
+<h2>⑥ 把它讲成你自己的项目故事</h2>
+<div class="panel story">
+  <b>面试官最爱的收尾：你在真实系统里怎么用它。</b>可以这样讲——"我做了一个多 agent 的传感器平台，自研框架的消息装配是四层：system 人设、动态上下文注入、对话历史、新消息。设计注入层时我刻意<b>不让动态内容进 system</b>、也<b>不落入持久历史</b>（每轮现算、独立成一条带 <code>&lt;system-reminder&gt;</code> 标签的假 user 消息）——一是防指令混淆，二是保住 system+工具定义这段最长稳定前缀的 KV 缓存。后来复盘发现还能再进一步：把注入点从历史头部挪到尾部，可以连历史的缓存一起保住——这是我从 Claude Code 的 harness 逆向学到的布局。多轮会话下，命中与否在成本和首字延迟上差接近一个数量级。"
+</div>
+
+<div class="foot">系列：①房子怎么盖 ②引擎怎么转 ③数据怎么进出 ④决策与传递显微镜 ⑤本篇（推理性能与缓存）。相关源码：<code>agent/core/context/injection.py</code>（注入层）· <code>agent/core/agent.py</code> 的消息装配。</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ① 两阶段动画 */
+const N_IN = 22, N_OUT = 7;
+function buildStrips() {
+  $('pfStrip').innerHTML = Array.from({length: N_IN}, () => '<span class="tok"></span>').join('');
+  $('dcStrip').innerHTML = '';
+}
+buildStrips();
+let playing = false;
+$('btnPlay').onclick = async () => {
+  if (playing) return;
+  playing = true;
+  buildStrips();
+  const toks = $('pfStrip').children;
+  // prefill: 快速并行感 (成批点亮)
+  for (let i = 0; i < N_IN; i += 4) {
+    for (let j = i; j < Math.min(i + 4, N_IN); j++) toks[j].classList.add('kv');
+    $('pfLabel').textContent = `prefill 中… ${Math.min(i+4, N_IN)}/${N_IN} token 的 KV 已入缓存 (并行, 快)`;
+    await new Promise(r => setTimeout(r, 130));
+  }
+  $('pfLabel').textContent = `prefill 完成: ${N_IN} 个 KV 驻留显存 — 这一段就是可被缓存复用的部分`;
+  // decode: 逐个慢出
+  const words = ['好', '的', '，', '正在', '分析', '录音', '…'];
+  for (let i = 0; i < N_OUT; i++) {
+    const t = document.createElement('span');
+    t.className = 'tok dec';
+    t.textContent = words[i];
+    $('dcStrip').appendChild(t);
+    $('dcLabel').textContent = `decode 第 ${i+1} 个 token: 回读全部 ${N_IN + i} 条 KV → 带宽瓶颈 (串行, 慢)`;
+    await new Promise(r => setTimeout(r, 420));
+  }
+  $('dcLabel').textContent = 'decode 完成。注意节奏差: prefill 成批闪过, decode 一字一顿 — 两种瓶颈的体感。';
+  playing = false;
+};
+
+/* ② 失效实验台 */
+// 布局模板: 每种预设 = 块序列 (label, sub, dyn=本轮变化点)
+const LAYOUTS = [
+  { note: '动态内容（时间戳/最新数据）混进了 system —— 序列第 1 块每轮都变，<b>命中率恒为 0</b>：连工具定义和全部历史都要每轮重算。这是最常见的无意识反模式（比如在 system prompt 里写"今天是几月几日"）。',
+    blocks: [
+      { l:'system+时钟', s:'每轮变', dyn:1 }, { l:'system', s:'人设' }, { l:'tools', s:'工具定义' }, { l:'tools', s:'工具定义' },
+      { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
+      { l:'新消息', s:'本轮' },
+    ] },
+  { note: '我的框架现状：动态注入是 system 之后的独立假 user 消息（L2）。<b>保住了 system+tools</b>（最长的稳定段），但注入每轮内容变 → 它身后的历史 KV 仍然失效。比 A 好，比 C 差。',
+    blocks: [
+      { l:'system', s:'人设' }, { l:'tools', s:'工具定义' }, { l:'tools', s:'工具定义' },
+      { l:'L2注入', s:'每轮变', dyn:1 },
+      { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
+      { l:'新消息', s:'本轮' },
+    ] },
+  { note: 'Claude Code 式布局：动态注入附着在消息流<b>尾部</b>（新消息旁）。变化点排在最后 → system、tools、全部历史统统命中，只为尾部两块付全价。<b>多轮长会话下成本与 TTFT 差近一个数量级</b>。',
+    blocks: [
+      { l:'system', s:'人设' }, { l:'tools', s:'工具定义' }, { l:'tools', s:'工具定义' },
+      { l:'历史1', s:'' }, { l:'历史2', s:'' }, { l:'历史3', s:'' }, { l:'历史4', s:'' }, { l:'历史5', s:'' }, { l:'历史6', s:'' }, { l:'历史7', s:'' }, { l:'历史8', s:'' },
+      { l:'注入', s:'每轮变', dyn:1 }, { l:'新消息', s:'本轮' },
+    ] },
+];
+let preset = 1, dynIdx = null;   // dynIdx: 用户手点的变化点(覆盖预设)
+function renderBlocks() {
+  const lay = LAYOUTS[preset];
+  const changeAt = dynIdx ?? lay.blocks.findIndex(b => b.dyn);
+  $('blocks').innerHTML = lay.blocks.map((b, i) => {
+    const hit = i < changeAt;
+    return `<div class="blk ${hit ? 'hit' : 'miss'} ${i === changeAt ? 'dyn' : ''}" data-i="${i}" title="点我设为本轮变化点">${b.l}<small>${i === changeAt ? '⚡ 变化点' : (hit ? '✓ 命中' : '✗ 失效')}</small></div>`;
+  }).join('');
+  const n = lay.blocks.length, hits = changeAt;
+  const h = hits / n;
+  const cost = (1 - h) + h * 0.1;                    // 命中部分 0.1×
+  const speedup = (1 - h) > 0 ? (1 / (1 - h)) : 99;
+  $('stHit').className = 'stat ' + (h > .7 ? 'good' : h > .2 ? 'mid' : 'bad');
+  $('stHit').firstElementChild.textContent = Math.round(h * 100) + '%';
+  $('stCost').className = 'stat ' + (cost < .4 ? 'good' : cost < .8 ? 'mid' : 'bad');
+  $('stCost').firstElementChild.textContent = '≈' + Math.round(cost * 100) + '% 原价';
+  $('stTtft').className = 'stat ' + (speedup > 3 ? 'good' : speedup > 1.3 ? 'mid' : 'bad');
+  $('stTtft').firstElementChild.textContent = speedup >= 99 ? '≈∞' : '×' + speedup.toFixed(1);
+  $('expNote').innerHTML = (dynIdx != null
+    ? `你把变化点设在了第 ${dynIdx + 1} 块 —— 它之前 ${hits} 块命中(绿)，之后全部失效(红)。点预设按钮可回到策略对比。`
+    : lay.note);
+  document.querySelectorAll('.preset').forEach(p => p.classList.toggle('on', +p.dataset.p === preset));
+}
+document.querySelectorAll('.preset').forEach(p => p.onclick = () => { preset = +p.dataset.p; dynIdx = null; renderBlocks(); });
+$('blocks').addEventListener('click', e => {
+  const b = e.target.closest('.blk');
+  if (!b) return;
+  dynIdx = +b.dataset.i;
+  renderBlocks();
+});
+renderBlocks();
+</script>
+</body>
+</html>
