@@ -41,10 +41,15 @@ def _spawn_server() -> int:
     to its own state (signal handlers, asyncio loop policy, etc).
     Restarts are reliable because we never share interpreter state."""
     here = os.path.dirname(os.path.abspath(__file__))
+    # M0 network hardening: default to loopback-only so LAN devices
+    # cannot reach the unauthenticated API (recordings, extensions
+    # pip-install, serial control). The old any-interface behaviour
+    # is one env var away: BIND_HOST=0.0.0.0.
+    bind_host = os.environ.get("BIND_HOST", "127.0.0.1")
     cmd = [
         sys.executable, "-m", "uvicorn",
         "app.main:app",
-        "--host", "0.0.0.0",
+        "--host", bind_host,
         "--port", "8080",
         "--log-level", "info",
     ]

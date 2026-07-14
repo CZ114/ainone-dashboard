@@ -5,7 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true,
+    // M0 network hardening: bind localhost only. `host: true` exposed the
+    // dev server on the LAN, and its proxy forwarded LAN requests to the
+    // loopback-bound backends — silently bypassing their 127.0.0.1 binding.
+    // Set VITE_LAN=1 to expose again (e.g. patient tablet), AFTER M2 authz.
+    host: process.env.VITE_LAN === '1',
     open: true,
     proxy: {
       // Python agent service (:8100) — model routing config, multi-agent
