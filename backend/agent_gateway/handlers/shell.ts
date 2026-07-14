@@ -30,6 +30,7 @@ import type { IncomingMessage, Server } from "node:http";
 import { spawn as ptySpawn, type IPty } from "node-pty";
 import { existsSync, statSync } from "node:fs";
 import { URL } from "node:url";
+import { verifyToken } from "../utils/authz.ts";
 
 interface InitMessage {
   type: "init";
@@ -203,13 +204,28 @@ export function attachShellWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req: IncomingMessage, socket, head) => {
-    const pathname = new URL(req.url || "", "http://localhost").pathname;
-    if (pathname !== "/ws/shell") return; // let other handlers see it
+    const url = new URL(req.url || "", "http://localhost");
+    if (url.pathname !== "/ws/shell") return; // let other handlers see it
+
+    // M2 authz: a PTY is full shell access — developer token required.
+    // Browsers can't set headers on WS handshakes, so the token rides
+    // a query param (?token=...). Reject BEFORE the upgrade completes
+    // so unauthorized clients never reach the PTY state machine.
+    const who = verifyToken(url.searchParams.get("token") || "");
+    if (who?.role !== "developer") {
+      socket.write(
+        "HTTP/1.1 403 Forbidden\r\n" +
+          "Connection: close\r\n\r\n" +
+          "shell access requires a developer token",
+      );
+      socket.destroy();
+      return;
+    }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       handleConnection(ws);
     });
   });
 
-  console.log("[shell] WebSocket endpoint ready at /ws/shell");
+  console.log("[shell] WebSocket endpoint ready at /ws/shell (developer token required)");
 }

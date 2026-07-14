@@ -16,7 +16,7 @@
  */
 
 import type { Context } from "hono";
-import { agentServiceUrl } from "../utils/agentService.ts";
+import { agentServiceUrl, serviceHeaders } from "../utils/agentService.ts";
 
 interface ApiMessage {
   role: "user" | "assistant";
@@ -67,7 +67,9 @@ export async function handleVoiceChat(c: Context): Promise<Response> {
   try {
     upstream = await fetch(`${agentServiceUrl()}/api/agent/voice`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      // X-Service-Key keeps the call page's own `system` persona intact;
+      // keyless (= patient-tier) callers get it stripped by authz.
+      headers: { "content-type": "application/json", ...serviceHeaders() },
       body: JSON.stringify(forwarded),
       signal: c.req.raw.signal,
     });

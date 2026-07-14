@@ -12,7 +12,7 @@
 import { getAgent } from "./agentStore.ts";
 import type { DiaryLang } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
-import { agentServiceUrl } from "../utils/agentService.ts";
+import { agentServiceUrl, serviceHeaders } from "../utils/agentService.ts";
 
 export interface RunResult {
   body: string;
@@ -152,7 +152,10 @@ async function runAgentImpl(
     try {
       res = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        // X-Service-Key: without it the authz middleware treats this
+        // machine call as patient tier and strips systemPrompt — which
+        // would silently break every diary agent's persona.
+        headers: { "content-type": "application/json", ...serviceHeaders() },
         body: JSON.stringify({
           message: userPrompt,
           systemPrompt: agent.system_prompt,

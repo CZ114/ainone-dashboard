@@ -7,6 +7,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { requiredRoles, roleOf } from "./utils/authz.ts";
 import type { Runtime } from "./runtime/types.ts";
 import {
   type ConfigContext,
@@ -76,9 +77,25 @@ export function createApp(
     cors({
       origin: "*",
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type"],
+      allowHeaders: ["Content-Type", "X-Auth-Token"],
     }),
   );
+
+  // M2 authz — admin routes (diary agents/secrets CRUD, entry deletion,
+  // project deletion, native pickers) require a signed staff/developer
+  // token; unlisted routes stay open (they are the patient's product
+  // surface). Verification shares the agent service's secret file, so
+  // there is exactly one identity system across both backends.
+  app.use("/api/*", async (c, next) => {
+    const roles = requiredRoles(c.req.method, new URL(c.req.url).pathname);
+    if (roles !== null && !roles.includes(roleOf(c))) {
+      return c.json(
+        { error: `此操作需要 ${roles.join("/")} 角色`, requiredRole: roles },
+        403,
+      );
+    }
+    await next();
+  });
 
   // Configuration middleware - makes app settings available to all handlers
   app.use(

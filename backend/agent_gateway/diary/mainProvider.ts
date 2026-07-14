@@ -18,7 +18,7 @@
  *    "Generate now" run will use, and whether auth is available.
  */
 
-import { agentServiceUrl } from "../utils/agentService.ts";
+import { agentServiceUrl, serviceHeaders } from "../utils/agentService.ts";
 
 export interface MainProviderInfo {
   /** The current provider's API base URL (informational, for the UI badge). */
@@ -48,6 +48,8 @@ interface AgentServiceConfig {
 export async function getMainProviderInfo(): Promise<MainProviderInfo> {
   try {
     const r = await fetch(`${agentServiceUrl()}/api/agent/config`, {
+      // config GET is staff-tier under authz — present machine identity.
+      headers: serviceHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
