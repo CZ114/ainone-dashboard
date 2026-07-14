@@ -9,24 +9,26 @@
 abort 置 Event, worker 在事件边界退出并修补历史。
 """
 
+import hmac
 import json
 import os
 import queue
+import re
 import threading
 import time
 import uuid
 
 import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from agent.orchestration import Workflow, WorkflowError
 
 from datetime import datetime
 
-from . import (agents_admin, authdb, config_store, mcp_admin, rag, run_history,
-               skills_admin, workflows_admin)
+from . import (agents_admin, authdb, authz, config_store, mcp_admin, rag,
+               run_history, skills_admin, workflows_admin)
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, PermissionBroker, human_inputs
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
@@ -44,6 +46,83 @@ aborts = AbortRegistry()
 manager = SessionManager()
 authdb.init_db()   # 本地身份库 patients.db (建表 + 首启 seed 演示账号)
 # human_inputs 单例已移至 bridge.py (run_workflow 工具与端点共用)
+
+
+# ─── M2 authz 中间件 ─────────────────────────────────────────────────
+# M1 的前端隐藏只防误触; 这里对每个请求做角色×策略表校验 (fail-closed)。
+# 凭据三选一: X-Auth-Token (登录签发) / X-Service-Key (网关内部调用,
+# 值=auth_secret 文件内容) / 无凭据=patient 最低档。
+
+# 消费面高频端点不写审计 (聊天流/轮询会刷爆日志), 只审计管理面写操作
+_AUDIT_EXEMPT = re.compile(
+    r"^/api/(compat/|agent/(chat|permission|abort|voice|oneshot|auth/login"
+    r"|workflows/input|sessions))")
+
+
+@app.middleware("http")
+async def authz_middleware(request: Request, call_next):
+    path = request.url.path
+    method = request.method
+    if method == "OPTIONS" or not path.startswith("/api/"):
+        return await call_next(request)
+
+    # 1) 凭据 → 角色
+    service_key = request.headers.get("x-service-key")
+    token = request.headers.get("x-auth-token") or (
+        request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    if service_key and hmac.compare_digest(
+            service_key, authz._load_secret().decode("ascii")):
+        role, uid = "developer", "gateway"      # 持密钥文件者本就拥有本机
+    elif token:
+        who = authz.verify_token(token)
+        if who is None:
+            # 过期/伪造给 401 而非降档 — 前端据此登出重登, 不静默变患者
+            return JSONResponse({"detail": "token 无效或已过期, 请重新登录"},
+                                status_code=401)
+        role, uid = who["role"], who["id"]
+    else:
+        role, uid = "patient", "anonymous"      # 机器调用按最低权放行消费面
+
+    # 2) 策略表
+    roles = authz.allowed_roles(method, path)
+    if role not in roles:
+        authz.audit(role, uid, method, path, 403)
+        return JSONResponse(
+            {"detail": f"此操作需要 {'/'.join(roles)} 角色 (当前: {role})",
+             "requiredRole": list(roles)},
+            status_code=403)
+
+    # 3) 患者档字段级钳制: oneshot/voice 剥离系统提示覆盖 (提示注入面)。
+    #    日记网关带 X-Service-Key 不受影响; call 页经网关透传同理。
+    if role == "patient" and method == "POST" and path in (
+            "/api/agent/oneshot", "/api/agent/voice"):
+        raw = await request.body()
+        try:
+            data = json.loads(raw or b"{}")
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict) and ("systemPrompt" in data or "system" in data):
+            data.pop("systemPrompt", None)
+            data.pop("system", None)
+            new_body = json.dumps(data).encode("utf-8")
+
+            async def receive():
+                return {"type": "http.request", "body": new_body,
+                        "more_body": False}
+            request = Request(request.scope, receive)
+        elif raw:
+            # body 已被消费, 必须原样回填, 否则下游 handler 读到空
+            async def receive():
+                return {"type": "http.request", "body": raw,
+                        "more_body": False}
+            request = Request(request.scope, receive)
+
+    response = await call_next(request)
+
+    # 4) 管理面写操作审计 (谁/何时/动了什么/结果)
+    if method in ("POST", "PUT", "PATCH", "DELETE") and not _AUDIT_EXEMPT.match(path):
+        authz.audit(role, uid, method, path, response.status_code)
+    return response
 
 
 # ─── 请求模型 ────────────────────────────────────────────────────────
@@ -339,7 +418,8 @@ def auth_login(body: LoginBody):
     who = authdb.login(body.id, body.code)
     if who is None:
         raise HTTPException(401, "编号/用户名或口令不正确")
-    return {"ok": True, **who}
+    # M2: 附签名 token — 前端每个 /api 请求带上, 中间件据此定角色。
+    return {"ok": True, **who, "token": authz.mint_token(who)}
 
 
 @app.get("/api/agent/patients")
