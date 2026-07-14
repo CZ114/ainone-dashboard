@@ -25,7 +25,7 @@ from agent.orchestration import Workflow, WorkflowError
 
 from datetime import datetime
 
-from . import (agents_admin, config_store, mcp_admin, rag, run_history,
+from . import (agents_admin, authdb, config_store, mcp_admin, rag, run_history,
                skills_admin, workflows_admin)
 from .agent_tools import build_registry
 from .bridge import AbortRegistry, PermissionBroker, human_inputs
@@ -42,6 +42,7 @@ app = FastAPI(title="agent_service", version="0.1.0")
 broker = PermissionBroker()
 aborts = AbortRegistry()
 manager = SessionManager()
+authdb.init_db()   # 本地身份库 patients.db (建表 + 首启 seed 演示账号)
 # human_inputs 单例已移至 bridge.py (run_workflow 工具与端点共用)
 
 
@@ -307,6 +308,68 @@ def agent_health():
         "model": cfg["model"],
         "tools": [t["name"] for t in build_registry().list_tools()],
     }
+
+
+# ─── 身份与病人档案 (M1: 本地库 patients.db) ─────────────────────────
+# 诚实边界: M1 只提供"登录校验 + 档案 CRUD"的事实, 这些端点本身尚无
+# HTTP 层鉴权 (前端隐藏只防误触); M2 的 authz 中间件才是真正的门。
+
+class LoginBody(BaseModel):
+    id: str                     # 患者编号 P-xxx 或 staff 用户名
+    code: str                   # 配对码 / 密码
+
+
+class PatientBody(BaseModel):
+    name: str
+    age: int | None = None
+    complaint: str = ""
+    device: str = ""
+    createdBy: str = ""
+
+
+class PatientPatchBody(BaseModel):
+    name: str | None = None
+    age: int | None = None
+    complaint: str | None = None
+    device: str | None = None
+
+
+@app.post("/api/agent/auth/login")
+def auth_login(body: LoginBody):
+    who = authdb.login(body.id, body.code)
+    if who is None:
+        raise HTTPException(401, "编号/用户名或口令不正确")
+    return {"ok": True, **who}
+
+
+@app.get("/api/agent/patients")
+def patients_list():
+    return {"patients": authdb.list_patients()}
+
+
+@app.post("/api/agent/patients")
+def patients_create(body: PatientBody):
+    if not body.name.strip():
+        raise HTTPException(422, "姓名不能为空")
+    created = authdb.create_patient(
+        body.name.strip(), body.age, body.complaint, body.device, body.createdBy)
+    # pair_code 明文只出现在这一次响应里 (医生抄给病人), 库里只存哈希
+    return {"ok": True, **created}
+
+
+@app.patch("/api/agent/patients/{pid}")
+def patients_update(pid: str, body: PatientPatchBody):
+    if not authdb.update_patient(pid, body.model_dump()):
+        raise HTTPException(404, f"未知病人: {pid}")
+    return {"ok": True}
+
+
+@app.post("/api/agent/patients/{pid}/reset-code")
+def patients_reset_code(pid: str):
+    reset = authdb.reset_pair_code(pid)
+    if reset is None:
+        raise HTTPException(404, f"未知病人: {pid}")
+    return {"ok": True, **reset}
 
 
 # ─── 模型服务商路由 (设置页) ─────────────────────────────────────────
