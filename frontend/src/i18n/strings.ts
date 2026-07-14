@@ -26,6 +26,7 @@ export const en = {
   header: {
     nav: {
       dashboard: 'Dashboard',
+      patients: 'Patients',
       chat: 'Agent Chat',
       call: 'Call',
       diary: 'Diary',
@@ -46,6 +47,13 @@ export const en = {
     logoAria: 'i-Thread Lab — Imperial Hamlyn Centre (opens in a new tab)',
     logoTitle: 'Open i-Thread Lab homepage at imperial.ac.uk in a new tab',
     settingsAria: 'Open settings',
+    // RoleBadge — identity chip on the right edge of the Header.
+    roleBadge: {
+      patient: 'Patient',
+      doctor: 'Doctor',
+      developer: 'Developer',
+      logout: 'Sign out',
+    },
     diaryUnreadAria: (n: number) =>
       `${n} unread diary ${n === 1 ? 'entry' : 'entries'}`,
     languageToggleAria: 'Switch language',
@@ -790,6 +798,7 @@ export const zh: Strings = {
   header: {
     nav: {
       dashboard: '仪表盘',
+      patients: '病人',
       chat: 'Agent 聊天',
       call: '通话',
       diary: '日记',
@@ -810,6 +819,13 @@ export const zh: Strings = {
     logoAria: 'i-Thread Lab — 帝国理工 Hamlyn 中心（新标签页打开）',
     logoTitle: '在新标签页打开 i-Thread Lab 主页（imperial.ac.uk）',
     settingsAria: '打开设置',
+    // RoleBadge — Header 右侧的身份徽章。
+    roleBadge: {
+      patient: '患者',
+      doctor: '医生',
+      developer: '开发者',
+      logout: '退出登录',
+    },
     diaryUnreadAria: (n: number) => `${n} 条未读日记`,
     languageToggleAria: '切换语言',
     languageToggleTitle: (next: 'en' | 'zh'): string =>

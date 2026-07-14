@@ -16,6 +16,7 @@ import { KnowledgePanel } from './KnowledgePanel';
 import { OrchestrationPanel } from './OrchestrationPanel';
 import { DiarySettingsPanel } from '../diary/DiarySettingsPanel';
 import { useT } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 
 type Tab =
   | 'extensions'
@@ -36,16 +37,34 @@ const TAB_IDS: readonly Tab[] = [
   'about',
 ];
 
+// Emoji prefix per tab ('' = label only, e.g. About).
+const TAB_ICONS: Record<Tab, string> = {
+  extensions: '🔌',
+  model: '🧠',
+  orchestration: '🎭',
+  knowledge: '📚',
+  diary: '📓',
+  appearance: '🎨',
+  about: '',
+};
+
 export function SettingsPage() {
   const navigate = useNavigate();
   const t = useT();
+  const can = useCan();
   const [searchParams] = useSearchParams();
+  // Role-filtered tab list — same order as TAB_IDS, filter only.
+  const visibleTabs = TAB_IDS.filter((id) => can(`settings.tab.${id}`));
   const initialTab: Tab = (() => {
     const q = searchParams.get('tab');
     // 向后兼容：旧的 ?tab=agents / ?tab=workflows 都归入合并后的「编排」tab。
-    if (q === 'agents' || q === 'workflows') return 'orchestration';
-    if (q && (TAB_IDS as readonly string[]).includes(q)) return q as Tab;
-    return 'extensions';
+    const requested = q === 'agents' || q === 'workflows' ? 'orchestration' : q;
+    if (requested && (visibleTabs as readonly string[]).includes(requested)) {
+      return requested as Tab;
+    }
+    // Deep links to hidden/unknown tabs fall back to the first visible
+    // tab, so e.g. ?tab=orchestration cannot leak a dev-only panel.
+    return visibleTabs[0] ?? 'appearance';
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [extensions, setExtensions] = useState<ExtensionStatus[]>([]);
@@ -98,32 +117,13 @@ export function SettingsPage() {
         </div>
       </header>
 
-      {/* Tab bar */}
+      {/* Tab bar — only the tabs the current role can see */}
       <nav className="shrink-0 border-b border-card-border bg-card-bg/50 px-6 flex gap-1">
-        <TabButton active={activeTab === 'extensions'} onClick={() => setActiveTab('extensions')}>
-          🔌 {t.settings.tabs.extensions}
-        </TabButton>
-        <TabButton active={activeTab === 'model'} onClick={() => setActiveTab('model')}>
-          🧠 {t.settings.tabs.model}
-        </TabButton>
-        <TabButton
-          active={activeTab === 'orchestration'}
-          onClick={() => setActiveTab('orchestration')}
-        >
-          🎭 {t.settings.tabs.orchestration}
-        </TabButton>
-        <TabButton active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')}>
-          📚 {t.settings.tabs.knowledge}
-        </TabButton>
-        <TabButton active={activeTab === 'diary'} onClick={() => setActiveTab('diary')}>
-          📓 {t.settings.tabs.diary}
-        </TabButton>
-        <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')}>
-          🎨 {t.settings.tabs.appearance}
-        </TabButton>
-        <TabButton active={activeTab === 'about'} onClick={() => setActiveTab('about')}>
-          {t.settings.tabs.about}
-        </TabButton>
+        {visibleTabs.map((id) => (
+          <TabButton key={id} active={activeTab === id} onClick={() => setActiveTab(id)}>
+            {TAB_ICONS[id] ? `${TAB_ICONS[id]} ${t.settings.tabs[id]}` : t.settings.tabs[id]}
+          </TabButton>
+        ))}
       </nav>
 
       {/* Body — 编排 tab 的可视化画布需要并排的 JSON 侧栏, 给更宽的容器 */}

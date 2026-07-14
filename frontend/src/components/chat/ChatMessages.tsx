@@ -17,7 +17,8 @@ import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
 import { agentAdminApi } from '../../api/agentAdminApi';
 import { MessageMarkdown } from './MessageMarkdown';
-import { useT } from '../../contexts/LanguageContext';
+import { useT, useLang } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 
 interface ChatMessagesProps {
   messages: AllMessage[];
@@ -1238,8 +1239,31 @@ export function LoadingIndicator() {
 }
 
 // Main ChatMessages component
+// Message types collapsed into one "working on it" line when the role
+// can't see raw activity (patients). Tool JSON, thinking traces and todo
+// scaffolding are developer/doctor vocabulary — a patient just needs to
+// know the assistant is busy on their behalf.
+const ACTIVITY_TYPES = new Set(['tool', 'tool_result', 'thinking', 'todo']);
+
+/** Patient-facing stand-in for a contiguous run of activity messages.
+    Reuses the LoadingIndicator's shimmer look so "busy" reads the same
+    everywhere; static (no spinner) since the run may already be done. */
+function ActivityDigestLine() {
+  const { lang } = useLang();
+  return (
+    <div className="mb-1 flex items-center gap-1.5 px-1.5 py-1">
+      <span className="text-[13px] leading-none text-text-muted">✳</span>
+      <span className="shimmer-text text-[12.5px]">
+        {lang === 'zh' ? '正在为你处理…' : 'Working on it…'}
+      </span>
+    </div>
+  );
+}
+
 export function ChatMessages({ messages }: ChatMessagesProps) {
   const t = useT();
+  const can = useCan();
+  const rawActivity = can('chat.rawActivity');
   if (messages.length === 0) {
     return (
       // Self-contained vertical centering — min-h-[60vh] gives the
@@ -1258,7 +1282,15 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
 
   return (
     <div className="space-y-2">
-      {messages.map((msg) => {
+      {messages.map((msg, i) => {
+        // Role-gated activity collapse: each contiguous run of
+        // tool/thinking/todo messages renders as ONE digest line (keyed
+        // by its first message), the rest of the run renders nothing.
+        if (!rawActivity && ACTIVITY_TYPES.has(msg.type)) {
+          const prev = messages[i - 1];
+          if (prev && ACTIVITY_TYPES.has(prev.type)) return null;
+          return <ActivityDigestLine key={msg.id} />;
+        }
         switch (msg.type) {
           case 'chat':
             return <ChatMessageComponent key={msg.id} message={msg} />;

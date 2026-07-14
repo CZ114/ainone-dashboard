@@ -25,6 +25,7 @@ import { AttachmentPills } from './AttachmentPills';
 import { ChatInputTools } from './ChatInputTools';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { useT } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 import {
   getMenuMatches,
   resolveCommand,
@@ -81,6 +82,9 @@ export function ChatInput({
   onModeChangeAnnounce,
 }: ChatInputProps) {
   const t = useT();
+  // Role capability lookup — slash commands are a developer feature;
+  // without chat.slash the menu never opens and `/foo` sends verbatim.
+  const can = useCan();
   const input = useChatStore((s) => s.input);
   const setInput = useChatStore((s) => s.setInput);
   const pendingAttachments = useChatStore((s) => s.pendingAttachments);
@@ -127,9 +131,10 @@ export function ChatInput({
   // Slash-menu matches are derived from the current input. Showing the
   // menu is purely a function of "does the input look like an in-
   // progress slash command" — no extra open/close state needed.
+  // Empty when the role lacks chat.slash so the menu never opens.
   const menuMatches = useMemo(
-    () => getMenuMatches(input, commands),
-    [input, commands],
+    () => (can('chat.slash') ? getMenuMatches(input, commands) : []),
+    [input, commands, can],
   );
   const menuOpen = menuMatches.length > 0;
 
@@ -630,10 +635,13 @@ export function ChatInput({
 
     // Slash command takes precedence when input starts with `/` and
     // has an exact registered name match. Otherwise, send as message.
-    const cmd = resolveCommand(text, commands);
-    if (cmd) {
-      dispatchCommand(cmd);
-      return;
+    // Role-gated: without chat.slash the text goes out verbatim.
+    if (can('chat.slash')) {
+      const cmd = resolveCommand(text, commands);
+      if (cmd) {
+        dispatchCommand(cmd);
+        return;
+      }
     }
 
     onSend(text);

@@ -1,14 +1,17 @@
 // Diary tab inside SettingsPage. One-stop control for: master enable,
 // daily schedule + agent, quiet hours, browser notification opt-in,
-// agent CRUD, and secret CRUD.
+// agent CRUD, and secret CRUD. Agent/secret CRUD is gated behind
+// diary.admin; schedule + notifications stay visible to every role.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDiaryStore } from '../../store/diaryStore';
 import { AgentEditor } from './AgentEditor';
 import { useT } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 
 export function DiarySettingsPanel() {
   const t = useT();
+  const can = useCan();
   const config = useDiaryStore((s) => s.config);
   const configLoading = useDiaryStore((s) => s.configLoading);
   const mainProvider = useDiaryStore((s) => s.mainProvider);
@@ -227,7 +230,8 @@ export function DiarySettingsPanel() {
         </div>
       </section>
 
-      {/* Agents */}
+      {/* Agents — admin-only (diary.admin) */}
+      {can('diary.admin') && (
       <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-text-primary">{t.diary.settingsPanel.agentsHeading}</h3>
@@ -350,8 +354,10 @@ export function DiarySettingsPanel() {
           </div>
         )}
       </section>
+      )}
 
-      {/* Secrets */}
+      {/* Secrets — admin-only (diary.admin) */}
+      {can('diary.admin') && (
       <section className="rounded-lg border border-card-border bg-card-bg/40 p-4">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-text-primary">
@@ -479,6 +485,7 @@ export function DiarySettingsPanel() {
         </>
         )}
       </section>
+      )}
     </div>
   );
 }

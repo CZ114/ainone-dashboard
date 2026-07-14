@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { useChatStore, VOICE_LANGS } from '../../store/chatStore';
 import { getDisplayName } from './ChatSidebar';
 import { ChatAudioStatus } from './ChatAudioStatus';
+import { useCan } from '../../contexts/RoleContext';
 import { agentAdminApi, type AgentDef } from '../../api/agentAdminApi';
 import type {
   PermissionModeValue,
@@ -349,6 +350,9 @@ export function ChatInputTools({
   esp32MicListening,
   onModeChangeAnnounce,
 }: ChatInputToolsProps) {
+  // Role capability lookup — slash trigger, agent preset and the mode
+  // pills are developer machinery; attach + mic stay for every role.
+  const can = useCan();
   const permissionMode = useChatStore((s) => s.permissionMode);
   const thinkingMode = useChatStore((s) => s.thinkingMode);
   const effortMode = useChatStore((s) => s.effortMode);
@@ -398,14 +402,16 @@ export function ChatInputTools({
             </svg>
           )}
         </button>
-        <button
-          onClick={onSlashClick}
-          className="w-7 h-7 flex items-center justify-center rounded text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors font-mono text-sm"
-          title="Insert / to open the slash-command menu"
-          aria-label="Open slash commands"
-        >
-          /
-        </button>
+        {can('chat.slash') && (
+          <button
+            onClick={onSlashClick}
+            className="w-7 h-7 flex items-center justify-center rounded text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors font-mono text-sm"
+            title="Insert / to open the slash-command menu"
+            aria-label="Open slash commands"
+          >
+            /
+          </button>
+        )}
         {/* Voice language picker — BCP-47 code for SpeechRecognition.
             Compact native <select> so all platforms render a familiar
             OS dropdown. Change takes effect on next mic start; if the
@@ -500,33 +506,39 @@ export function ChatInputTools({
 
       {/* Right — agent picker + mode pills. Each pill cycles through
           its enum; the colored dot + category prefix + value keep the
-          current selection self-explanatory without hovering. */}
+          current selection self-explanatory without hovering.
+          Role-gated: pills change agent behaviour (permissions,
+          thinking, effort) so only developers see them. */}
       <div className="flex items-center gap-0.5 shrink-0">
-        <AgentPicker />
-        <Pill
-          icon="🛡️"
-          category="Perm"
-          value={pm.value}
-          dotClass={pm.dot}
-          title={`${pm.detail}\n\nClick to cycle through permission modes.`}
-          onClick={cyclePermission}
-        />
-        <Pill
-          icon="💡"
-          category="Think"
-          value={tm.value}
-          dotClass={tm.dot}
-          title={`${tm.detail}\n\nClick to cycle: Auto → On → Off.`}
-          onClick={cycleThinking}
-        />
-        <Pill
-          icon="⚡"
-          category="Effort"
-          value={em.value}
-          dotClass={em.dot}
-          title={`${em.detail}\n\nClick to cycle: Auto → Low → Med → High → xHigh → Max.`}
-          onClick={cycleEffort}
-        />
+        {can('chat.agentPreset') && <AgentPicker />}
+        {can('chat.pills') && (
+          <>
+            <Pill
+              icon="🛡️"
+              category="Perm"
+              value={pm.value}
+              dotClass={pm.dot}
+              title={`${pm.detail}\n\nClick to cycle through permission modes.`}
+              onClick={cyclePermission}
+            />
+            <Pill
+              icon="💡"
+              category="Think"
+              value={tm.value}
+              dotClass={tm.dot}
+              title={`${tm.detail}\n\nClick to cycle: Auto → On → Off.`}
+              onClick={cycleThinking}
+            />
+            <Pill
+              icon="⚡"
+              category="Effort"
+              value={em.value}
+              dotClass={em.dot}
+              title={`${em.detail}\n\nClick to cycle: Auto → Low → Med → High → xHigh → Max.`}
+              onClick={cycleEffort}
+            />
+          </>
+        )}
       </div>
     </div>
   );

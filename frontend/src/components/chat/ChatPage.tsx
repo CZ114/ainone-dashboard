@@ -24,6 +24,7 @@ import { EmbeddedTerminal } from '../shell/EmbeddedTerminal';
 import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
 import { useT } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 import {
   buildPromptWithAttachments,
   MAX_TOTAL_ATTACHMENT_BYTES,
@@ -63,6 +64,9 @@ interface DiaryHandoff {
 
 function ChatPage() {
   const t = useT();
+  // Role capability lookup — gates the developer/staff-only chat
+  // machinery (embedded terminal, workflow panel, recordings drawer).
+  const can = useCan();
   const [searchParams, setSearchParams] = useSearchParams();
   const { processStreamLine } = useStreamParser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -945,7 +949,7 @@ function ChatPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {terminalCwd && (
+            {can('chat.terminal') && terminalCwd && (
               <div className="flex items-center gap-0.5 p-0.5 bg-card-border/30 rounded-md">
                 <button
                   onClick={() => setViewMode('chat')}
@@ -1081,7 +1085,7 @@ function ChatPage() {
             </div>
           </div>
 
-          {terminalCwd && (
+          {can('chat.terminal') && terminalCwd && (
             <div
               className={`flex-1 flex flex-col overflow-hidden ${
                 viewMode === 'terminal' ? '' : 'hidden'
@@ -1132,8 +1136,10 @@ function ChatPage() {
           {/* Workflow panel — collapsible section pinned above Chat
               History. Lives inside the right column so it inherits the
               focus-mode collapse behaviour for free. shrink-0 keeps the
-              resizable history/recordings group below it intact. */}
-          <ChatWorkflowPanel />
+              resizable history/recordings group below it intact.
+              Role-gated: hiding the component also hides its own
+              collapse toggle. */}
+          {can('chat.workflowPanel') && <ChatWorkflowPanel />}
           <PanelGroup orientation="vertical" className="flex-1 flex flex-col">
             <Panel id="right-history" defaultSize={55} minSize={20} className="flex flex-col">
               <ChatSidebar
@@ -1148,10 +1154,17 @@ function ChatPage() {
                 onOpenNewProjectDialog={() => setShowNewProjectDialog(true)}
               />
             </Panel>
-            <PanelResizeHandle className="h-1 bg-card-border hover:bg-accent/60 active:bg-accent transition-colors cursor-row-resize" />
-            <Panel id="right-recordings" defaultSize={45} minSize={20} className="flex flex-col">
-              <RecordingsPanel />
-            </Panel>
+            {/* Recordings drawer — role-gated together with its resize
+                handle; without it the history panel takes the full
+                column height. */}
+            {can('chat.recordings') && (
+              <PanelResizeHandle className="h-1 bg-card-border hover:bg-accent/60 active:bg-accent transition-colors cursor-row-resize" />
+            )}
+            {can('chat.recordings') && (
+              <Panel id="right-recordings" defaultSize={45} minSize={20} className="flex flex-col">
+                <RecordingsPanel />
+              </Panel>
+            )}
           </PanelGroup>
         </Panel>
       </PanelGroup>

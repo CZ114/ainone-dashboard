@@ -102,19 +102,24 @@ export function EntryCard({ entry, onReply, onMarkRead, onDelete }: EntryCardPro
         >
           {entry.read ? t.diary.entryCard.read : t.diary.entryCard.markRead}
         </button>
-        <button
-          type="button"
-          onClick={() => onDelete?.(entry)}
-          disabled={!entry.read || !onDelete}
-          title={
-            entry.read
-              ? t.diary.entryCard.deleteEnabledTitle
-              : t.diary.entryCard.deleteDisabledTitle
-          }
-          className="rounded border border-card-border px-3 py-1 text-xs text-text-muted hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-card-border disabled:hover:bg-transparent disabled:hover:text-text-muted"
-        >
-          {t.diary.entryCard.delete}
-        </button>
+        {/* No onDelete handler → no button at all (not a disabled one).
+            Role policy decides upstream: patients never get the handler —
+            diary entries are care records, replyable but not destroyable. */}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(entry)}
+            disabled={!entry.read}
+            title={
+              entry.read
+                ? t.diary.entryCard.deleteEnabledTitle
+                : t.diary.entryCard.deleteDisabledTitle
+            }
+            className="rounded border border-card-border px-3 py-1 text-xs text-text-muted hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-card-border disabled:hover:bg-transparent disabled:hover:text-text-muted"
+          >
+            {t.diary.entryCard.delete}
+          </button>
+        )}
         {entry.context_refs.recordings.length > 0 && (
           <span className="ml-auto truncate text-[11px] text-text-muted" title={entry.context_refs.recordings.join(', ')}>
             {t.diary.entryCard.refs} {entry.context_refs.recordings.length}

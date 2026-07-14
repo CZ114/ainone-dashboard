@@ -1,13 +1,84 @@
 // Header component with navigation
 
-import { startTransition } from 'react';
+import { startTransition, useState } from 'react';
 import { useStore } from '../../store';
 import { useDiaryStore } from '../../store/diaryStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../ThemeToggle';
 import { LanguageToggle } from '../LanguageToggle';
 import { useT } from '../../contexts/LanguageContext';
+import { useAuth, useCan } from '../../contexts/RoleContext';
+import type { FeatureKey, Role } from '../../lib/rolePolicy';
 import { isDemoMode } from '../../lib/demoMode';
+
+// Nav entries are data, not hand-written buttons — each one is gated
+// by its rolePolicy feature key, so what a patient vs. doctor sees is
+// decided by the policy table, never by ad-hoc role checks here.
+interface NavItem {
+  path: string;
+  feature: FeatureKey;
+  label: string;
+  ariaLabel?: string;
+}
+
+// Role → icon shorthand for the identity badge on the right edge.
+const ROLE_ICONS: Record<Role, string> = {
+  patient: '🌿',
+  doctor: '🩺',
+  developer: '🔧',
+};
+
+// RoleBadge — current identity (icon + display name) with a tiny
+// dropdown holding the single "sign out" action. Plain useState
+// toggle; closes when focus leaves the badge subtree (onBlur), so no
+// document-level click listener is needed.
+function RoleBadge() {
+  const { auth, logout } = useAuth();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onBlur={(e) => {
+        // Close only when focus moves outside the badge (button + menu).
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors"
+        title={t.header.roleBadge[auth.role]}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <span aria-hidden="true">{ROLE_ICONS[auth.role]}</span>
+        <span>{auth.name}</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-1 min-w-[8rem] py-1 rounded-lg border border-card-border bg-card-bg shadow-lg z-50"
+          // Keep focus on the toggle button so the blur handler above
+          // doesn't close the menu before the click lands.
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={logout}
+            className="w-full text-left px-3 py-2 text-sm text-status-danger hover:bg-card-border/50 transition-colors"
+          >
+            {t.header.roleBadge.logout}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Header() {
   const serial = useStore((state) => state.serial);
@@ -20,6 +91,7 @@ export function Header() {
   const navigate = useNavigate();
   const demo = isDemoMode();
   const t = useT();
+  const can = useCan();
 
   // Wrap route changes in startTransition so React 18 treats the
   // unmount/mount work as a non-urgent update — meaning sensor-data
@@ -36,6 +108,23 @@ export function Header() {
       void navigate(path);
     });
   };
+
+  // Declared inside the component because labels come from the live
+  // i18n table. Filtered through can() below — hidden routes simply
+  // don't render for roles the policy table excludes.
+  const NAV_ITEMS: NavItem[] = [
+    { path: '/dashboard', feature: 'route.dashboard', label: t.header.nav.dashboard },
+    { path: '/patients', feature: 'route.patients', label: t.header.nav.patients },
+    { path: '/chat', feature: 'route.chat', label: t.header.nav.chat },
+    { path: '/call', feature: 'route.call', label: t.header.nav.call },
+    { path: '/diary', feature: 'route.diary', label: t.header.nav.diary },
+    {
+      path: '/settings',
+      feature: 'route.settings',
+      label: t.header.nav.settings,
+      ariaLabel: t.header.settingsAria,
+    },
+  ];
 
   return (
     <header className="bg-card-bg border-b border-card-border px-6 py-2">
@@ -82,130 +171,106 @@ export function Header() {
         </a>
 
         {/* Navigation — buttons (not <Link>) so we can wrap navigate
-            in startTransition. */}
+            in startTransition. Rendered from NAV_ITEMS after the
+            role-policy filter; /diary keeps its unread badge and
+            /settings keeps its prefix-match highlight. */}
         <nav className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => goTo('/dashboard')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              location.pathname === '/dashboard'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
-            }`}
-          >
-            {t.header.nav.dashboard}
-          </button>
-          <button
-            type="button"
-            onClick={() => goTo('/chat')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              location.pathname === '/chat'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
-            }`}
-          >
-            {t.header.nav.chat}
-          </button>
-          <button
-            type="button"
-            onClick={() => goTo('/call')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              location.pathname === '/call'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
-            }`}
-          >
-            {t.header.nav.call}
-          </button>
-          <button
-            type="button"
-            onClick={() => goTo('/diary')}
-            className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              location.pathname === '/diary'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
-            }`}
-          >
-            {t.header.nav.diary}
-            {diaryUnread > 0 && (
-              <span
-                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-status-disconnected text-white text-[10px] font-bold flex items-center justify-center"
-                aria-label={t.header.diaryUnreadAria(diaryUnread)}
+          {NAV_ITEMS.filter((item) => can(item.feature)).map((item) => {
+            const isDiary = item.path === '/diary';
+            const isActive =
+              item.path === '/settings'
+                ? location.pathname.startsWith('/settings')
+                : location.pathname === item.path;
+            return (
+              <button
+                key={item.path}
+                type="button"
+                onClick={() => goTo(item.path)}
+                className={`${isDiary ? 'relative ' : ''}px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-accent text-white'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
+                }`}
+                aria-label={item.ariaLabel}
               >
-                {diaryUnread > 99 ? '99+' : diaryUnread}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => goTo('/settings')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              location.pathname.startsWith('/settings')
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-card-border/50'
-            }`}
-            aria-label={t.header.settingsAria}
-          >
-            {t.header.nav.settings}
-          </button>
+                {item.label}
+                {isDiary && diaryUnread > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-status-disconnected text-white text-[10px] font-bold flex items-center justify-center"
+                    aria-label={t.header.diaryUnreadAria(diaryUnread)}
+                  >
+                    {diaryUnread > 99 ? '99+' : diaryUnread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Status indicators */}
         <div className="flex items-center gap-6">
-          {/* Connection status */}
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  serial.connected ? 'bg-status-connected' : 'bg-status-disconnected'
-                }`}
-              />
-              <span className="text-text-secondary">
-                {t.header.status.serial}{' '}
-                {serial.connected ? serial.port : t.header.status.disconnected}
-              </span>
-            </div>
+          {/* Hardware telemetry (connection lights, recording pulse,
+              channel count) is staff-facing — hidden for patients via
+              the same policy table as the nav. */}
+          {can('nav.statusLights') && (
+            <>
+              {/* Connection status */}
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      serial.connected ? 'bg-status-connected' : 'bg-status-disconnected'
+                    }`}
+                  />
+                  <span className="text-text-secondary">
+                    {t.header.status.serial}{' '}
+                    {serial.connected ? serial.port : t.header.status.disconnected}
+                  </span>
+                </div>
 
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  ble.connected ? 'bg-status-connected' : 'bg-status-disconnected'
-                }`}
-              />
-              <span className="text-text-secondary">
-                {t.header.status.ble}{' '}
-                {ble.connected ? ble.deviceName : t.header.status.disconnected}
-              </span>
-            </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      ble.connected ? 'bg-status-connected' : 'bg-status-disconnected'
+                    }`}
+                  />
+                  <span className="text-text-secondary">
+                    {t.header.status.ble}{' '}
+                    {ble.connected ? ble.deviceName : t.header.status.disconnected}
+                  </span>
+                </div>
 
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  audio.connected ? 'bg-status-connected' : 'bg-status-disconnected'
-                }`}
-              />
-              <span className="text-text-secondary">
-                {t.header.status.audio}{' '}
-                {audio.connected ? t.header.status.active : t.header.status.inactive}
-              </span>
-            </div>
-          </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      audio.connected ? 'bg-status-connected' : 'bg-status-disconnected'
+                    }`}
+                  />
+                  <span className="text-text-secondary">
+                    {t.header.status.audio}{' '}
+                    {audio.connected ? t.header.status.active : t.header.status.inactive}
+                  </span>
+                </div>
+              </div>
 
-          {/* Recording indicator */}
-          {isRecording && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-status-disconnected/20 rounded-lg">
-              <span className="w-2 h-2 rounded-full bg-status-disconnected animate-pulse" />
-              <span className="text-status-disconnected text-sm font-medium">{t.header.status.recording}</span>
-            </div>
+              {/* Recording indicator */}
+              {isRecording && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-status-disconnected/20 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-status-disconnected animate-pulse" />
+                  <span className="text-status-disconnected text-sm font-medium">{t.header.status.recording}</span>
+                </div>
+              )}
+
+              {/* Channel count */}
+              <div className="text-sm text-text-secondary">
+                <span className="font-mono">{channelCount}</span> {t.header.status.channels}
+              </div>
+            </>
           )}
-
-          {/* Channel count */}
-          <div className="text-sm text-text-secondary">
-            <span className="font-mono">{channelCount}</span> {t.header.status.channels}
-          </div>
 
           <LanguageToggle />
           <ThemeToggle />
+          <RoleBadge />
         </div>
       </div>
     </header>

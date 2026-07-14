@@ -11,6 +11,7 @@ import { EntryCard } from './EntryCard';
 import { MessageMarkdown } from '../chat/MessageMarkdown';
 import type { DiaryEntry } from '../../api/diaryApi';
 import { useT } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 
 // Per-entry sessionStorage key. Picked up by ChatPage on /chat mount to
 // build the pinned context card and inject the diary entry as the
@@ -34,6 +35,7 @@ export interface DiaryHandoff {
 export default function DiaryPage() {
   const navigate = useNavigate();
   const t = useT();
+  const can = useCan();
   const entries = useDiaryStore((s) => s.entries);
   const loading = useDiaryStore((s) => s.loading);
   const generating = useDiaryStore((s) => s.generating);
@@ -254,10 +256,13 @@ export default function DiaryPage() {
                 entry={entry}
                 onReply={handleReply}
                 onMarkRead={(e) => void markRead(e.id)}
-                onDelete={(e) => {
+                // Role-gated: no handler → EntryCard renders no delete
+                // button. Diary entries are care records — patients can
+                // reply but never destroy them.
+                onDelete={can('diary.delete') ? (e) => {
                   if (!window.confirm(t.diary.page.confirmDelete(e.title))) return;
                   void deleteEntry(e.id);
-                }}
+                } : undefined}
               />
             ))}
           </div>

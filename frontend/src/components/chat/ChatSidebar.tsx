@@ -13,6 +13,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { type SessionSummary } from '../../store/chatStore';
 import { claudeApi, type SearchHit } from '../../api/claudeApi';
+import { useCan } from '../../contexts/RoleContext';
 
 interface ChatSidebarProps {
   sessions: SessionSummary[];
@@ -200,6 +201,7 @@ export function ChatSidebar({
   currentSessionId,
   onOpenNewProjectDialog,
 }: ChatSidebarProps) {
+  const can = useCan();
   const groups = useMemo(
     () => groupByProject(sessions, extraProjects),
     [sessions, extraProjects],
@@ -351,13 +353,17 @@ export function ChatSidebar({
             Chat History
           </h2>
         </div>
-        <button
-          onClick={handleNewProjectClick}
-          className="w-full px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
-          title="Register a new project folder — you'll be asked for its absolute path, then dropped into a fresh chat scoped to it."
-        >
-          + New Project
-        </button>
+        {/* Project management is a staff concern — patients get a plain
+            session list without the cwd/project mental model. */}
+        {can('chat.sidebarProjects') && (
+          <button
+            onClick={handleNewProjectClick}
+            className="w-full px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+            title="Register a new project folder — you'll be asked for its absolute path, then dropped into a fresh chat scoped to it."
+          >
+            + New Project
+          </button>
+        )}
         {/* Inline cross-session search. Real input — typing here
             replaces the project list below with matching messages
             from every .jsonl under ~/.claude/projects. Clearing the
@@ -507,44 +513,50 @@ export function ChatSidebar({
                         />
                       </svg>
                     </button>
-                    <button
-                      onClick={(e) => handleProjectTerminalClick(e, group.cwd)}
-                      className="shrink-0 p-1 rounded text-text-muted hover:text-emerald-300 hover:bg-emerald-500/20 transition-colors opacity-0 group-hover/row:opacity-100"
-                      title={`Open ${group.displayName} in system terminal with Claude CLI`}
-                      aria-label="Open in system terminal"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
+                    {/* Spawning the OS terminal with a full CLI is
+                        developer-only — it's shell access. */}
+                    {can('chat.openInTerminal') && (
+                      <button
+                        onClick={(e) => handleProjectTerminalClick(e, group.cwd)}
+                        className="shrink-0 p-1 rounded text-text-muted hover:text-emerald-300 hover:bg-emerald-500/20 transition-colors opacity-0 group-hover/row:opacity-100"
+                        title={`Open ${group.displayName} in system terminal with Claude CLI`}
+                        aria-label="Open in system terminal"
                       >
-                        <path
-                          fillRule="evenodd"
-                          d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 2.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 11 5.293 8.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => handleProjectDeleteClick(e, group.cwd)}
-                      className="shrink-0 p-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/20 transition-colors opacity-0 group-hover/row:opacity-100"
-                      title={`Delete project ${group.displayName}`}
-                      aria-label="Delete this project"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 2.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 11 5.293 8.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {can('chat.sidebarProjects') && (
+                      <button
+                        onClick={(e) => handleProjectDeleteClick(e, group.cwd)}
+                        className="shrink-0 p-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/20 transition-colors opacity-0 group-hover/row:opacity-100"
+                        title={`Delete project ${group.displayName}`}
+                        aria-label="Delete this project"
                       >
-                        <path
-                          fillRule="evenodd"
-                          d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
                   {/* Session list under this project */}
