@@ -62,6 +62,7 @@ interface TimelineLabels {
   failed: string;
   loopBreak: string;
   aborted: string;
+  references: (agent: string) => string;
 }
 
 function str(v: unknown): string {
@@ -216,8 +217,35 @@ function eventsToRows(
           titleClass: 'text-text-muted',
         });
         break;
+      case 'references': {
+        // 引用依据 — agent 检索命中的知识库来源。历史回放里也要显示，
+        // 否则医生审核过往运行时看不到结论的知识库溯源（audit trail 缺口）。
+        const hits = Array.isArray(e.hits) ? (e.hits as Array<Record<string, unknown>>) : [];
+        if (hits.length === 0) break;
+        const detail = hits
+          .map((h) => {
+            const src = str(h.source) || '—';
+            const score = typeof h.score === 'number' ? ` · ${h.score.toFixed(2)}` : '';
+            const prev = str(h.preview);
+            return `📄 ${src}${score}${prev ? `\n${prev}` : ''}`;
+          })
+          .join('\n\n');
+        rows.push({
+          key,
+          variant: 'row',
+          icon: '📚',
+          iconClass: 'text-accent-soft',
+          title: labels.references(str(e.agent)),
+          titleClass: 'text-text-muted',
+          meta: [str(e.query) ? firstLine(str(e.query)) : '', String(hits.length)]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+          detailText: detail,
+        });
+        break;
+      }
       default:
-        break; // 未知事件类型（含 references）— 回放里静默跳过
+        break; // 未知事件类型 — 回放里静默跳过
     }
   }
   return rows;
@@ -233,6 +261,7 @@ function useTimelineLabels(): TimelineLabels {
       failed: tw.failed,
       loopBreak: tw.loopBreak,
       aborted: tw.aborted,
+      references: tw.refsTitle,
     }),
     [tw],
   );
