@@ -25,6 +25,7 @@ export const en = {
   },
   header: {
     nav: {
+      today: 'Today',
       dashboard: 'Dashboard',
       patients: 'Patients',
       chat: 'Agent Chat',
@@ -797,6 +798,7 @@ export const zh: Strings = {
   },
   header: {
     nav: {
+      today: '今天',
       dashboard: '仪表盘',
       patients: '病人',
       chat: 'Agent 聊天',

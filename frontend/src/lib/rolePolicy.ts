@@ -11,6 +11,7 @@ export type Role = 'patient' | 'doctor' | 'developer';
 
 export type FeatureKey =
   // 顶级路由
+  | 'route.today'            // 患者首页 (数据 insight + 日记 + 语音入口)
   | 'route.dashboard'        // 传感器监测 (波形墙/录制/回放)
   | 'route.chat'
   | 'route.call'
@@ -49,6 +50,7 @@ const DEV: Role[] = ['developer'];
 
 /** 功能 → 允许的角色。缺表条目按 fail-closed 处理 (只有 developer 可见)。 */
 export const FEATURES: Record<FeatureKey, Role[]> = {
+  'route.today':              ['patient'],
   'route.dashboard':          STAFF,
   'route.chat':               ALL,
   'route.call':               ALL,
@@ -92,5 +94,5 @@ export function can(role: Role | null, feature: FeatureKey): boolean {
 
 /** 各角色的落地页 — `/` 重定向 & 越权访问的退路。 */
 export function homeOf(role: Role): string {
-  return role === 'patient' ? '/call' : '/dashboard';
+  return role === 'patient' ? '/today' : '/dashboard';
 }

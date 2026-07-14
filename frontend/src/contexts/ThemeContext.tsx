@@ -162,6 +162,18 @@ function readStoredConfig(): StoredConfig {
   } catch {
     /* localStorage unavailable */
   }
+  // Role default: patients get a calm light medical-blue theme
+  // (nord/light) to reinforce the clinical feel. Only applies when the
+  // user hasn't picked a theme yet — an explicit theme-config above
+  // always wins, so a patient who changes theme keeps their choice.
+  try {
+    const auth = localStorage.getItem('app.auth');
+    if (auth && JSON.parse(auth).role === 'patient') {
+      return { name: 'nord', mode: 'light' };
+    }
+  } catch {
+    /* ignore */
+  }
   return { name: 'archival', mode: 'system' };
 }
 

@@ -8,6 +8,7 @@ import SettingsPage from './components/settings/SettingsPage';
 import DiaryPage from './components/diary/DiaryPage';
 import CallPage from './components/call/CallPage';
 import PatientsPage from './components/patients/PatientsPage';
+import TodayPage from './components/patient/TodayPage';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { RoleProvider, useAuth, useCan } from './contexts/RoleContext';
@@ -55,6 +56,9 @@ function App() {
             <AppBridge />
             <Routes>
               <Route path="/" element={<HomeRedirect />} />
+              <Route path="/today" element={
+                <RoleRoute feature="route.today"><TodayPage /></RoleRoute>
+              } />
               <Route path="/dashboard" element={
                 <RoleRoute feature="route.dashboard"><Dashboard /></RoleRoute>
               } />

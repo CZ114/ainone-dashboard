@@ -21,6 +21,7 @@ import {
 } from 'react';
 import { can, type FeatureKey, type Role } from '../lib/rolePolicy';
 import { LoginGate } from '../components/auth/LoginGate';
+import { useTheme } from './ThemeContext';
 
 export interface AuthInfo {
   role: Role;
@@ -61,6 +62,7 @@ function readStoredAuth(): AuthInfo | null {
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthInfo | null>(readStoredAuth);
+  const { setThemeName, setPreference } = useTheme();
 
   const handleLogin = useCallback((info: AuthInfo) => {
     try {
@@ -68,8 +70,14 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore quota / private mode — session-only login */
     }
+    // Patients land on a calm light medical-blue theme immediately —
+    // only when they haven't already picked one (theme-config present).
+    if (info.role === 'patient' && !localStorage.getItem('theme-config')) {
+      setThemeName('nord');
+      setPreference('light');
+    }
     setAuth(info);
-  }, []);
+  }, [setThemeName, setPreference]);
 
   const logout = useCallback(() => {
     try {

@@ -113,6 +113,7 @@ export function Header() {
   // i18n table. Filtered through can() below — hidden routes simply
   // don't render for roles the policy table excludes.
   const NAV_ITEMS: NavItem[] = [
+    { path: '/today', feature: 'route.today', label: t.header.nav.today },
     { path: '/dashboard', feature: 'route.dashboard', label: t.header.nav.dashboard },
     { path: '/patients', feature: 'route.patients', label: t.header.nav.patients },
     { path: '/chat', feature: 'route.chat', label: t.header.nav.chat },
