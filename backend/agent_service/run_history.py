@@ -56,26 +56,33 @@ def _prune() -> None:
             pass
 
 
-def list_runs(limit: int = 30) -> list[dict]:
-    """摘要列表, 最新在前。逐文件读但只取摘要字段 (文件都很小)。"""
+def list_runs(limit: int = 30, owner=None) -> list[dict]:
+    """摘要列表, 最新在前。owner 给定 (患者) → 只返回该 owner 名下的运行;
+    owner=None (医生/开发者) → 全部。旧记录无 owner 只对 owner=None 可见。
+    先按 owner 过滤再取 limit, 避免最新 limit 个里恰好没有匹配项。"""
     out = []
     files = sorted(RUNS_DIR.glob("*.json"),
                    key=lambda p: p.stat().st_mtime, reverse=True)
-    for p in files[:limit]:
+    for p in files:
         try:
             r = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            continue
+        if owner is not None and r.get("owner") != owner:
             continue
         out.append({
             "run_id": r.get("run_id", p.stem),
             "workflow_id": r.get("workflow_id"),
             "name": r.get("name"),
+            "owner": r.get("owner"),
             "status": r.get("status"),
             "started_at": r.get("started_at"),
             "elapsed_ms": r.get("elapsed_ms"),
             "steps": sum(1 for e in r.get("events", []) if e.get("type") == "step_end"),
             "output_preview": (str(r.get("output") or "")[:_PREVIEW_CHARS]),
         })
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -105,11 +112,12 @@ _active_lock = threading.Lock()
 class RunHandle:
     """一次运行的追踪句柄: add_event 累积, finish 归档并摘除。"""
 
-    def __init__(self, run_id, workflow_id, name, inputs):
+    def __init__(self, run_id, workflow_id, name, inputs, owner=None):
         self.run_id = run_id
         self.workflow_id = workflow_id
         self.name = name
         self.inputs = inputs
+        self.owner = owner   # M3 归属: 患者编号 / staff 用户名
         self.started = time.time()
         self.events: list[dict] = []
         self._lock = threading.Lock()
@@ -125,6 +133,7 @@ class RunHandle:
                 "run_id": self.run_id,
                 "workflow_id": self.workflow_id,
                 "name": self.name,
+                "owner": self.owner,
                 "status": "running",
                 "started_at": datetime.fromtimestamp(self.started).isoformat(),
                 "events": list(self.events),
@@ -144,6 +153,7 @@ class RunHandle:
                 "run_id": self.run_id,
                 "workflow_id": self.workflow_id,
                 "name": self.name,
+                "owner": self.owner,
                 "status": status,
                 "inputs": self.inputs,
                 "started_at": datetime.fromtimestamp(self.started).isoformat(),
@@ -155,23 +165,24 @@ class RunHandle:
             pass
 
 
-def start_run(workflow_id: str, name: str, inputs: dict) -> RunHandle:
-    h = RunHandle(new_run_id(), workflow_id, name, inputs)
+def start_run(workflow_id: str, name: str, inputs: dict, owner=None) -> RunHandle:
+    h = RunHandle(new_run_id(), workflow_id, name, inputs, owner)
     with _active_lock:
         _active[h.run_id] = h
     return h
 
 
-def list_active() -> list[dict]:
+def list_active(owner=None) -> list[dict]:
     with _active_lock:
         handles = list(_active.values())
     return [{
         "run_id": h.run_id,
         "workflow_id": h.workflow_id,
         "name": h.name,
+        "owner": h.owner,
         "started_at": datetime.fromtimestamp(h.started).isoformat(),
         "n_events": len(h.events),
-    } for h in handles]
+    } for h in handles if owner is None or h.owner == owner]
 
 
 def get_active(run_id: str) -> dict:

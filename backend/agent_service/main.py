@@ -117,6 +117,9 @@ async def authz_middleware(request: Request, call_next):
                         "more_body": False}
             request = Request(request.scope, receive)
 
+    # 身份挂到 request.state, 供下游端点做数据级归属过滤 (M3)。scope 复用,
+    # 即使上面重建过 request, state 仍在同一 scope 里。
+    request.state.user_info = {"role": role, "id": uid}
     response = await call_next(request)
 
     # 4) 管理面写操作审计 (谁/何时/动了什么/结果)
@@ -229,13 +232,22 @@ class VoiceBody(BaseModel):
     system: str | None = None
 
 
+# ─── 归属过滤 helper (M3) ────────────────────────────────────────────
+
+def _owner_filter(request: Request) -> str | None:
+    """患者 → 自己的 id (只见自己的数据); 医生/开发者 → None (见全部)。"""
+    ui = getattr(request.state, "user_info", {})
+    return ui.get("id") if ui.get("role") == "patient" else None
+
+
 # ─── chat 流核心 (neutral 与 compat 共用) ────────────────────────────
 
-def _chat_response(body: ChatBody, fmt: str) -> StreamingResponse:
+def _chat_response(body: ChatBody, fmt: str, owner: str | None = None) -> StreamingResponse:
     try:
         # compat: 前端新会话带临时 id ("new-session-*"), 未知 id 视为新建
         session_id, entry = manager.get_or_create(
-            body.sessionId, body.agentId, create_if_missing=(fmt == "compat"))
+            body.sessionId, body.agentId, create_if_missing=(fmt == "compat"),
+            owner=owner)
     except KeyError as e:
         raise HTTPException(404, str(e))
     except NotImplementedError as e:
@@ -322,8 +334,9 @@ def _resolve_permission(body: PermissionBody):
 # ─── neutral 端点 (/api/agent/*) ─────────────────────────────────────
 
 @app.post("/api/agent/chat")
-def agent_chat(body: ChatBody):
-    return _chat_response(body, "neutral")
+def agent_chat(body: ChatBody, request: Request):
+    owner = getattr(request.state, "user_info", {}).get("id")
+    return _chat_response(body, "neutral", owner)
 
 
 @app.post("/api/agent/permission")
@@ -357,12 +370,15 @@ def agent_oneshot(body: OneshotBody):
 
 
 @app.get("/api/agent/sessions")
-def agent_sessions():
-    return {"sessions": manager.list_sessions()}
+def agent_sessions(request: Request):
+    return {"sessions": manager.list_sessions(_owner_filter(request))}
 
 
 @app.get("/api/agent/sessions/{session_id}/messages")
-def agent_session_messages(session_id: str):
+def agent_session_messages(session_id: str, request: Request):
+    ui = getattr(request.state, "user_info", {})
+    if ui.get("role") == "patient" and manager.owner_of(session_id) != ui.get("id"):
+        raise HTTPException(403, "无权访问此会话")
     try:
         return {"messages": manager.read_messages(session_id)}
     except KeyError as e:
@@ -659,7 +675,7 @@ def workflows_run(wf_id: str, body: WorkflowRunBody):
 
 
 @app.post("/api/agent/workflows/{wf_id}/stream")
-def workflows_stream(wf_id: str, body: WorkflowRunBody):
+def workflows_stream(wf_id: str, body: WorkflowRunBody, request: Request):
     """NDJSON 事件流: workflow_start|step_start|step_end|loop_iter|loop_break|
     route_choice|human_ask|human_input_required|workflow_end|error。
 
@@ -671,7 +687,10 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
     """
     wf = _load_workflow_or_404(wf_id)
     q: queue.Queue = queue.Queue()
-    handle = run_history.start_run(wf_id, wf.spec.get("name") or wf_id, body.inputs)
+    # run owner = 发起者 id (患者自跑归患者, 医生跑归医生); 患者只见自己发起的。
+    _run_owner = getattr(request.state, "user_info", {}).get("id")
+    handle = run_history.start_run(
+        wf_id, wf.spec.get("name") or wf_id, body.inputs, _run_owner)
 
     def ask_human(prompt: str) -> str:
         p = human_inputs.create()
@@ -722,14 +741,14 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody):
 # 注意路径避开 /api/agent/workflows/{wf_id} 的通配
 
 @app.get("/api/agent/workflow-runs")
-def workflow_runs_list(limit: int = 30):
-    return {"runs": run_history.list_runs(max(1, min(limit, 100)))}
+def workflow_runs_list(request: Request, limit: int = 30):
+    return {"runs": run_history.list_runs(max(1, min(limit, 100)), _owner_filter(request))}
 
 
 @app.get("/api/agent/workflow-runs/active")
-def workflow_runs_active():
+def workflow_runs_active(request: Request):
     """进行中的运行 (含聊天 agent 经 run_workflow 工具启动的) — 面板轮询用。"""
-    return {"active": run_history.list_active()}
+    return {"active": run_history.list_active(_owner_filter(request))}
 
 
 @app.get("/api/agent/workflow-runs/active/{run_id}")
@@ -882,8 +901,9 @@ def rag_search(body: RagSearchBody):
 # ─── compat 端点 (/api/compat/*, 供 agent_gateway 透传) ──────────────
 
 @app.post("/api/compat/chat")
-def compat_chat(body: ChatBody):
-    return _chat_response(body, "compat")
+def compat_chat(body: ChatBody, request: Request):
+    owner = getattr(request.state, "user_info", {}).get("id")
+    return _chat_response(body, "compat", owner)
 
 
 @app.post("/api/compat/chat/permission")
@@ -904,10 +924,10 @@ def _first_content(messages, role):
 
 
 @app.get("/api/compat/sessions")
-def compat_sessions():
+def compat_sessions(request: Request):
     """前端 sidebar 的 SessionSummary shape。"""
     out = []
-    for meta in manager.list_sessions():
+    for meta in manager.list_sessions(_owner_filter(request)):
         sid = meta["sessionId"]
         try:
             msgs = manager.read_messages(sid)

@@ -5,6 +5,7 @@
 同一 session 同时只允许一个进行中请求 (entry.lock)。
 """
 
+import json
 import threading
 import time
 import uuid
@@ -27,6 +28,28 @@ class SessionManager:
     def __init__(self):
         self._sessions = {}
         self._lock = threading.Lock()
+        # M3 归属: session_id → owner (患者编号 / staff 用户名)。side-car
+        # JSON, 因为 session 本体是 audit .jsonl (消息历史), 不宜塞元数据。
+        self._owners = self._load_owners()
+
+    _OWNERS_PATH = SESSIONS_DIR.parent / "session_owners.json"
+
+    @classmethod
+    def _load_owners(cls):
+        try:
+            return json.loads(cls._OWNERS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _save_owners(self):
+        try:
+            self._OWNERS_PATH.write_text(
+                json.dumps(self._owners, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+    def owner_of(self, session_id):
+        return self._owners.get(session_id)
 
     @staticmethod
     def _audit_path(session_id):
@@ -36,7 +59,7 @@ class SessionManager:
     def _new_session_id():
         return datetime.now().strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:6]
 
-    def get_or_create(self, session_id=None, agent_id=None, create_if_missing=False):
+    def get_or_create(self, session_id=None, agent_id=None, create_if_missing=False, owner=None):
         """返回 (session_id, entry)。
 
         - session_id=None → 新会话
@@ -68,6 +91,10 @@ class SessionManager:
 
             entry = SessionEntry(agent)
             self._sessions[session_id] = entry
+            # 首次见到该 session 且调用方带了 owner → 记归属 (幂等)。
+            if owner and session_id not in self._owners:
+                self._owners[session_id] = owner
+                self._save_owners()
             return session_id, entry
 
     def peek(self, session_id):
@@ -85,13 +112,23 @@ class SessionManager:
 
     # ─── 只读查询 (直接走磁盘, 不触碰内存实例) ──────────────────────
 
-    def list_sessions(self):
-        """按最近更新排序的 [{sessionId, updatedAt}]。"""
+    def list_sessions(self, owner=None):
+        """按最近更新排序的 [{sessionId, updatedAt, owner}]。
+
+        owner 给定 (患者) → 只返回该 owner 名下的会话; owner=None (医生/
+        开发者) → 全部。归属未知的旧会话 (无 owner 记录) 只对 owner=None
+        可见 — 患者严格只见自己的, 不会漏看到他人或迁移前的孤立会话。
+        """
         out = []
         for p in SESSIONS_DIR.glob("*.jsonl"):
+            sid = p.stem
+            sid_owner = self._owners.get(sid)
+            if owner is not None and sid_owner != owner:
+                continue
             out.append({
-                "sessionId": p.stem,
+                "sessionId": sid,
                 "updatedAt": datetime.fromtimestamp(p.stat().st_mtime).isoformat(),
+                "owner": sid_owner,
             })
         out.sort(key=lambda s: s["updatedAt"], reverse=True)
         return out
