@@ -26,6 +26,7 @@ export interface AuthInfo {
   role: Role;
   id: string;      // 患者编号 P-xxx / staff 用户名
   name: string;    // 显示名 (患者姓名; staff 同用户名)
+  token?: string;  // M2: 签名 token — authToken.ts 的 fetch 包装读它注头
 }
 
 interface RoleContextValue {
@@ -45,7 +46,10 @@ function readStoredAuth(): AuthInfo | null {
     const parsed = JSON.parse(raw);
     if (
       (parsed.role === 'patient' || parsed.role === 'doctor' || parsed.role === 'developer') &&
-      typeof parsed.id === 'string' && typeof parsed.name === 'string'
+      typeof parsed.id === 'string' && typeof parsed.name === 'string' &&
+      // M2: a session without a signed token is a stale M1 login — force
+      // re-login rather than render a role whose API calls all 403.
+      typeof parsed.token === 'string' && parsed.token
     ) {
       return parsed as AuthInfo;
     }

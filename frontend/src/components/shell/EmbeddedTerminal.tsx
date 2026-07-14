@@ -18,6 +18,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getToken } from '../../lib/authToken';
 
 interface EmbeddedTerminalProps {
   cwd: string;
@@ -36,7 +37,12 @@ const RESIZE_DEBOUNCE_MS = 50;
 // vite.config.ts routes /ws/shell to the backend.
 function buildWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws/shell`;
+  // M2: the shell endpoint requires a developer token. Browsers can't
+  // set headers on WS handshakes, so it rides a query param — the
+  // gateway rejects the upgrade outright without a valid one.
+  const token = getToken();
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${protocol}//${window.location.host}/ws/shell${query}`;
 }
 
 // Theme palettes — chrome (background / foreground / cursor / selection)

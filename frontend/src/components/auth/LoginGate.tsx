@@ -58,7 +58,8 @@ export function LoginGate({ onLogin }: { onLogin: (info: AuthInfo) => void }) {
       });
       if (res.ok) {
         const data = await res.json();
-        onLogin({ role: data.role, id: data.id, name: data.name });
+        // token: M2 签名凭证 — 持久化后由 authToken.ts 注入每个 /api 请求
+        onLogin({ role: data.role, id: data.id, name: data.name, token: data.token });
         return; // Provider 切换到应用树, 本组件卸载
       }
       setError(res.status === 401 ? t.failed : `HTTP ${res.status}`);
