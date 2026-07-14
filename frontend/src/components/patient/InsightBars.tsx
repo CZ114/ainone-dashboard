@@ -12,6 +12,7 @@ const TEXT = {
   zh: {
     title: '此刻状态',
     live: '实时',
+    demo: '演示',
     hr: '心率', activity: '活动', ambient: '环境', voice: '说话声音',
     hrNormal: '正常', hrHigh: '偏快', hrLow: '偏慢',
     resting: '静息', light: '轻度活动', active: '活跃',
@@ -22,6 +23,7 @@ const TEXT = {
   en: {
     title: 'Right now',
     live: 'live',
+    demo: 'demo',
     hr: 'Heart rate', activity: 'Activity', ambient: 'Ambient', voice: 'Voice',
     hrNormal: 'normal', hrHigh: 'fast', hrLow: 'slow',
     resting: 'resting', light: 'light', active: 'active',
@@ -67,7 +69,7 @@ export function InsightBars({ insights }: { insights: PatientInsights }) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text-primary">{t.title}</h3>
         <span className="text-[10px] font-medium text-accent bg-accent/10 rounded-full px-2 py-0.5 uppercase tracking-wide">
-          ● {t.live}
+          ● {insights.isDemo ? t.demo : t.live}
         </span>
       </div>
 

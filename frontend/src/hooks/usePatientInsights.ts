@@ -8,33 +8,39 @@
 //   - So: heart rate is a real channel value; "activity" is DERIVED
 //     here as accelerometer window volatility (max-min spread), which
 //     genuinely tracks movement but is NOT a calibrated 0-100 score —
-//     the UI labels it qualitatively (resting / light / active), never
-//     as a fake percentage of some daily goal.
+//     the UI labels it qualitatively (resting / light / active).
 //   - Everything is instantaneous ("right now"), never "today's
 //     average" — there is no daily aggregation in the pipeline.
 //
-// When no device is streaming, `hasData` is false and numeric fields are
-// null; the UI still shows the breathing-guide ring (its value doesn't
-// depend on data) and a "connect your band" hint.
+// Demo mode: when VITE_DEMO_MODE=1 and no real device is streaming, we
+// synthesise a gently-drifting glove feed so the full page can be seen
+// (heart rate ticks, activity/voice breathe). This is clearly demo data,
+// only used when there is nothing real to show.
+//
+// When neither real nor demo data exists, `hasData` is false and the UI
+// degrades gracefully (breathing-guide ring only, "connect" hints).
 
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
+import { isDemoMode } from '../lib/demoMode';
 import type { ChannelData } from '../types';
 
 export type ActivityLevel = 'resting' | 'light' | 'active';
 
 export interface PatientInsights {
   hasData: boolean;
+  isDemo: boolean;                 // true when the shown numbers are synthetic
   heartRate: number | null;        // bpm, rounded
   heartRateBand: 'low' | 'normal' | 'high' | null;
-  activity: { score: number; level: ActivityLevel } | null; // score 0-100 (qualitative)
+  activity: { score: number; level: ActivityLevel } | null;
   ambient: { temp: number | null; humidity: number | null } | null;
   voiceLevel: number;              // 0..1, from audio RMS dB
   device: DeviceStatus;
 }
 
 export interface DeviceStatus {
-  band: { connected: boolean; name: string | null };   // BLE chest band
-  hub: { connected: boolean };                          // serial hub
+  glove: { connected: boolean; name: string | null };  // the smart glove (BLE)
+  hub: { connected: boolean };                          // wired/USB data link
   mic: { connected: boolean };                          // audio capture
   channelCount: number;
   recording: { active: boolean; elapsedSec: number };
@@ -47,8 +53,32 @@ function findChannel(channels: ChannelData[], re: RegExp): ChannelData | undefin
 
 /** Map audio RMS dB (~[-100, 0]) to a [0,1] talk-loudness bar. */
 function dbToNorm(db: number): number {
-  const norm = (db + 60) / 60; // -60 dB → 0, 0 dB → 1
-  return Math.min(1, Math.max(0, norm));
+  return Math.min(1, Math.max(0, (db + 60) / 60));
+}
+
+// Synthetic, gently-drifting insights for demo mode so the whole page is
+// visible without a physical glove. Driven by a slow tick.
+function buildDemoInsights(tick: number): PatientInsights {
+  const hr = 72 + Math.round(4 * Math.sin(tick / 2.4));           // 68–76 bpm
+  const actScore = 16 + Math.round(14 * (0.5 + 0.5 * Math.sin(tick / 3.1)));
+  const voice = 0.08 + 0.16 * (0.5 + 0.5 * Math.sin(tick / 1.7));
+  return {
+    hasData: true,
+    isDemo: true,
+    heartRate: hr,
+    heartRateBand: 'normal',
+    activity: { score: actScore, level: actScore < 12 ? 'resting' : actScore < 45 ? 'light' : 'active' },
+    ambient: { temp: 26.8, humidity: 45 },
+    voiceLevel: voice,
+    device: {
+      glove: { connected: true, name: 'ESP32-S3-Glove' },
+      hub: { connected: true },
+      mic: { connected: true },
+      channelCount: 12,
+      recording: { active: false, elapsedSec: 0 },
+      anyConnected: true,
+    },
+  };
 }
 
 export function usePatientInsights(): PatientInsights {
@@ -59,17 +89,25 @@ export function usePatientInsights(): PatientInsights {
   const channelCount = useStore((s) => s.channelCount);
   const recording = useStore((s) => s.recording);
 
+  // Demo drift tick — only runs when demo mode is on and nothing real
+  // is streaming, so real deployments pay nothing.
+  const [demoTick, setDemoTick] = useState(0);
+  const demoActive = channels.length === 0 && isDemoMode();
+  useEffect(() => {
+    if (!demoActive) return;
+    const id = setInterval(() => setDemoTick((t) => t + 1), 1500);
+    return () => clearInterval(id);
+  }, [demoActive]);
+
+  if (demoActive) return buildDemoInsights(demoTick);
+
   const hasData = channels.length > 0;
 
-  // Heart rate — a real firmware-derived channel value.
   const hrChannel = findChannel(channels, /\bHR\b|heart/i);
   const heartRate = hrChannel ? Math.round(hrChannel.value) : null;
   const heartRateBand =
     heartRate === null ? null : heartRate < 55 ? 'low' : heartRate > 100 ? 'high' : 'normal';
 
-  // Activity — DERIVED from accelerometer window volatility. Sum of each
-  // axis's (max - min) spread over the rolling window: still ≈ 0, moving
-  // grows. Mapped to a qualitative 0-100 (≈3 g total spread = full).
   const accelChannels = channels.filter((c) => /accel/i.test(c.name));
   let activity: PatientInsights['activity'] = null;
   if (accelChannels.length > 0) {
@@ -82,7 +120,6 @@ export function usePatientInsights(): PatientInsights {
     activity = { score, level };
   }
 
-  // Ambient — environmental context, latest values.
   const tempCh = findChannel(channels, /temp/i);
   const humCh = findChannel(channels, /humid/i);
   const ambient =
@@ -92,7 +129,7 @@ export function usePatientInsights(): PatientInsights {
       : null;
 
   const device: DeviceStatus = {
-    band: { connected: ble.connected, name: ble.deviceName },
+    glove: { connected: ble.connected, name: ble.deviceName },
     hub: { connected: serial.connected },
     mic: { connected: audio.connected },
     channelCount,
@@ -102,6 +139,7 @@ export function usePatientInsights(): PatientInsights {
 
   return {
     hasData,
+    isDemo: false,
     heartRate,
     heartRateBand,
     activity,
