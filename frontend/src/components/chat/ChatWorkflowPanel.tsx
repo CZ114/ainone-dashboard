@@ -26,6 +26,8 @@ import {
   type WorkflowSpec,
   type WorkflowSummary,
 } from '../../api/agentAdminApi';
+import { useAuth } from '../../contexts/RoleContext';
+import type { Role } from '../../lib/rolePolicy';
 import {
   asString,
   condOf,
@@ -77,6 +79,21 @@ function firstLine(s: string): string {
 }
 
 /**
+ * 三镜头投影: 医生看 labels.doctor 的临床叙事替代 step id, 开发者(及缺省)
+ * 看原始 step。患者不用此面板(照护丝带在 TodayPage), role 仍完整传入。
+ */
+function projectStepTitle(e: WorkflowRunEvent, step: string, role: Role): string {
+  if (role === 'doctor') {
+    const lbl = (e as { labels?: unknown }).labels;
+    if (lbl && typeof lbl === 'object') {
+      const d = (lbl as Record<string, unknown>).doctor;
+      if (typeof d === 'string' && d) return d;
+    }
+  }
+  return step;
+}
+
+/**
  * 把事件序列映射成时间线行(历史回放)。step_start 先落占位行(按 step id
  * 记账)，对应的 step_end 到达时原位「落定」为 ✓ + 首行摘要 + 可展开的
  * 完整 output。key 复用占位行的 key，React 保持组件身份、展开状态不丢。
@@ -84,6 +101,7 @@ function firstLine(s: string): string {
 function eventsToRows(
   events: WorkflowRunEvent[],
   labels: TimelineLabels,
+  role: Role,
 ): TimelineRowModel[] {
   const rows: TimelineRowModel[] = [];
   // step id → 未落定占位行的下标。parallel 分支 step id 互不相同，
@@ -111,7 +129,7 @@ function eventsToRows(
           variant: 'row',
           icon: '→',
           iconClass: 'text-accent-soft',
-          title: step,
+          title: projectStepTitle(e, step, role),
           meta: `(${e.type === 'human_ask' ? 'human' : str(e.agent)})`,
         });
         openSteps.set(step, rows.length - 1);
@@ -126,7 +144,7 @@ function eventsToRows(
           variant: 'row',
           icon: '✓',
           iconClass: 'text-emerald-600',
-          title: step,
+          title: projectStepTitle(e, step, role),
           meta: firstLine(output) || undefined,
           detailText: output || undefined,
         };
@@ -646,9 +664,10 @@ function HistoryRunRow({
     }
   };
 
+  const { auth } = useAuth();
   const rows = useMemo(
-    () => (events ? eventsToRows(events, labels) : []),
-    [events, labels],
+    () => (events ? eventsToRows(events, labels, auth.role) : []),
+    [events, labels, auth.role],
   );
 
   const status = STATUS_ICON[run.status] ?? STATUS_ICON.done;
