@@ -1,0 +1,570 @@
+// Zustand store for Claude chat state - with proper session continuity
+
+import { create } from 'zustand';
+import type { PendingAttachment } from '../lib/attachments';
+export type { PendingAttachment } from '../lib/attachments';
+
+// Message types
+export interface ChatMessage {
+  id: string;
+  type: 'chat';
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface SystemMessage {
+  id: string;
+  type: 'system';
+  subtype: 'init' | 'result' | 'error' | 'abort';
+  content?: string;
+  model?: string;
+  session_id?: string;
+  tools?: string[];
+  cwd?: string;
+  permissionMode?: string;
+  duration_ms?: number;
+  total_cost_usd?: number;
+  timestamp: number;
+}
+
+export interface ToolMessage {
+  id: string;
+  type: 'tool';
+  toolName: string;
+  input?: Record<string, unknown>;
+  toolUseId?: string;
+  timestamp: number;
+}
+
+export interface ToolResultMessage {
+  id: string;
+  type: 'tool_result';
+  toolName?: string;
+  toolUseId?: string;
+  content: string;
+  isError?: boolean;
+  timestamp: number;
+}
+
+export interface ThinkingMessage {
+  id: string;
+  type: 'thinking';
+  content: string;
+  timestamp: number;
+  /** 本轮推理耗时 (秒), 前端在收到 thinking 块时用轮次起点估算 — Codex 式 "Thought for Ns" 标签用 */
+  durationSec?: number;
+}
+
+export interface TodoItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm?: string;
+}
+
+export interface TodoMessage {
+  id: string;
+  type: 'todo';
+  todos: TodoItem[];
+  timestamp: number;
+}
+
+export interface PlanMessage {
+  id: string;
+  type: 'plan';
+  plan: string;
+  toolUseId: string;
+  timestamp: number;
+}
+
+// Mirror of backend PermissionSuggestion. `raw` is opaque; we round-trip
+// it back to the backend untouched when the user picks "Allow always".
+export interface PermissionSuggestionWire {
+  type: string;
+  behavior?: 'allow' | 'deny' | 'ask';
+  destination?: string;
+  raw: unknown;
+}
+
+export type PermissionDecidedStatus =
+  | { status: 'pending' }
+  | { status: 'allowed'; always: boolean }
+  | { status: 'denied'; message: string }
+  | { status: 'aborted' }
+  // AskUserQuestion-style answer. Wire-wise it's a deny+message back to
+  // Claude (SDK has no "tool answered" behavior), but UX-wise it's a
+  // first-class outcome so the bubble shouldn't read as "denied".
+  | { status: 'answered'; summary: string };
+
+export interface PermissionRequestMessage {
+  id: string;
+  type: 'permission_request';
+  // Server-side id for the SDK callback resolution. Different from the
+  // store-side id (this.id) so we don't conflate UI identity and RPC.
+  permissionId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  toolUseId: string;
+  title?: string;
+  displayName?: string;
+  description?: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  suggestions?: PermissionSuggestionWire[];
+  decided: PermissionDecidedStatus;
+  timestamp: number;
+}
+
+// Workflow run events forwarded into the conversation (SIDEBAR = state
+// indicator, CHAT = interaction & outputs). Emitted by ChatWorkflowPanel's
+// event forwarder for both manual streams and auto-discovered runs:
+// - human_ask:   the run is paused on a human step — answer inline in chat
+// - output:      a step's full output (step_end)
+// - references:  which knowledge-base documents grounded an agent's answer
+// - status:      terse end-of-run line (done / failed / aborted) only
+export interface WorkflowChatMessage {
+  id: string;
+  type: 'workflow';
+  timestamp: number;
+  subtype: 'human_ask' | 'output' | 'references' | 'status';
+  runId: string;
+  workflowName?: string;
+  step?: string;
+  agent?: string;
+  content: string;              // human prompt / step output / status text
+  inputId?: string;             // human_ask: for submitWorkflowInput
+  answered?: boolean;           // human_ask: set true after submit
+  answer?: string;              // human_ask: the submitted text (shown after ✓)
+  refs?: { source?: string; score?: number; preview?: string }[]; // references
+  query?: string;               // references
+}
+
+export type AllMessage =
+  | ChatMessage
+  | SystemMessage
+  | ToolMessage
+  | ToolResultMessage
+  | ThinkingMessage
+  | TodoMessage
+  | PlanMessage
+  | PermissionRequestMessage
+  | WorkflowChatMessage;
+
+// Message input types (without id and timestamp)
+export type ChatMessageInput = Omit<ChatMessage, 'id' | 'timestamp'>;
+export type SystemMessageInput = Omit<SystemMessage, 'id' | 'timestamp'>;
+export type ToolMessageInput = Omit<ToolMessage, 'id' | 'timestamp'>;
+export type ToolResultMessageInput = Omit<ToolResultMessage, 'id' | 'timestamp'>;
+export type ThinkingMessageInput = Omit<ThinkingMessage, 'id' | 'timestamp'>;
+export type TodoMessageInput = Omit<TodoMessage, 'id' | 'timestamp'>;
+export type PermissionRequestMessageInput = Omit<
+  PermissionRequestMessage,
+  'id' | 'timestamp'
+>;
+export type WorkflowChatMessageInput = Omit<WorkflowChatMessage, 'id' | 'timestamp'>;
+
+export type MessageInput =
+  | ChatMessageInput
+  | SystemMessageInput
+  | ToolMessageInput
+  | ToolResultMessageInput
+  | ThinkingMessageInput
+  | TodoMessageInput
+  | PermissionRequestMessageInput
+  | WorkflowChatMessageInput;
+
+// Session summary from backend
+export interface SessionSummary {
+  sessionId: string;
+  cwd: string;
+  firstMessage: string;
+  lastMessage: string;
+  // Claude's first substantive reply in the conversation. Sidebar
+  // renders it as a second line under the user's question so the
+  // entry feels like a topic summary rather than just the user's
+  // opener. Optional for older backends that don't yet emit it.
+  firstAssistantMessage?: string;
+  messageCount: number;
+  updatedAt: string;
+  // Fork-group metadata: when SDK --resume forks each turn, multiple .jsonl
+  // files belong to the same logical conversation (same firstUserMsgId).
+  // Backend collapses them into one entry; these fields describe the group.
+  isGrouped?: boolean;
+  groupSize?: number;
+  groupSessions?: string[];
+}
+
+// Toolbar selection values. "default" on thinking/effort means "don't
+// send the field over the wire" — let the SDK pick the model-native
+// default (adaptive thinking on Opus 4.6+, sensible effort per model).
+export type PermissionModeValue =
+  | 'default'
+  | 'plan'
+  | 'acceptEdits'
+  | 'bypassPermissions'
+  | 'auto';
+export type ThinkingModeValue = 'default' | 'enabled' | 'disabled';
+export type EffortModeValue =
+  | 'default'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
+
+// localStorage keys for toolbar persistence
+const LS_PERMISSION = 'chat-permission-mode';
+const LS_THINKING = 'chat-thinking-mode';
+const LS_EFFORT = 'chat-effort-level';
+const LS_VOICE_LANG = 'chat-voice-lang';
+const LS_AGENT_ID = 'chat-agent-id';
+export const THINKING_BUDGET_TOKENS = 10_000;
+
+// Supported BCP-47 codes for browser SpeechRecognition + backend
+// Whisper transcription. Keep this list short and focused on languages
+// Claude's users are likely to mix — adding more is cheap later.
+export interface VoiceLangOption {
+  code: string;          // BCP-47 tag fed to recognition.lang
+  label: string;         // "English (UK)" — shown in the picker
+  short: string;         // "EN" — shown in the compact button
+}
+export const VOICE_LANGS: VoiceLangOption[] = [
+  { code: 'en-US', label: 'English (US)', short: 'EN' },
+  { code: 'en-GB', label: 'English (UK)', short: 'EN' },
+  { code: 'zh-CN', label: '中文 (简体)', short: '中' },
+  { code: 'zh-TW', label: '中文 (繁體)', short: '中' },
+  { code: 'ja-JP', label: '日本語', short: '日' },
+  { code: 'ko-KR', label: '한국어', short: '한' },
+  { code: 'es-ES', label: 'Español', short: 'ES' },
+  { code: 'fr-FR', label: 'Français', short: 'FR' },
+  { code: 'de-DE', label: 'Deutsch', short: 'DE' },
+];
+
+function loadPermissionMode(): PermissionModeValue {
+  try {
+    const v = localStorage.getItem(LS_PERMISSION);
+    if (
+      v === 'default' ||
+      v === 'plan' ||
+      v === 'acceptEdits' ||
+      v === 'bypassPermissions' ||
+      v === 'auto'
+    ) {
+      return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  // Preserve historical default: handleSend used to hardcode 'bypassPermissions'.
+  return 'bypassPermissions';
+}
+function loadThinkingMode(): ThinkingModeValue {
+  try {
+    const v = localStorage.getItem(LS_THINKING);
+    if (v === 'default' || v === 'enabled' || v === 'disabled') return v;
+  } catch {
+    /* ignore */
+  }
+  return 'default';
+}
+function loadEffortMode(): EffortModeValue {
+  try {
+    const v = localStorage.getItem(LS_EFFORT);
+    if (v === 'default' || v === 'low' || v === 'medium' || v === 'high' || v === 'xhigh' || v === 'max') {
+      return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'default';
+}
+function loadAgentId(): string {
+  try {
+    const v = localStorage.getItem(LS_AGENT_ID);
+    // Agent ids are dynamic (user-defined on the agent backend) so any
+    // non-empty string is acceptable; the picker reconciles against the
+    // live list at render time and 'default' always exists server-side.
+    if (v && v.trim().length > 0) return v;
+  } catch {
+    /* ignore */
+  }
+  return 'default';
+}
+function loadVoiceLang(): string {
+  try {
+    const v = localStorage.getItem(LS_VOICE_LANG);
+    if (v && VOICE_LANGS.some((l) => l.code === v)) return v;
+  } catch {
+    /* ignore */
+  }
+  // Default to the browser's preferred language if it's one of our
+  // supported codes; else en-US (broadest Chrome SR coverage).
+  const browser = typeof navigator !== 'undefined' ? navigator.language : '';
+  const match = VOICE_LANGS.find(
+    (l) =>
+      l.code === browser ||
+      l.code.split('-')[0] === browser.split('-')[0],
+  );
+  return match?.code || 'en-US';
+}
+function savePersist(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+interface ChatState {
+  messages: AllMessage[];
+  input: string;
+  isLoading: boolean;
+  isThinking: boolean;
+  // Session IDs:
+  // - sessionId: live session ID from CLI. Changes every turn because
+  //   --resume forks on each call; we always adopt the server's latest so
+  //   the next turn resumes from the right fork (preserves full context).
+  // - displaySessionId: stable label for the current conversation shown in
+  //   the UI. Set once when the user enters a session (either sidebar
+  //   click or first system/init of a new chat), then never changes until
+  //   the user switches conversations. Decouples UI identity from the
+  //   churning real session id.
+  // - temporarySessionId: frontend-generated temp ID for tracking until CLI responds
+  sessionId: string | null;
+  displaySessionId: string | null;
+  temporarySessionId: string | null;
+  // Tracks which requestId last updated the session (for preventing cross-request overwrites)
+  lastSessionUpdateRequestId: string | null;
+  currentRequestId: string | null;
+  error: string | null;
+  projects: Array<{ name: string; path: string; encodedName: string }>;
+  selectedProject: string | null;
+  sessions: SessionSummary[];
+
+  // Chat toolbar state — persisted to localStorage on change.
+  permissionMode: PermissionModeValue;
+  thinkingMode: ThinkingModeValue;
+  effortMode: EffortModeValue;
+  // Agent preset on the agent backend that NEW conversations start
+  // with. Sent on every /api/chat request; the server ignores it when
+  // resuming an existing session (a session keeps the agent it was
+  // created with), so mid-conversation changes only affect the next
+  // new chat. 'default' = the backend's builtin default agent.
+  agentId: string;
+  // BCP-47 code driving both browser SpeechRecognition and the optional
+  // Whisper-local lang hint (passed via /ws/transcribe?lang=...).
+  voiceLang: string;
+
+  // File attachments pending the next send. Cleared on send, on
+  // session switch, and on /clear. See lib/attachments.ts for shape.
+  pendingAttachments: PendingAttachment[];
+
+  // Actions
+  addMessage: (msg: MessageInput) => string;
+  updateLastMessage: (id: string, content: string) => void;
+  // Mark an outstanding permission_request bubble as decided. Looked up
+  // by permissionId (server-side id) so the UI can update the right
+  // bubble even when there are several pending in the conversation.
+  setPermissionDecision: (
+    permissionId: string,
+    decided: PermissionDecidedStatus,
+  ) => void;
+  // Mark a workflow human_ask bubble as answered (after submitWorkflowInput
+  // succeeded). Optional `answer` keeps the submitted text for display.
+  markWorkflowAnswered: (messageId: string, answer?: string) => void;
+  setInput: (input: string) => void;
+  setIsLoading: (loading: boolean) => void;
+  setIsThinking: (thinking: boolean) => void;
+  setSessionId: (id: string | null) => void;
+  setDisplaySessionId: (id: string | null) => void;
+  setTemporarySessionId: (id: string | null) => void;
+  /**
+   * Replace temporary session ID with real one from backend
+   * CRITICAL: Only updates if:
+   * 1. There's a temporary session to replace (state.temporarySessionId exists)
+   * 2. AND the requestId matches lastSessionUpdateRequestId (prevents concurrent request overwrites)
+   */
+  replaceTemporarySession: (realSessionId: string, requestId?: string) => void;
+  setCurrentRequestId: (id: string | null) => void;
+  setError: (error: string | null) => void;
+  clearMessages: () => void;
+  setProjects: (projects: Array<{ name: string; path: string; encodedName: string }>) => void;
+  setSelectedProject: (path: string | null) => void;
+  setPermissionMode: (mode: PermissionModeValue) => void;
+  setThinkingMode: (mode: ThinkingModeValue) => void;
+  setEffortMode: (mode: EffortModeValue) => void;
+  setAgentId: (id: string) => void;
+  setVoiceLang: (code: string) => void;
+  addPendingAttachments: (attachments: PendingAttachment[]) => void;
+  removePendingAttachment: (id: string) => void;
+  clearPendingAttachments: () => void;
+  setSessions: (sessions: SessionSummary[]) => void;
+  setMessages: (messages: AllMessage[]) => void;
+}
+
+let messageCounter = 0;
+const generateId = () => `msg_${Date.now()}_${++messageCounter}`;
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  messages: [],
+  input: '',
+  isLoading: false,
+  isThinking: false,
+  sessionId: null,
+  displaySessionId: null,
+  temporarySessionId: null,
+  lastSessionUpdateRequestId: null,
+  currentRequestId: null,
+  error: null,
+  projects: [],
+  selectedProject: null,
+  sessions: [],
+  permissionMode: loadPermissionMode(),
+  thinkingMode: loadThinkingMode(),
+  effortMode: loadEffortMode(),
+  agentId: loadAgentId(),
+  voiceLang: loadVoiceLang(),
+  pendingAttachments: [],
+
+  addMessage: (msg) => {
+    const id = generateId();
+    const timestamp = Date.now();
+    set((state) => ({
+      messages: [...state.messages, { ...msg, id, timestamp } as AllMessage],
+    }));
+    return id;
+  },
+
+  updateLastMessage: (id, content) =>
+    set((state) => {
+      const messages = [...state.messages];
+      const index = messages.findIndex((m) => m.id === id);
+      if (index !== -1 && messages[index].type === 'chat') {
+        messages[index] = { ...messages[index], content } as AllMessage;
+      }
+      return { messages };
+    }),
+
+  setPermissionDecision: (permissionId, decided) =>
+    set((state) => {
+      const messages = state.messages.map((m) => {
+        if (m.type !== 'permission_request') return m;
+        if (m.permissionId !== permissionId) return m;
+        return { ...m, decided };
+      });
+      return { messages };
+    }),
+
+  markWorkflowAnswered: (messageId, answer) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.type === 'workflow' && m.id === messageId
+          ? { ...m, answered: true, ...(answer !== undefined ? { answer } : {}) }
+          : m,
+      ),
+    })),
+
+  setInput: (input) => set({ input }),
+
+  setIsLoading: (isLoading) => set({ isLoading }),
+
+  setIsThinking: (isThinking) => set({ isThinking }),
+
+  setSessionId: (sessionId) => set({ sessionId }),
+
+  setDisplaySessionId: (displaySessionId) => set({ displaySessionId }),
+
+  setTemporarySessionId: (temporarySessionId) => set({ temporarySessionId }),
+
+  /**
+   * Adopt the server-reported session_id as the canonical one.
+   *
+   * Covers three cases:
+   * 1. New chat: replaces the frontend-generated temporarySessionId.
+   * 2. Continued chat where the SDK forks (resume creates a new session file):
+   *    the server returns a new session_id, which must overwrite the old sessionId
+   *    so the next send resumes from the fork, not the stale original.
+   * 3. Same-id echo: harmless overwrite with the same value.
+   *
+   * Guard: if requestId is provided and doesn't match the in-flight currentRequestId,
+   * drop the update (prevents out-of-order stream chunks from a stale request).
+   */
+  replaceTemporarySession: (realSessionId, requestId) => {
+    const state = get();
+
+    if (requestId && state.currentRequestId && state.currentRequestId !== requestId) {
+      console.log('[DEBUG] replaceTemporarySession: skipped (stale request)', {
+        current: state.currentRequestId,
+        got: requestId,
+      });
+      return;
+    }
+
+    // Pin displaySessionId on the first real id we see for this conversation.
+    // Thereafter the live sessionId may fork away, but the UI label stays put.
+    const nextDisplay = state.displaySessionId || realSessionId;
+
+    set({
+      sessionId: realSessionId,
+      displaySessionId: nextDisplay,
+      temporarySessionId: null,
+      lastSessionUpdateRequestId: requestId || null,
+    });
+  },
+
+  setCurrentRequestId: (currentRequestId) => set({ currentRequestId }),
+
+  setError: (error) => set({ error }),
+
+  // Clear messages but keep sessionId (so user can continue in same session).
+  // Also drops any pending attachments — if the user was about to send
+  // them, they probably don't want them applied to the freshly-cleared
+  // conversation either.
+  clearMessages: () =>
+    set({ messages: [], temporarySessionId: null, pendingAttachments: [] }),
+
+  setProjects: (projects) => set({ projects }),
+
+  setSelectedProject: (selectedProject) => set({ selectedProject }),
+
+  setPermissionMode: (permissionMode) => {
+    savePersist(LS_PERMISSION, permissionMode);
+    set({ permissionMode });
+  },
+
+  setThinkingMode: (thinkingMode) => {
+    savePersist(LS_THINKING, thinkingMode);
+    set({ thinkingMode });
+  },
+
+  setEffortMode: (effortMode) => {
+    savePersist(LS_EFFORT, effortMode);
+    set({ effortMode });
+  },
+
+  setAgentId: (agentId) => {
+    savePersist(LS_AGENT_ID, agentId);
+    set({ agentId });
+  },
+
+  setVoiceLang: (voiceLang) => {
+    savePersist(LS_VOICE_LANG, voiceLang);
+    set({ voiceLang });
+  },
+
+  addPendingAttachments: (attachments) =>
+    set((state) => ({
+      pendingAttachments: [...state.pendingAttachments, ...attachments],
+    })),
+
+  removePendingAttachment: (id) =>
+    set((state) => ({
+      pendingAttachments: state.pendingAttachments.filter((a) => a.id !== id),
+    })),
+
+  clearPendingAttachments: () => set({ pendingAttachments: [] }),
+
+  setSessions: (sessions) => set({ sessions }),
+
+  setMessages: (messages) => set({ messages }),
+}));

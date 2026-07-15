@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+
+# Virtual environments (both legacy Scripts/ and modern bin/ styles)
+backend/.venv/
+backend/.venv
+venv/
+.venv/
+.venv
+
+# Backend
+backend/claude/node_modules/
+*.egg-info/
+dist/
+build/
+
+# Frontend
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/dist/
+
+# Pre-recorded demo audio drops (large binary, generated externally
+# via TTS services). Keep the README that explains the convention,
+# ignore the actual MP3/WAV/M4A files. To commit them anyway (so the
+# demo is self-contained for other lab members), delete this block.
+frontend/public/demo-audio/**/*.mp3
+frontend/public/demo-audio/**/*.wav
+frontend/public/demo-audio/**/*.m4a
+frontend/public/demo-audio/**/*.ogg
+
+# Generated / runtime state
+*.db
+*.db-journal
+*.log
+logs/
+recordings/
+backend/data/audio/
+backend/data/csv/
+backend/data/serial_logs/
+# Diary entries, config, agents.json (contains plaintext API keys —
+# never commit). See DIARY_SPEC.md.
+backend/data/diary/
+# agent_service runtime state: session transcripts (AuditLog JSONL) +
+# smoke-test artifacts. See docs/agent-migration-sod/.
+backend/data/agent_service/
+# agent_gateway is the SDK-free copy of backend/claude — same ignore rule.
+backend/agent_gateway/node_modules/
+# "Project" directory for diary-reply chat sessions. Just acts as a cwd
+# anchor so all diary follow-ups group under one label in the chat
+# sidebar. Empty marker file is fine to keep, otherwise nothing here is
+# committable.
+diary-replies/
+extensions_state.json
+
+# Whisper model weights — downloaded to project-local cache instead
+# of ~/.cache/huggingface/hub. Per-model size: 75 MB (tiny) to 3 GB
+# (large-v3); never committable. See app/extensions/whisper_local.py
+# MODELS_DIR.
+VoiceModel/
+
+# Environment (contains secrets — never commit)
+.env
+.env.local
+.env.*.local
+
+# Development-process docs — kept local, excluded from the public
+# ainone-dashboard snapshot (SOD design, role-tiering proposals, plans,
+# interactive explainer pages).
+docs/agent-migration-sod/
+docs/proposals/
+docs/plans/
+docs/learn/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artifacts
+*.tgz
+*.whl
+
+# Claude Code per-project local config (personal, auto-generated)
+.claude/

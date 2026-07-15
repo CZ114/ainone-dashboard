@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>ESP32 Dashboard · 语音转文字与回答 · 全流程图</title>
+<style>
+  :root {
+    --bg:        #f6f7fb;
+    --panel:     #ffffff;
+    --panel-2:   #fafbff;
+    --ink:       #1a2238;
+    --ink-2:     #344063;
+    --muted:     #6b7796;
+    --muted-2:   #93a0c0;
+    --line:      #e3e8f4;
+    --code-bg:   #f1f4fb;
+    --code-ink:  #1a2238;
+
+    --s1:        #2563eb;   --s1-soft:   #e0ebff;   /* 蓝   · 采集 */
+    --s2:        #0d9488;   --s2-soft:   #d1fae5;   /* 青   · RMS */
+    --s3:        #d97706;   --s3-soft:   #fef3c7;   /* 琥珀 · VAD */
+    --s4:        #7c3aed;   --s4-soft:   #ede9fe;   /* 紫   · 录音 */
+    --s5:        #15803d;   --s5-soft:   #dcfce7;   /* 绿   · Whisper */
+    --s6:        #be123c;   --s6-soft:   #ffe4e6;   /* 玫瑰 · LLM/TTS */
+    --recap:     #475569;   --recap-soft:#e2e8f0;
+
+    --kw:        #b45309;
+    --num:       #1d4ed8;
+    --str:       #15803d;
+    --com:       #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+
+  header {
+    padding: 32px 40px 8px;
+    border-bottom: 1px solid var(--line);
+    background: #ffffff;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: .3px; color: var(--ink); }
+  h2 {
+    font-size: 13px; font-weight: 700; margin: 0 0 12px;
+    letter-spacing: 1.2px; text-transform: uppercase;
+  }
+  .sub { color: var(--muted); margin-bottom: 14px; }
+
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    color: var(--muted); font-size: 12px;
+    padding: 14px 40px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--line);
+  }
+  .swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -2px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  main {
+    display: grid; grid-template-columns: 1fr; gap: 22px;
+    padding: 26px 40px 60px;
+    max-width: 1380px; margin: 0 auto;
+  }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px;
+    padding: 22px 24px 20px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(20,30,60,0.04);
+  }
+  .stage::before {
+    content: attr(data-step);
+    position: absolute; top: -11px; left: 22px;
+    background: var(--accent);
+    color: #ffffff;
+    font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+    padding: 4px 12px; border-radius: 999px;
+  }
+  .stage h2 { color: var(--accent); }
+
+  .stage.s1 { --accent: var(--s1); --accent-soft: var(--s1-soft); }
+  .stage.s2 { --accent: var(--s2); --accent-soft: var(--s2-soft); }
+  .stage.s3 { --accent: var(--s3); --accent-soft: var(--s3-soft); }
+  .stage.s4 { --accent: var(--s4); --accent-soft: var(--s4-soft); }
+  .stage.s5 { --accent: var(--s5); --accent-soft: var(--s5-soft); }
+  .stage.s6 { --accent: var(--s6); --accent-soft: var(--s6-soft); }
+  .stage.recap { --accent: var(--recap); --accent-soft: var(--recap-soft); }
+
+  .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 920px) {
+    .row, .row.three { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 13px; color: var(--accent); letter-spacing: .5px; font-weight: 700;
+  }
+  .card p { margin: 4px 0; color: var(--ink-2); }
+
+  code, pre {
+    background: var(--code-bg);
+    border-radius: 6px;
+    color: var(--code-ink);
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px;
+  }
+  code { padding: 1px 6px; border: 1px solid var(--line); }
+  pre {
+    padding: 12px 14px; overflow-x: auto; line-height: 1.55;
+    border: 1px solid var(--line);
+  }
+  .k { color: var(--kw); }
+  .n { color: var(--num); }
+  .s { color: var(--str); }
+  .c { color: var(--com); font-style: italic; }
+
+  .arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted-2); font-size: 18px; line-height: 1;
+  }
+  .arrow::before { content: "▼"; }
+
+  .fsm { width: 100%; height: 240px; display: block; }
+  .thresh {
+    display: grid; grid-template-columns: 1.1fr 1fr;
+    gap: 16px; align-items: stretch;
+  }
+  .thresh > svg, .thresh > .card { width: 100%; }
+  .thresh > svg {
+    height: 230px; display: block;
+    background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+  }
+  @media (max-width: 920px) { .thresh { grid-template-columns: 1fr; } }
+
+  table.params { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.params th, table.params td {
+    padding: 7px 10px; border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+  table.params th {
+    color: var(--accent); font-weight: 700;
+    background: var(--accent-soft);
+  }
+  table.params td.num {
+    font-family: "JetBrains Mono", Consolas, monospace;
+    color: var(--ink); text-align: right;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; letter-spacing: .3px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent);
+    margin-right: 6px;
+  }
+  .pill.note { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .pill.ok   { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+  .pill.warn { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+  footer {
+    text-align: center; color: var(--muted); font-size: 12px;
+    padding: 20px 40px 40px;
+    border-top: 1px solid var(--line);
+    background: #ffffff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ESP32 Dashboard · 语音 → 转文字 → 回答 · 全流程图</h1>
+  <div class="sub">从麦克风字节流到 Claude 回复，每一步的数据形态、公式与阈值。</div>
+</header>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#2563eb"></span>① 音频采集 · Web Audio</span>
+  <span><span class="swatch" style="background:#0d9488"></span>② RMS 与归一化</span>
+  <span><span class="swatch" style="background:#d97706"></span>③ VAD · 阈值判决</span>
+  <span><span class="swatch" style="background:#7c3aed"></span>④ 录音 / 上传</span>
+  <span><span class="swatch" style="background:#15803d"></span>⑤ 后端 Whisper</span>
+  <span><span class="swatch" style="background:#be123c"></span>⑥ LLM 回答 + TTS</span>
+</div>
+
+<main>
+
+  <!-- Stage 1 -->
+  <section class="stage s1" data-step="STEP 1 · 音频采集">
+    <h2>麦克风输入 · Web Audio AnalyserNode</h2>
+    <div class="row">
+      <div class="card">
+        <h3>采集链路</h3>
+        <p><code>navigator.mediaDevices.getUserMedia({ audio: true })</code></p>
+        <p>↓ 拿到 <code>MediaStream</code>（PCM, 通常 48 kHz）</p>
+        <p><code>AudioContext.createMediaStreamSource()</code> → <code>AnalyserNode</code></p>
+        <p><code>analyser.fftSize = 1024</code> &nbsp;<span class="pill">≈ 21 ms / 帧 @ 48 kHz</span></p>
+        <p>每个 <code>requestAnimationFrame</code> 调用 <code>analyser.getFloatTimeDomainData(buf)</code></p>
+      </div>
+      <div class="card">
+        <h3>为什么 fftSize = 1024？</h3>
+        <p>· 太大 → 延迟高，VAD 反应慢</p>
+        <p>· 太小 → 峰值噪声，RMS 抖动</p>
+        <p>· 1024 在 48 kHz 下 ≈ 21 ms，正好和屏幕 60 Hz 刷新（16.7 ms）同数量级</p>
+        <p><span class="pill note">注</span>rAF 内立即消费，不积压</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- Stage 2 -->
+  <section class="stage s2" data-step="STEP 2 · RMS 计算与归一化">
+    <h2>useAudioLevel · 把波形折算成 0–1 的「响度」</h2>
+
+    <div class="row">
+      <div class="card">
+        <h3>逐样本累加</h3>
+<pre><span class="c">// 时域样本 ∈ [-1, 1] (Float32)</span>
+<span class="k">let</span> sum = <span class="n">0</span>, peak = <span class="n">0</span>;
+<span class="k">for</span> (<span class="k">let</span> i = <span class="n">0</span>; i &lt; buf.length; i++) {
+  <span class="k">const</span> v = buf[i];
+  sum  += v * v;        <span class="c">// 平方和</span>
+  <span class="k">if</span> (Math.abs(v) &gt; peak) peak = Math.abs(v);
+}
+<span class="k">const</span> rmsRaw = Math.sqrt(sum / buf.length);</pre>
+        <p>这就是经典的 <strong>均方根 (RMS)</strong>：</p>
+<pre>RMS = √(  Σ xᵢ²  /  N  )           <span class="c">// N = 1024</span></pre>
+        <p>对纯正弦：RMS = 振幅 / √2。对真实语音：≈ 短时能量的几何平均。</p>
+      </div>
+
+      <div class="card">
+        <h3>非线性放大 + 一阶低通</h3>
+<pre><span class="c">// 麦克风原始 RMS 通常 ~0.01（很小）</span>
+<span class="c">// 先线性放大 6×，再开 0.7 次幂压缩动态范围</span>
+<span class="k">const</span> rms = Math.min(<span class="n">1</span>, Math.pow(rmsRaw * <span class="n">6</span>, <span class="n">0.7</span>));
+
+<span class="c">// 一阶低通平滑（IIR）：α = 0.25</span>
+smoothed = prev + (rms − prev) * <span class="n">0.25</span>;
+levelRef.current = { rms: smoothed, peak };</pre>
+        <p>等价滤波器：<code>y[n] = (1−α)·y[n−1] + α·x[n]</code></p>
+        <p>· α 越小 → 越平滑、越滞后</p>
+        <p>· α = 0.25 → 时间常数 ≈ 4 帧 (≈ 67 ms)，眼睛看 orb 顺滑、VAD 还来得及响应</p>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>ESP32 模式（替代路径）</h3>
+        <p>音频从 ESP32 通过 UDP 发到 FastAPI，再由 WebSocket 推送给前端 (50 Hz)：</p>
+<pre>norm = clamp01( (dB − (<span class="n">−60</span>)) / <span class="n">60</span> )</pre>
+        <p>把 [-60 dB, 0 dB] 线性映射到 [0, 1]。然后同样过一阶低通 (α = 0.4)，最后写进 <strong>同一个 levelRef</strong> —— 下游 VAD / Orb 不需要管来源。</p>
+      </div>
+      <div class="card">
+        <h3>输出契约</h3>
+<pre>levelRef = {
+  rms:  <span class="n">0..1</span>,   <span class="c">// 平滑后给 orb 主体 + VAD</span>
+  peak: <span class="n">0..1</span>,   <span class="c">// 更激进，给波形条</span>
+}</pre>
+        <p><span class="pill ok">关键</span>写进 ref 而不是 React state —— 60 Hz 更新不会触发 re-render</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- Stage 3 -->
+  <section class="stage s3" data-step="STEP 3 · VAD 判决">
+    <h2>useVad · 双阈值 + 持续时间的施密特触发器</h2>
+
+    <div class="thresh">
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#2563eb" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
+          </linearGradient>
+          <marker id="amk" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+          </marker>
+        </defs>
+        <line x1="40" y1="20" x2="40" y2="190" stroke="#cbd5e1" />
+        <line x1="40" y1="190" x2="580" y2="190" stroke="#cbd5e1" />
+        <text x="8" y="25" fill="#6b7796" font-size="10">level</text>
+        <text x="555" y="205" fill="#6b7796" font-size="10">time</text>
+
+        <line x1="40" y1="80" x2="580" y2="80" stroke="#d97706" stroke-dasharray="4 4" />
+        <text x="498" y="76" fill="#d97706" font-size="11" font-weight="700">onset 0.18</text>
+        <line x1="40" y1="125" x2="580" y2="125" stroke="#0d9488" stroke-dasharray="4 4" />
+        <text x="486" y="121" fill="#0d9488" font-size="11" font-weight="700">silence 0.10</text>
+
+        <path d="
+          M 40 175
+          C 60 175, 80 173, 100 170
+          C 120 165, 130 145, 150 95
+          C 165 60, 180 50, 200 55
+          C 220 60, 240 90, 260 70
+          C 280 55, 300 65, 320 75
+          C 340 85, 360 95, 380 130
+          C 400 165, 420 178, 440 180
+          C 460 182, 480 180, 500 178
+          C 520 176, 540 175, 560 175
+          L 580 175"
+          fill="none" stroke="#2563eb" stroke-width="2" />
+        <path d="
+          M 40 175
+          C 60 175, 80 173, 100 170
+          C 120 165, 130 145, 150 95
+          C 165 60, 180 50, 200 55
+          C 220 60, 240 90, 260 70
+          C 280 55, 300 65, 320 75
+          C 340 85, 360 95, 380 130
+          C 400 165, 420 178, 440 180
+          L 440 190 L 40 190 Z"
+          fill="url(#g1)" />
+
+        <line x1="155" y1="20" x2="155" y2="200" stroke="#7c3aed" stroke-dasharray="2 2" />
+        <text x="160" y="34" fill="#7c3aed" font-size="11" font-weight="700">speech-start</text>
+        <text x="160" y="46" fill="#6b7796" font-size="10">level &gt; 0.18 持续 220 ms</text>
+
+        <line x1="450" y1="20" x2="450" y2="200" stroke="#7c3aed" stroke-dasharray="2 2" />
+        <text x="335" y="34" fill="#7c3aed" font-size="11" font-weight="700">speech-end</text>
+        <text x="335" y="46" fill="#6b7796" font-size="10">level &lt; 0.10 持续 1100 ms</text>
+      </svg>
+
+      <div class="card">
+        <h3>状态机 (Schmitt trigger + hysteresis)</h3>
+        <svg class="fsm" viewBox="0 0 480 240">
+          <circle cx="100" cy="120" r="48" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/>
+          <text x="100" y="118" text-anchor="middle" fill="#1a2238" font-size="14" font-weight="700">idle</text>
+          <text x="100" y="135" text-anchor="middle" fill="#6b7796" font-size="10">待机</text>
+
+          <circle cx="380" cy="120" r="48" fill="#ffffff" stroke="#7c3aed" stroke-width="2.5"/>
+          <text x="380" y="118" text-anchor="middle" fill="#1a2238" font-size="14" font-weight="700">active</text>
+          <text x="380" y="135" text-anchor="middle" fill="#6b7796" font-size="10">说话中</text>
+
+          <path d="M 148 105 Q 240 60 332 105" fill="none" stroke="#d97706" stroke-width="2" marker-end="url(#amk)"/>
+          <text x="240" y="58" text-anchor="middle" fill="#d97706" font-size="11" font-weight="700">level ≥ 0.18, 持续 220 ms</text>
+          <text x="240" y="74" text-anchor="middle" fill="#6b7796" font-size="10">→ fire onSpeechStart()</text>
+
+          <path d="M 332 138 Q 240 200 148 138" fill="none" stroke="#0d9488" stroke-width="2" marker-end="url(#amk)"/>
+          <text x="240" y="218" text-anchor="middle" fill="#0d9488" font-size="11" font-weight="700">level ≤ 0.10, 持续 1100 ms</text>
+          <text x="240" y="200" text-anchor="middle" fill="#6b7796" font-size="10">→ fire onSpeechEnd()</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>核心循环（每个 rAF 帧）</h3>
+<pre><span class="k">const</span> tick = () =&gt; {
+  <span class="k">const</span> now   = performance.now();
+  <span class="k">const</span> level = levelRef.current.rms;
+
+  <span class="k">if</span> (!active) {
+    <span class="c">// 找开口边沿 (rising edge)</span>
+    <span class="k">if</span> (level &gt;= onsetThreshold) {
+      <span class="k">if</span> (candidateSince === <span class="k">null</span>) candidateSince = now;
+      <span class="k">else if</span> (now − candidateSince &gt;= onsetMs) {
+        active = <span class="k">true</span>; candidateSince = <span class="k">null</span>;
+        onSpeechStart();           <span class="c">// → transcriber.begin()</span>
+      }
+    } <span class="k">else</span> candidateSince = <span class="k">null</span>;   <span class="c">// 跌破阈值 → 重置</span>
+  } <span class="k">else</span> {
+    <span class="c">// 找闭口边沿 (falling edge)</span>
+    <span class="k">if</span> (level &lt;= silenceThreshold) {
+      <span class="k">if</span> (candidateSince === <span class="k">null</span>) candidateSince = now;
+      <span class="k">else if</span> (now − candidateSince &gt;= silenceMs) {
+        active = <span class="k">false</span>; candidateSince = <span class="k">null</span>;
+        onSpeechEnd();             <span class="c">// → transcriber.end()</span>
+      }
+    } <span class="k">else</span> candidateSince = <span class="k">null</span>;
+  }
+  raf = requestAnimationFrame(tick);
+};</pre>
+      </div>
+
+      <div class="card">
+        <h3>参数与默认值</h3>
+        <table class="params">
+          <tr><th>参数</th><th>默认</th><th>作用</th></tr>
+          <tr><td><code>onsetThreshold</code></td><td class="num">0.18</td><td>触发开始的下限</td></tr>
+          <tr><td><code>silenceThreshold</code></td><td class="num">0.10</td><td>触发结束的上限</td></tr>
+          <tr><td><code>onsetMs</code></td><td class="num">220 ms</td><td>开始要持续的时间（防咳嗽误触）</td></tr>
+          <tr><td><code>silenceMs</code></td><td class="num">1100 ms</td><td>结束要静音的时间（容忍换气）</td></tr>
+        </table>
+        <p style="margin-top:10px"><strong>为什么两个阈值？</strong> 单阈值 = 在边界来回抖动疯狂触发 (flapping)。让 <em>开口门槛 &gt; 闭口门槛</em>，就是经典的迟滞 (hysteresis)，进去要更响、出来才更安静。</p>
+        <p><strong>为什么两边都要持续时间？</strong> 一声咳嗽 (短峰值) 不该开 turn；句中换气 (短静音) 不该关 turn。两边都要「持续达标」。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- Stage 4 -->
+  <section class="stage s4" data-step="STEP 4 · 录音 / 上传">
+    <h2>useTranscriber · speech-start / speech-end → 录音 → 提交</h2>
+    <div class="row three">
+      <div class="card">
+        <h3>① speech-start</h3>
+        <p><code>transcriber.begin()</code></p>
+        <p><strong>mic 模式</strong>：复用 <code>persistentStreamRef</code>（页面打开就预先 <code>getUserMedia</code> 拿好），同步 <code>new MediaRecorder(stream).start()</code>。</p>
+        <p><span class="pill warn">关键优化</span>流是常驻的 —— 不在 turn 之间反复 getUserMedia，否则 100–500 ms 的延迟会把"第一个字"吃掉。</p>
+        <p><strong>esp32 模式</strong>：POST <code>/api/voice/clip/start</code>，让后端开始往环形缓冲写 UDP 音频。</p>
+      </div>
+      <div class="card">
+        <h3>② recording 状态</h3>
+        <p>状态机： <code>idle → recording → transcribing → idle</code></p>
+        <p><strong>mic</strong>：<code>recorder.ondataavailable</code> 把 <code>Blob</code> 块塞进 <code>recorderChunksRef</code>。</p>
+        <p><strong>esp32</strong>：后端持续追加 PCM 帧。</p>
+      </div>
+      <div class="card">
+        <h3>③ speech-end</h3>
+        <p><code>transcriber.end()</code></p>
+        <p><strong>mic</strong>：<code>recorder.stop()</code> → <code>onstop</code> 里把 chunks 拼成 <code>Blob(type:audio/webm)</code> → <code>POST /api/voice/transcribe</code>。</p>
+        <p><strong>esp32</strong>：<code>POST /api/voice/clip/stop</code> 触发后端转写。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- Stage 5 -->
+  <section class="stage s5" data-step="STEP 5 · 后端转写">
+    <h2>FastAPI + faster-whisper · 本地、离线 ASR</h2>
+
+    <!-- 5.0 What is Whisper -->
+    <div class="row">
+      <div class="card">
+        <h3>Whisper 是什么</h3>
+        <p><strong>Whisper</strong> 是 OpenAI 在 2022 年 9 月开源的语音识别模型 (论文：<em>Robust Speech Recognition via Large-Scale Weak Supervision</em>)。</p>
+        <p>它的"独门"在于训练规模 — <strong>68 万小时</strong> 的多语言 + 多任务音频 (互联网上爬来的, 弱监督)。这让它在 99 种语言上都能开箱即用, 且在背景噪声、口音、重叠语音下显著更鲁棒。</p>
+        <p>架构上是 <strong>encoder-decoder Transformer</strong> — 跟 GPT 系列同根同源, 但加了一个把音频 (log-mel) 编码成 hidden states 的前端。</p>
+        <p><span class="pill ok">关键</span>同一份权重能做：转写 (transcribe) / 翻译到英文 (translate) / 语种识别 / 时间戳预测 — 全靠 prompt 里的 special token 切换。</p>
+      </div>
+      <div class="card">
+        <h3>模型尺寸光谱</h3>
+        <table class="params">
+          <tr><th>name</th><th>params</th><th>VRAM (fp16)</th><th>WER (en, librispeech)</th></tr>
+          <tr><td>tiny</td><td class="num">39 M</td><td class="num">~1 GB</td><td class="num">7.6%</td></tr>
+          <tr><td>base</td><td class="num">74 M</td><td class="num">~1 GB</td><td class="num">5.0%</td></tr>
+          <tr><td>small</td><td class="num">244 M</td><td class="num">~2 GB</td><td class="num">3.4%</td></tr>
+          <tr><td>medium</td><td class="num">769 M</td><td class="num">~5 GB</td><td class="num">2.9%</td></tr>
+          <tr><td>large-v3</td><td class="num">1550 M</td><td class="num">~10 GB</td><td class="num">2.7%</td></tr>
+          <tr><td>large-v3-turbo</td><td class="num">809 M</td><td class="num">~6 GB</td><td class="num">≈ large-v3</td></tr>
+        </table>
+        <p style="margin-top:6px"><span class="pill note">注</span>turbo 是 large-v3 的 distilled 版本 — decoder 砍到 4 层 (原版 32 层), 速度 ~6× 提升, 准确率几乎不掉。</p>
+      </div>
+    </div>
+
+    <!-- 5.1 Architecture diagram -->
+    <div class="row" style="margin-top:14px">
+      <div class="card" style="grid-column: 1 / -1">
+        <h3>架构总览 — Encoder-Decoder Transformer</h3>
+        <svg viewBox="0 0 980 220" style="width:100%;height:auto;font-family:inherit">
+          <defs>
+            <marker id="arrK" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+            </marker>
+          </defs>
+          <!-- Audio -->
+          <rect x="20" y="78" width="100" height="64" rx="8" fill="#e0ebff" stroke="#2563eb" />
+          <text x="70" y="106" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2238">audio</text>
+          <text x="70" y="124" text-anchor="middle" font-size="10" fill="#475569">16 kHz mono PCM</text>
+          <line x1="120" y1="110" x2="160" y2="110" stroke="#475569" stroke-width="1.5" marker-end="url(#arrK)" />
+
+          <!-- log-mel -->
+          <rect x="160" y="78" width="120" height="64" rx="8" fill="#d1fae5" stroke="#0d9488" />
+          <text x="220" y="100" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">log-Mel</text>
+          <text x="220" y="116" text-anchor="middle" font-size="10" fill="#475569">80 bands</text>
+          <text x="220" y="130" text-anchor="middle" font-size="10" fill="#475569">25 ms / 10 ms hop</text>
+          <line x1="280" y1="110" x2="320" y2="110" stroke="#475569" stroke-width="1.5" marker-end="url(#arrK)" />
+
+          <!-- Encoder -->
+          <rect x="320" y="40" width="200" height="140" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+          <text x="420" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">Encoder</text>
+          <text x="420" y="80" text-anchor="middle" font-size="10" fill="#92400e">2× Conv (subsample)</text>
+          <text x="420" y="100" text-anchor="middle" font-size="10" fill="#92400e">+ sinusoidal pos enc</text>
+          <text x="420" y="124" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">N × Self-Attn block</text>
+          <text x="420" y="142" text-anchor="middle" font-size="10" fill="#475569">(N = 4 / 6 / 12 / 24 / 32)</text>
+          <text x="420" y="162" text-anchor="middle" font-size="10" fill="#475569">→ 1500 × d hidden</text>
+          <line x1="520" y1="110" x2="560" y2="110" stroke="#475569" stroke-width="1.5" marker-end="url(#arrK)" />
+
+          <!-- Decoder -->
+          <rect x="560" y="40" width="220" height="140" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" />
+          <text x="670" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#5b21b6">Decoder</text>
+          <text x="670" y="80" text-anchor="middle" font-size="10" fill="#5b21b6">causal self-attn</text>
+          <text x="670" y="98" text-anchor="middle" font-size="10" fill="#5b21b6">+ cross-attn → encoder</text>
+          <text x="670" y="120" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">autoregressive</text>
+          <text x="670" y="138" text-anchor="middle" font-size="10" fill="#475569">special tokens 起头：</text>
+          <text x="670" y="156" text-anchor="middle" font-size="10" fill="#475569">&lt;|startoftranscript|&gt; &lt;|zh|&gt;</text>
+          <text x="670" y="170" text-anchor="middle" font-size="10" fill="#475569">&lt;|transcribe|&gt; &lt;|notimestamps|&gt;</text>
+          <line x1="780" y1="110" x2="820" y2="110" stroke="#475569" stroke-width="1.5" marker-end="url(#arrK)" />
+
+          <!-- Tokens -->
+          <rect x="820" y="78" width="140" height="64" rx="8" fill="#dcfce7" stroke="#15803d" />
+          <text x="890" y="102" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2238">BPE tokens</text>
+          <text x="890" y="118" text-anchor="middle" font-size="10" fill="#475569">→ detokenize → text</text>
+          <text x="890" y="132" text-anchor="middle" font-size="10" fill="#475569">"今天天气..."</text>
+        </svg>
+        <p style="margin-top:8px"><strong>核心想法</strong>：encoder 把音频压成定长 hidden states, decoder 像 GPT 一样自回归生成文字 token, 通过 cross-attention "看回" encoder 的隐状态找发音对应。整个解码是单向的 — decoder 用 causal mask 像写句子一样从左往右出 token。</p>
+      </div>
+    </div>
+
+    <!-- 5.2 Forward pass detail -->
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>前向过程：从波形到第一个 token</h3>
+<pre><span class="c">// 1. 音频归一化</span>
+audio = pcm.astype(float32) / <span class="n">32768.0</span>
+audio = resample(audio, <span class="n">16000</span>)            <span class="c">// Whisper 固定 16 kHz</span>
+
+<span class="c">// 2. 切 30s 窗口（不足 zero-pad）</span>
+chunks = pad_or_trim(audio, length=<span class="n">30</span>*<span class="n">16000</span>)
+
+<span class="c">// 3. 提 log-mel 特征</span>
+mel = log_mel_spectrogram(
+  chunks,
+  n_fft=<span class="n">400</span>, hop_length=<span class="n">160</span>, n_mels=<span class="n">80</span>
+)                                       <span class="c">// → (80, 3000)</span>
+
+<span class="c">// 4. encoder forward</span>
+enc = encoder(mel)                      <span class="c">// → (1500, d_model)</span>
+
+<span class="c">// 5. decoder 起始 prompt（special tokens）</span>
+tokens = [SOT, lang_zh, TRANSCRIBE, NO_TIMESTAMPS]
+
+<span class="c">// 6. 自回归循环</span>
+<span class="k">while</span> tokens[-<span class="n">1</span>] != EOT:
+  logits = decoder(tokens, enc)
+  next   = beam_search_step(logits, beam=<span class="n">5</span>)
+  tokens.append(next)
+
+text = bpe_decode(tokens)               <span class="c">// "今天天气怎么样"</span></pre>
+      </div>
+      <div class="card">
+        <h3>log-Mel 是个啥？</h3>
+        <p>把 16 kHz 波形按 25 ms 一个窗口、10 ms 一步切片 (短时傅里叶)，每个切片做 FFT 拿到频谱。然后过 <strong>80 个 Mel 滤波器组</strong>，模拟人耳对低频更敏感的非线性感知。最后取 log。</p>
+        <p>结果是一张 <strong>80 × 3000</strong> 的图 — 横轴 30 秒被切成 3000 帧 (10 ms × 3000)，纵轴 80 个频带 — 这就是 encoder 的输入。</p>
+        <p style="margin-top:8px">为什么不直接喂 PCM？</p>
+        <p>· PCM 太大 (480000 个数), 让模型自己学频谱浪费容量</p>
+        <p>· 人耳就是 mel 尺度的 — 跟语音识别任务的归纳偏置匹配</p>
+        <p>· 30 ms 内的频谱差异比时间样本差异更稳定 — 噪声鲁棒性高</p>
+      </div>
+    </div>
+
+    <!-- 5.3 Tokenizer + multitask -->
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>Tokenizer 的多任务 prompt</h3>
+        <p>Whisper 用 <strong>BPE 分词</strong>，~50k 个 token 的词表里塞了几类特殊 token：</p>
+<pre><span class="s">&lt;|startoftranscript|&gt;</span>      <span class="c">// 序列开始</span>
+<span class="s">&lt;|en|&gt;, &lt;|zh|&gt;, &lt;|ja|&gt;...</span>   <span class="c">// 99 种语言标签</span>
+<span class="s">&lt;|transcribe|&gt;</span>             <span class="c">// 任务：转写</span>
+<span class="s">&lt;|translate|&gt;</span>              <span class="c">// 任务：翻译到英文</span>
+<span class="s">&lt;|notimestamps|&gt;</span>           <span class="c">// 输出纯文字</span>
+<span class="s">&lt;|0.00|&gt; ... &lt;|30.00|&gt;</span>     <span class="c">// 时间戳 token (步进 0.02s)</span>
+<span class="s">&lt;|endoftext|&gt;</span>              <span class="c">// 序列结束</span></pre>
+        <p>训练时同一份权重看到：</p>
+        <p>· 「转写中文 → 中文」、「转写中文 → 英文 (translate)」</p>
+        <p>· 「带时间戳」、「不带时间戳」</p>
+        <p>· 不同语言、不同任务穿插</p>
+        <p>所以推理时只要换 prompt 起头, 就切换任务 — 不需要多个模型。</p>
+      </div>
+      <div class="card">
+        <h3>解码：Beam Search + 温度回退</h3>
+        <p><strong>Beam search (beam_size=5)</strong>：每步同时维护 5 个候选序列, 按累计 log-prob 排序保留前 5 — 比 greedy 显著降低 word error rate。</p>
+        <p><strong>温度回退 (temperature fallback)</strong> — Whisper 训练时有 ~20% 的"低质量"标签被剔除掉, 但推理时遇到不确定的片段, 模型会陷入：</p>
+        <p>· 重复同一短语 ("我我我我我我我...")</p>
+        <p>· 生成"无声"的 hallucination</p>
+        <p>检测信号：no-speech 概率 &gt; 阈值, 或 avg log-prob 太低。检测到就升温度 (0 → 0.2 → 0.4 → 0.6 → 0.8 → 1.0) 重解一次 — 引入随机性打破死循环。</p>
+        <p><span class="pill warn">代价</span>最坏情况一段音频会跑 6 次 forward, 是延迟变高的常见原因。</p>
+      </div>
+    </div>
+
+    <!-- 5.4 faster-whisper -->
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>为什么用 <code>faster-whisper</code> 而不是 <code>openai/whisper</code>?</h3>
+        <p>openai 的官方实现是 PyTorch eager mode, 推理时大部分时间花在 Python ↔ CUDA 调度上。<a href="https://github.com/SYSTRAN/faster-whisper" style="color:var(--s5)">faster-whisper</a> 把整个模型迁到 <strong>CTranslate2</strong> — 一个用 C++ 写的、专门给 Transformer 推理优化的运行时。</p>
+        <table class="params" style="margin-top:8px">
+          <tr><th>优势</th><th>是什么</th></tr>
+          <tr><td>4× 速度</td><td>fused kernel + 自定义 attention impl</td></tr>
+          <tr><td>低显存</td><td>int8 / int8_float16 量化, large-v3 从 10 GB → 3 GB</td></tr>
+          <tr><td>批处理</td><td>多个 30s 窗口同时跑 encoder</td></tr>
+          <tr><td>VAD 内嵌</td><td>带 Silero VAD, <code>vad_filter=True</code> 自动跳过静音段</td></tr>
+          <tr><td>pip 友好</td><td>无需手动装 CUDA toolkit, wheel 自带</td></tr>
+        </table>
+        <p style="margin-top:8px"><span class="pill ok">权衡</span>精度跟原版 Whisper 一致 (浮点等价); 量化档位的轻微精度损失可以接受。</p>
+      </div>
+      <div class="card">
+        <h3>量化档位选择</h3>
+        <table class="params">
+          <tr><th>compute_type</th><th>VRAM (large-v3)</th><th>速度</th><th>WER 增量</th></tr>
+          <tr><td><code>float16</code></td><td class="num">~6 GB</td><td>1.0×</td><td class="num">+0.0%</td></tr>
+          <tr><td><code>int8_float16</code></td><td class="num">~4 GB</td><td>1.4×</td><td class="num">+0.1%</td></tr>
+          <tr><td><code>int8</code></td><td class="num">~3 GB</td><td>1.7×</td><td class="num">+0.3%</td></tr>
+          <tr><td><code>float32</code></td><td class="num">~12 GB</td><td>0.7×</td><td>baseline</td></tr>
+        </table>
+        <p style="margin-top:8px">本项目默认 GPU 用 <code>float16</code>, CPU 用 <code>int8</code> — 在显存/精度之间最平衡。手动覆盖见 <code>WhisperLocalExtension.compute_type</code>。</p>
+      </div>
+    </div>
+
+    <!-- 5.5 Our integration -->
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>本项目的接入</h3>
+        <p>扩展 <code>backend/app/extensions/whisper_local.py</code></p>
+        <p>启动时 <code>pip install faster-whisper</code>, 然后构造单例 <code>WhisperModel(...)</code>, 权重缓存到 <code>VoiceModel/</code>。</p>
+        <p><span class="pill ok">隐私</span>无云 API：所有数据都不出本机。</p>
+        <p style="margin-top:8px">三条调用路径殊途同归到同一个 <code>WhisperModel</code> 实例：</p>
+        <p>· <strong>实时流</strong>：UDP 音频 → 1.5s 块 → <code>transcribe()</code> (WS 推回前端)</p>
+        <p>· <strong>ESP32 一锤子</strong>：<code>/api/voice/clip/{start,stop}</code> → <code>transcribe_pcm_clip()</code></p>
+        <p>· <strong>Mic 一锤子</strong>：<code>/api/voice/transcribe-pcm</code> → <code>transcribe_pcm_clip()</code> (PCM 直传, 无 codec round-trip)</p>
+      </div>
+      <div class="card">
+        <h3>本项目的固定参数</h3>
+<pre>SAMPLE_RATE = <span class="n">16000</span>  <span class="c">// Hz, Whisper 要求</span>
+CHANNELS    = <span class="n">1</span>      <span class="c">// mono</span>
+SAMPLE_FMT  = <span class="s">"PCM16"</span>
+CHUNK_SECONDS   = <span class="n">1.5</span>   <span class="c">// 实时流块长</span>
+OVERLAP_SECONDS = <span class="n">0.3</span>   <span class="c">// 跨块上下文窗口</span>
+BEAM_SIZE       = <span class="n">5</span>     <span class="c">// 解码束宽</span>
+PREROLL_MS      = <span class="n">800</span>   <span class="c">// 实时模式: 提前缓存避免漏第一字</span>
+
+<span class="c">// 转写参数</span>
+vad_filter      = <span class="k">True</span>   <span class="c">// 内嵌 Silero VAD 跳静音</span>
+language        = <span class="s">"zh"</span>   <span class="c">// 来自前端 lang param (BCP-47)</span>
+condition_on_previous_text = <span class="k">False</span>
+                          <span class="c">// 关闭跨段上下文 — 防止前段</span>
+                          <span class="c">// 错误污染后段</span></pre>
+      </div>
+    </div>
+
+    <!-- 5.6 Output -->
+    <div class="row" style="margin-top:14px">
+      <div class="card">
+        <h3>转写返回 → JSON</h3>
+<pre>{
+  <span class="s">"text"</span>: <span class="s">"今天天气怎么样"</span>,
+  <span class="s">"language"</span>: <span class="s">"zh"</span>,
+  <span class="s">"language_probability"</span>: <span class="n">0.9982</span>,
+  <span class="s">"duration_seconds"</span>: <span class="n">2.34</span>,
+  <span class="s">"transcribe_ms"</span>: <span class="n">412</span>,
+  <span class="s">"segments"</span>: [
+    {<span class="s">"start"</span>: <span class="n">0.0</span>, <span class="s">"end"</span>: <span class="n">2.34</span>,
+     <span class="s">"text"</span>: <span class="s">"今天天气怎么样"</span>,
+     <span class="s">"avg_logprob"</span>: <span class="n">-0.21</span>,
+     <span class="s">"no_speech_prob"</span>: <span class="n">0.02</span>}
+  ]
+}</pre>
+        <p>返回到前端 <code>useTranscriber.end()</code> 的 <code>await</code> 处, <code>onFinalized(text)</code> 把文本交给 CallPage。</p>
+      </div>
+      <div class="card">
+        <h3>关键质量信号</h3>
+        <p><code>language_probability</code>：语种识别置信度。低于 0.5 通常意味着用户切换了语言或音频太短。</p>
+        <p><code>avg_logprob</code>：解码段的平均 log 概率。&lt; -1.0 说明模型在猜 — UI 可以选择不显示。</p>
+        <p><code>no_speech_prob</code>：这一段是不是其实没人说话。&gt; 0.6 + 短音频 = 大概率是误触发的 VAD。</p>
+        <p><span class="pill note">用法</span>把这三个值带回前端用于"质量门控" — 比如静音误触发就不创建对话轮次, 不浪费 Claude 一次调用。</p>
+      </div>
+    </div>
+
+    <!-- 5.7 Failure modes -->
+    <div class="row" style="margin-top:14px">
+      <div class="card" style="grid-column: 1 / -1">
+        <h3>常见失败模式 &amp; 我们的对策</h3>
+        <table class="params">
+          <tr><th>症状</th><th>底层原因</th><th>对策 (本项目位置)</th></tr>
+          <tr>
+            <td>第一个字漏了</td>
+            <td>录音从 PTT 按下时刻起算, 但人通常已经开了口</td>
+            <td>800 ms preroll 环形缓冲 (<code>whisper_local.py</code> + <code>pcm-capture-worklet.js</code>)</td>
+          </tr>
+          <tr>
+            <td>把背景噪声转成"嗯啊好的"等填充词</td>
+            <td>训练数据含弱标签, 静音容易触发幻觉</td>
+            <td><code>vad_filter=True</code> + 前端 VAD 双阈值过滤静音段</td>
+          </tr>
+          <tr>
+            <td>"你你你你你你..." 重复死循环</td>
+            <td>低 log-prob 段 + greedy 卡死</td>
+            <td>温度回退 (faster-whisper 默认开启), beam_size=5</td>
+          </tr>
+          <tr>
+            <td>中文输出夹杂英文短语</td>
+            <td>未指定 language 时模型自己猜, 可能猜错</td>
+            <td>前端 LanguageToggle 的 lang 通过 query string 传到后端 (<code>bcp47_to_whisper</code>)</td>
+          </tr>
+          <tr>
+            <td>长音频末尾被截断</td>
+            <td>Whisper 固定 30 秒窗口, 超出需切片</td>
+            <td>实时流路径用 1.5 秒块 + 0.3 秒重叠拼接, 单次 clip 限制 ≤ 30 s</td>
+          </tr>
+          <tr>
+            <td>前段错误污染后段</td>
+            <td><code>condition_on_previous_text=True</code> 时前段 hallucination 被当上下文继续</td>
+            <td>本项目设为 <code>False</code> — 牺牲一点跨段流畅, 换更高鲁棒性</td>
+          </tr>
+          <tr>
+            <td>WebM/Opus 解码慢</td>
+            <td>浏览器 MediaRecorder 出来要先过 pyav → PCM, 多一步</td>
+            <td>Mic 路径换成 PCM16 直传 (<code>/transcribe-pcm</code>)</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"></div>
+
+  <!-- Stage 6 -->
+  <section class="stage s6" data-step="STEP 6 · LLM 回答 + TTS">
+    <h2>CallPage · 文本 → Claude → 文本 → 朗读</h2>
+    <div class="row">
+      <div class="card">
+        <h3>onFinalized 串接</h3>
+<pre><span class="c">// CallPage.tsx</span>
+useTranscriber({
+  source,
+  onFinalized: (text) =&gt; {
+    sendToClaude(text);  <span class="c">// → 流式聊天 API</span>
+  },
+});</pre>
+        <p>Claude 流式回 token → 前端边收边渲染 → 同步喂给 TTS（如有启用）。</p>
+      </div>
+      <div class="card">
+        <h3>Barge-in（打断）</h3>
+        <p>VAD 在 TTS 播放期间继续运行：用户一开口，<code>onSpeechStart</code> 立刻被触发 → CallPage 中断 TTS，开新一轮录音。</p>
+        <p><span class="pill ok">价值</span>这就是双阈值 + 持续 220ms 设计真正发挥威力的地方 —— 不能让 TTS 自身播出的尾音误触发"打断"。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recap -->
+  <section class="stage recap" data-step="RECAP · 端到端时间线">
+    <h2>一次问答的关键时间点（典型值）</h2>
+    <table class="params">
+      <tr><th>事件</th><th>耗时</th><th>来源</th></tr>
+      <tr><td>用户开口 → AnalyserNode 拿到第一帧</td><td class="num">~21 ms</td><td>fftSize=1024 @ 48 kHz</td></tr>
+      <tr><td>level &gt; 0.18 → speech-start 触发</td><td class="num">220 ms</td><td>onsetMs (反误触)</td></tr>
+      <tr><td>说完 → speech-end 触发</td><td class="num">1100 ms</td><td>silenceMs (容忍换气)</td></tr>
+      <tr><td>MediaRecorder.stop → Blob 上传</td><td class="num">50–200 ms</td><td>本地网络 / WebM 编码</td></tr>
+      <tr><td>faster-whisper 转写</td><td class="num">300–1500 ms</td><td>取决于 turbo / GPU 与音频长度</td></tr>
+      <tr><td>Claude 首 token</td><td class="num">~500 ms</td><td>API 延迟</td></tr>
+      <tr><td><strong>总：从「说完」到「开始听到回答」</strong></td><td class="num">~2.0 – 3.5 s</td><td></td></tr>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  生成自 <code>frontend/src/hooks/useVad.ts</code> ·
+  <code>useAudioLevel.ts</code> ·
+  <code>useTranscriber.ts</code> ·
+  <code>backend/app/extensions/whisper_local.py</code>
+</footer>
+
+</body>
+</html>

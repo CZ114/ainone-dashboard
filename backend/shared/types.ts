@@ -1,0 +1,250 @@
+export interface StreamResponse {
+  type:
+    | "claude_json"
+    | "error"
+    | "done"
+    | "aborted"
+    | "permission_request";
+  data?: unknown; // SDKMessage object for claude_json type
+  error?: string;
+  // Populated when type === "permission_request". The id is what the
+  // frontend echoes back via POST /api/chat/permission to resolve the
+  // matching SDK callback.
+  permission?: PermissionRequestPayload;
+}
+
+// Lightweight subset of the SDK's PermissionUpdate, just what we need to
+// surface "always allow" suggestions to the UI without leaking the full
+// SDK type into shared/types.
+export interface PermissionSuggestion {
+  type: string;
+  behavior?: "allow" | "deny" | "ask";
+  destination?: string;
+  // Original suggestion blob — the frontend echoes it back unmodified
+  // when the user picks "Allow always", and the backend forwards it to
+  // the SDK as `updatedPermissions`. Keeps wire schema decoupled.
+  raw: unknown;
+}
+
+export interface PermissionRequestPayload {
+  id: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  toolUseId: string;
+  // Pre-rendered prompt strings the SDK supplies when available — use
+  // these when present rather than reconstructing from toolName/input.
+  title?: string;
+  displayName?: string;
+  description?: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  suggestions?: PermissionSuggestion[];
+}
+
+// What the user's choice looks like on the wire. Mirrors the SDK's
+// PermissionResult variants. The backend serialises this into a
+// PermissionResult before handing it back to the SDK.
+export type PermissionDecisionWire =
+  | {
+      behavior: "allow";
+      updatedInput?: Record<string, unknown>;
+      // When the user picked "Allow always" the frontend echoes back the
+      // suggestions that were attached to the request.
+      acceptedSuggestions?: PermissionSuggestion[];
+    }
+  | {
+      behavior: "deny";
+      message: string;
+    };
+
+export interface PermissionResponseRequest {
+  id: string;
+  decision: PermissionDecisionWire;
+}
+
+// Effort level maps directly onto the agent SDK's EffortLevel type.
+// Client may omit the field (equivalent to model default).
+export type EffortLevelWire = "low" | "medium" | "high" | "xhigh" | "max";
+
+// Thinking config — the wire equivalent of the SDK's ThinkingConfig union.
+// Client omits the field to let the SDK pick a default (adaptive on Opus 4.6+).
+export type ThinkingConfigWire =
+  | { type: "enabled"; budgetTokens: number }
+  | { type: "disabled" }
+  | { type: "adaptive" };
+
+export interface ChatRequest {
+  message: string;
+  sessionId?: string;
+  requestId: string;
+  allowedTools?: string[];
+  workingDirectory?: string;
+  permissionMode?:
+    | "default"
+    | "plan"
+    | "acceptEdits"
+    | "bypassPermissions"
+    | "auto";
+  // Optional SDK knobs exposed from the frontend toolbar.
+  effort?: EffortLevelWire;
+  thinking?: ThinkingConfigWire;
+  /**
+   * DEAD CODE — see docs/specs/diary.md "Dead code / debt".
+   *
+   * Per-turn override forwarded to the SDK's `appendSystemPrompt`
+   * option. Originally used by the diary "Reply" flow but the SDK's
+   * `claude_code` preset doesn't surface this to the model, so the
+   * field is no longer set by any frontend caller. Plumbing kept for
+   * Phase 3 scenarios that may want a working invisible-context knob.
+   */
+  additionalSystemPrompt?: string;
+  /**
+   * Extra directories to add to Claude's tool-permission allow list
+   * (forwarded to the SDK's `additionalDirectories` option, equivalent
+   * to the CLI's `--add-dir`). Used by the chat handler to expose
+   * attached files that live outside the session cwd, so Claude's
+   * Read tool can actually open them.
+   */
+  additionalDirectories?: string[];
+}
+
+export interface AbortRequest {
+  requestId: string;
+}
+
+export interface ProjectInfo {
+  path: string;
+  encodedName: string;
+}
+
+export interface ProjectsResponse {
+  projects: ProjectInfo[];
+}
+
+// Conversation history types
+export interface ConversationSummary {
+  sessionId: string;
+  startTime: string;
+  lastTime: string;
+  messageCount: number;
+  lastMessagePreview: string;
+}
+
+export interface HistoryListResponse {
+  conversations: ConversationSummary[];
+}
+
+// Conversation history types
+// Note: messages are typed as unknown[] to avoid frontend/backend dependency issues
+// Frontend should cast to TimestampedSDKMessage[] (defined in frontend/src/types.ts)
+export interface ConversationHistory {
+  sessionId: string;
+  messages: unknown[]; // TimestampedSDKMessage[] in practice, but avoiding frontend type dependency
+  metadata: {
+    startTime: string;
+    endTime: string;
+    messageCount: number;
+  };
+}
+
+// =============================================================================
+// Diary feature (see DIARY_SPEC.md)
+// =============================================================================
+
+export type DiaryTrigger = "manual" | "cron" | "event";
+export type DiaryEntryType = "observation" | "question" | "reminder";
+
+export interface DiaryEntry {
+  id: string;
+  type: DiaryEntryType;
+  title: string;
+  body: string;                       // markdown
+  created_at: string;                 // ISO 8601
+  trigger: DiaryTrigger;
+
+  agent_id: string;
+  model: string;
+
+  context_refs: {
+    recordings: string[];             // recording timestamps consulted
+  };
+
+  read: boolean;
+  reply_session_id?: string;
+
+  // Best-effort telemetry from claude CLI's `result` event.
+  duration_ms?: number;
+  cost_usd?: number;             // captured but not displayed in UI
+  tokens?: { input: number; output: number };
+
+  // Tagged when scheduler ran a delayed entry on boot because the host was
+  // off when the schedule fired. Phase 2 only.
+  delayed?: boolean;
+}
+
+export interface DiaryEntriesFile {
+  version: 1;
+  entries: DiaryEntry[];              // newest first
+}
+
+export interface DiaryDailySchedule {
+  time: string;                       // "HH:MM" 24h, local
+  agent_id: string;
+}
+
+export interface DiaryWeeklySchedule {
+  weekday: number;                    // 0 (Sun) - 6
+  time: string;
+  agent_id: string;
+}
+
+export type DiaryLang = "en" | "zh";
+
+export interface DiaryConfig {
+  enabled: boolean;
+  schedule: {
+    daily?: DiaryDailySchedule;
+    weekly?: DiaryWeeklySchedule;
+  };
+  triggers: {
+    on_recording_complete: { enabled: boolean; agent_id?: string };
+  };
+  notification: {
+    browser: boolean;
+    quiet_hours?: [string, string];   // ["22:00", "08:00"]
+  };
+  daily_quota: number;
+  /**
+   * Language used by the built-in `diary_observer` agent's system
+   * prompt. User-defined agents bring their own prompts and ignore
+   * this. Manual triggers from the UI override per-call via the
+   * trigger body's `lang`. Defaults to 'en' when missing.
+   */
+  lang?: DiaryLang;
+  // Persisted next to the config so the scheduler can detect "already ran today"
+  // without keeping a sidecar file.
+  last_run?: {
+    daily?: { date: string; entry_id: string };
+    weekly?: { date: string; entry_id: string };
+  };
+}
+
+export interface AgentSampling {
+  temperature?: number;
+  max_tokens?: number;
+}
+
+export interface AgentConfig {
+  name: string;
+  description?: string;
+  model: string;                      // passed as --model
+  env: Record<string, string>;        // values may use ${SECRET_NAME}
+  system_prompt: string;
+  sampling?: AgentSampling;
+}
+
+export interface AgentsFile {
+  version: 1;
+  secrets: Record<string, string>;    // unmasked on disk; UI never returns these raw
+  agents: Record<string, AgentConfig>;
+}

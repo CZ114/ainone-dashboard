@@ -1,0 +1,370 @@
+// Single extension card inside SettingsPage → Extensions tab.
+//
+// Responsibilities:
+//   - Show current state (installed / enabled / installing / error).
+//   - Primary action button cycles through the install lifecycle.
+//   - During install: open an EventSource against the backend's SSE
+//     progress endpoint, render a progress bar + scrolling log tail.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  extensionsApi,
+  type ExtensionCacheEntry,
+  type ExtensionStatus,
+  type InstallProgressEvent,
+} from '../../api/extensionsApi';
+import { ExtensionConfigPanel } from './ExtensionConfigPanel';
+import { ExtensionCachePanel } from './ExtensionCachePanel';
+import { useT } from '../../contexts/LanguageContext';
+
+interface ExtensionCardProps {
+  ext: ExtensionStatus;
+  onChanged: () => void;
+}
+
+// How many recent log lines to keep in UI memory. Pip output can be
+// hundreds of lines; old ones aren't useful once install succeeds.
+const LOG_TAIL_SIZE = 200;
+
+export function ExtensionCard({ ext, onChanged }: ExtensionCardProps) {
+  const t = useT();
+  // Per-extension translation override. We look up by ext.id; if a key
+  // exists for the current language we use it for name + description,
+  // otherwise we fall back to the backend-supplied English values.
+  // This deliberately does NOT translate at the backend — extensions are
+  // declared in Python with English metadata and we layer i18n on top.
+  const meta = t.settings.extensionMeta[ext.id];
+  const displayName = meta?.name ?? ext.name;
+  const displayDescription = meta?.description ?? ext.description;
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [streaming, setStreaming] = useState(false);
+  const [lastResult, setLastResult] = useState<
+    { success: boolean; error: string | null } | null
+  >(null);
+  const esRef = useRef<EventSource | null>(null);
+  const logBoxRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll the log viewer to the bottom on each new line.
+  useEffect(() => {
+    if (logBoxRef.current) {
+      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
+    }
+  }, [logLines]);
+
+  const closeStream = useCallback(() => {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+    setStreaming(false);
+  }, []);
+
+  // Tear down the stream on unmount. The backend will keep the job
+  // running regardless — we can reconnect later via the same endpoint.
+  useEffect(() => {
+    return () => closeStream();
+  }, [closeStream]);
+
+  const openStream = useCallback(() => {
+    closeStream();
+    setStreaming(true);
+    setLogLines([]);
+    setProgress(0);
+    setLastResult(null);
+    esRef.current = extensionsApi.openProgressStream(
+      ext.id,
+      (evt: InstallProgressEvent) => {
+        if (evt.kind === 'log') {
+          setLogLines((prev) => {
+            const next = [...prev, evt.line];
+            return next.length > LOG_TAIL_SIZE
+              ? next.slice(-LOG_TAIL_SIZE)
+              : next;
+          });
+        } else if (evt.kind === 'progress') {
+          setProgress(evt.pct);
+        } else if (evt.kind === 'done') {
+          setLastResult({ success: evt.success, error: evt.error });
+          closeStream();
+          onChanged();
+        }
+      },
+      () => {
+        // EventSource errors fire both on network issues and on clean
+        // server-side close. Backend sends "done" before closing, so
+        // by the time we see onerror we usually already know the
+        // outcome. Just tear down defensively.
+        closeStream();
+      },
+    );
+  }, [ext.id, closeStream, onChanged]);
+
+  const handleInstall = async () => {
+    const r = await extensionsApi.install(ext.id);
+    if (!r.ok) {
+      window.alert(t.settings.extensions.card.installFailedToStart(r.error ?? ''));
+      return;
+    }
+    openStream();
+    onChanged();
+  };
+
+  const handleEnable = async () => {
+    const r = await extensionsApi.enable(ext.id);
+    if (!r.ok) window.alert(t.settings.extensions.card.enableFailed(r.error ?? ''));
+    onChanged();
+  };
+
+  const handleDisable = async () => {
+    const r = await extensionsApi.disable(ext.id);
+    if (!r.ok) window.alert(t.settings.extensions.card.disableFailed(r.error ?? ''));
+    onChanged();
+  };
+
+  const handleUninstall = async () => {
+    if (!window.confirm(t.settings.extensions.card.confirmUninstall(displayName))) {
+      return;
+    }
+    const r = await extensionsApi.uninstall(ext.id);
+    if (!r.ok) window.alert(t.settings.extensions.card.uninstallFailed(r.error ?? ''));
+    onChanged();
+  };
+
+  // If the backend reports installing=true (e.g. we navigated away and
+  // came back), reconnect to the progress stream automatically.
+  useEffect(() => {
+    if (ext.installing && !streaming && !esRef.current) {
+      openStream();
+    }
+    // We only want this effect to react to `ext.installing` flipping,
+    // not to `streaming` changing as a side-effect of our own calls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ext.installing]);
+
+  // State badge — one of: Not installed / Installing / Enabled / Disabled / Error
+  const statusBadge = (() => {
+    if (streaming || ext.installing) {
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-soft border border-accent/30">
+          {t.settings.extensions.card.statusInstalling}
+        </span>
+      );
+    }
+    if (!ext.installed) {
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-full bg-card-border text-text-muted">
+          {t.settings.extensions.card.statusNotInstalled}
+        </span>
+      );
+    }
+    if (ext.last_error) {
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-full bg-status-danger/20 text-status-danger border border-status-danger/30">
+          {t.settings.extensions.card.statusError}
+        </span>
+      );
+    }
+    if (ext.enabled) {
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-full bg-status-success/20 text-status-success border border-status-success/30">
+          {t.settings.extensions.card.statusEnabled}
+        </span>
+      );
+    }
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-full bg-status-warning/20 text-status-warning border border-status-warning/30">
+        {t.settings.extensions.card.statusDisabled}
+      </span>
+    );
+  })();
+
+  const showProgress = streaming || ext.installing || logLines.length > 0;
+
+  return (
+    <div className="p-4 rounded-lg bg-card-bg border border-card-border">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text-primary">{displayName}</h3>
+            <span className="text-[11px] font-mono text-text-muted">
+              v{ext.version}
+            </span>
+            {statusBadge}
+          </div>
+          <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+            {displayDescription}
+          </p>
+          <p className="mt-1 text-[11px] text-text-muted font-mono">
+            {t.settings.extensions.card.idLabel} {ext.id}
+            {ext.installed_at && (
+              <>
+                {' · '}
+                {t.settings.extensions.card.installedAt(
+                  new Date(ext.installed_at).toLocaleString(),
+                )}
+              </>
+            )}
+          </p>
+          {ext.last_error && (
+            <p className="mt-2 text-xs text-status-danger">
+              {t.settings.extensions.card.lastError} <code className="break-all">{ext.last_error}</code>
+            </p>
+          )}
+        </div>
+
+        {/* Actions — right-aligned */}
+        <div className="flex flex-col gap-1.5 shrink-0">
+          {!ext.installed && (
+            <button
+              onClick={handleInstall}
+              disabled={streaming || ext.installing}
+              className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent-hover disabled:bg-card-border disabled:cursor-not-allowed text-white font-medium"
+            >
+              {streaming || ext.installing
+                ? t.settings.extensions.card.statusInstalling
+                : t.settings.extensions.card.install}
+            </button>
+          )}
+          {ext.installed && !ext.enabled && (
+            <button
+              onClick={handleEnable}
+              className="px-3 py-1.5 text-xs rounded bg-accent hover:opacity-90 text-white font-medium"
+            >
+              {t.settings.extensions.card.enable}
+            </button>
+          )}
+          {ext.installed && ext.enabled && (
+            <button
+              onClick={handleDisable}
+              className="px-3 py-1.5 text-xs rounded bg-card-border hover:bg-card-border/70 text-text-primary"
+            >
+              {t.settings.extensions.card.disable}
+            </button>
+          )}
+          {ext.installed && (
+            <button
+              onClick={handleUninstall}
+              className="px-3 py-1.5 text-xs rounded text-status-danger hover:bg-status-danger/10 border border-status-danger/30"
+            >
+              {t.settings.extensions.card.uninstall}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar + log tail */}
+      {showProgress && (
+        <div className="mt-4 space-y-2">
+          {(streaming || ext.installing) && (
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-text-muted mb-1">
+                <span>{t.settings.extensions.card.progressLabel}</span>
+                <span>{Math.round(progress * 100)}%</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-card-border overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-200"
+                  style={{ width: `${Math.max(2, progress * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {logLines.length > 0 && (
+            <div
+              ref={logBoxRef}
+              className="h-32 overflow-y-auto rounded bg-black/40 text-[11px] font-mono text-text-secondary p-2 border border-card-border"
+            >
+              {logLines.map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap break-all">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+          {lastResult && !streaming && (
+            <div
+              className={`text-xs ${
+                lastResult.success ? 'text-status-success' : 'text-status-danger'
+              }`}
+            >
+              {lastResult.success
+                ? t.settings.extensions.card.installCompleteOk
+                : t.settings.extensions.card.installFailed(
+                    lastResult.error || t.settings.extensions.card.unknownError,
+                  )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Configuration panel — only when the extension is live AND
+          declares a non-empty schema. Hides itself entirely otherwise,
+          so cards for non-configurable extensions look like before.
+          We pass `runtime` so the panel can detect configured-vs-running
+          mismatches (e.g. user saved a new model_name but hasn't
+          restarted yet — the panel keeps the "Restart required" badge
+          up until the running model matches the configured one). */}
+      {ext.installed &&
+        ext.enabled &&
+        ext.config_schema &&
+        ext.config_schema.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-card-border/50">
+            <ExtensionConfigPanel
+              extensionId={ext.id}
+              schema={ext.config_schema}
+              currentConfig={ext.config}
+              runtime={ext.runtime}
+              onChanged={onChanged}
+            />
+          </div>
+        )}
+
+      {/* Cache panel — only for extensions that expose
+          runtime.cached_models (currently just whisper-local). The
+          shape narrowing below keeps TS happy AND tolerates future
+          extensions that put unrelated arrays under the same key by
+          checking the entry shape, not just the array's existence. */}
+      {ext.installed && ext.enabled && (() => {
+        const raw = ext.runtime?.cached_models;
+        if (!Array.isArray(raw)) return null;
+        // Shape-check defensively — runtime is typed Record<string,unknown>
+        // and a stale frontend pointed at a different backend version
+        // could see anything here.
+        const entries = raw.filter(
+          (e): e is ExtensionCacheEntry =>
+            !!e &&
+            typeof e === 'object' &&
+            typeof (e as ExtensionCacheEntry).name === 'string' &&
+            typeof (e as ExtensionCacheEntry).size_bytes === 'number',
+        );
+        return (
+          <div className="mt-4 pt-4 border-t border-card-border/50">
+            <ExtensionCachePanel
+              extensionId={ext.id}
+              entries={entries}
+              onChanged={onChanged}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Runtime status — verbose dump for debugging. We hide
+          cached_models from this row since the CachePanel above already
+          renders it as a structured table; printing it twice is just
+          noise. */}
+      {ext.runtime && Object.keys(ext.runtime).length > 0 && (
+        <div className="mt-3 pt-3 border-t border-card-border/50 text-[11px] text-text-muted font-mono">
+          {Object.entries(ext.runtime)
+            .filter(([k]) => k !== 'cached_models')
+            .map(([k, v]) => (
+              <span key={k} className="mr-3">
+                {k}: <span className="text-text-secondary">{String(v)}</span>
+              </span>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
