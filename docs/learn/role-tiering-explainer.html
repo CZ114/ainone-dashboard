@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三视角分级 — 这两天做了什么 · 可互动讲解</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 30px 16px 90px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 25px; margin-bottom: 4px; }
+  h2 { font-size: 19px; margin: 40px 0 6px; padding-left: 11px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .lead { color: var(--soft); font-size: 12.5px; font-family: var(--mono); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13.5px; }
+  .analogy b { color: var(--amber); }
+  .tech { border-left: 4px solid var(--blue); background: var(--blue-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13px; }
+  .tech b { color: var(--blue-deep); }
+  .btn { font: inherit; font-size: 13px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 7px 14px; transition: all .15s; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.on { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .elevator { border-left: 4px solid var(--green); background: var(--green-bg); font-size: 14px; }
+  .elevator b { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; background: var(--blue); color: #fff; border-radius: 6px; padding: 1px 9px; letter-spacing: .04em; margin-bottom: 6px; }
+
+  /* 三道门 */
+  .doors { display: flex; gap: 4px; align-items: stretch; margin: 14px 0 8px; overflow-x: auto; padding-bottom: 6px; }
+  .door { flex: 0 0 auto; width: 120px; border: 2px dashed var(--border2); border-radius: 10px; padding: 10px 8px; text-align: center; font-size: 11.5px; color: var(--soft); background: var(--bg); transition: all .3s; position: relative; }
+  .door.on { border-style: solid; border-color: var(--blue); background: var(--blue-bg); color: var(--text); }
+  .door .icn { font-size: 20px; display: block; }
+  .door b { display: block; font-size: 12px; margin: 3px 0; }
+  .arrow { flex: 0 0 auto; display: flex; align-items: center; color: var(--soft); font-size: 18px; }
+  .pkt { font-family: var(--mono); font-size: 11px; padding: 4px 9px; border-radius: 20px; background: var(--card); border: 1.5px solid var(--border2); display: inline-block; transition: all .3s; }
+  .pkt.blocked { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .pkt.pass { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .verdict { margin-top: 10px; font-size: 13px; min-height: 22px; }
+
+  /* 隔离器 */
+  .iso-grid { display: grid; grid-template-columns: 200px 1fr; gap: 14px; margin-top: 12px; }
+  @media (max-width: 720px) { .iso-grid { grid-template-columns: 1fr; } }
+  .db { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .db-h { background: #2e3a48; color: #cdd8e4; font-family: var(--mono); font-size: 11px; padding: 6px 10px; }
+  .db-row { display: flex; justify-content: space-between; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--border); transition: all .25s; }
+  .db-row:last-child { border-bottom: none; }
+  .db-row.dim { opacity: .28; }
+  .db-row .own { font-family: var(--mono); font-size: 10.5px; color: var(--soft); }
+  .db-row.mine .own { color: var(--green); font-weight: 700; }
+  .screen { background: #f9fbfd; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .screen-h { font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; }
+  .card-mini { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; margin-bottom: 6px; font-size: 12.5px; }
+  .empty { color: var(--soft); font-size: 12.5px; padding: 14px; text-align: center; font-style: italic; }
+
+  /* 三镜头 */
+  .lens-out { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 10px; min-height: 130px; background: #f9fbfd; }
+  .rib-step { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 3px 0; color: var(--muted); }
+  .rib-step .d { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .rib-step.done .d { background: var(--green); } .rib-step.done { color: var(--text); }
+  .rib-step.act .d { background: var(--blue); animation: pulse 1.1s infinite; } .rib-step.act { color: var(--text); font-weight: 600; }
+  .rib-step.pend .d { background: var(--border2); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(63,111,176,.5);} 50%{box-shadow:0 0 0 5px rgba(63,111,176,0);} }
+  .flow-node { display: inline-flex; flex-direction: column; align-items: center; border: 1.5px solid var(--border2); border-radius: 9px; padding: 6px 12px; font-size: 12.5px; margin: 3px; }
+  .flow-node small { font-size: 10px; color: var(--soft); font-family: var(--mono); }
+  .flow-node.done { border-color: var(--green); color: var(--green); }
+  .flow-node.act { border-color: var(--blue); color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .devline { font-family: var(--mono); font-size: 11px; color: var(--muted); background: #2e3a48; color: #cdd8e4; padding: 8px 11px; border-radius: 7px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
+  .devline .k { color: #7fb0e6; } .devline .hot { color: #e6c07f; }
+
+  /* 数据流 */
+  .pipe { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+  .pstep { display: flex; gap: 12px; align-items: flex-start; }
+  .pstep .bul { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: var(--card); border: 2px solid var(--border2); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--soft); transition: all .3s; z-index: 1; }
+  .pstep.lit .bul { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .pstep .conn { width: 2px; flex: 1; background: var(--border); margin: 2px 0; min-height: 14px; align-self: stretch; margin-left: 14px; }
+  .pcol { display: flex; flex-direction: column; align-items: center; }
+  .pbody { flex: 1; padding-bottom: 14px; }
+  .pbody h4 { font-size: 13.5px; } .pbody p { font-size: 12.5px; color: var(--muted); }
+  .pbody .m { font-family: var(--mono); font-size: 11px; color: var(--blue-deep); background: var(--blue-bg); padding: 1px 6px; border-radius: 4px; }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  table.cmp th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 1.5px solid var(--border2); padding: 6px 9px; }
+  table.cmp td { padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.cmp td:first-child { font-weight: 700; white-space: nowrap; }
+  .was { color: var(--red); } .now { color: var(--green); }
+  .qa { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0; overflow: hidden; margin-top: 8px; }
+  .qa summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 13.5px; list-style: none; }
+  .qa summary::before { content: "❓ "; }
+  .qa summary:hover { background: var(--blue-bg); }
+  .qa .a { padding: 0 14px 12px; font-size: 13px; }
+  .foot { margin-top: 30px; color: var(--soft); font-size: 12px; border-top: 1px dashed var(--border2); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🎭 三视角分级 — 这两天到底做了什么</h1>
+<p class="sub">可互动讲解 · 用生活比方教你看懂：数据怎么流、变量怎么隔离、和之前比改了什么。<span class="lead">不需要任何前后端知识，点开每个方块自己玩。</span></p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版</span><br>
+  你的健康 App 本来是<b>所有人看到同一个界面</b>（波形图、终端、配置全摊开）。这两天做了三件事：
+  <b>①上锁</b>（先把后端的"门"从街上改到只对内院开，再加登录）；<b>②发防伪工牌</b>（每个人拿一张签了名、改一个字就失效的通行证，后端逐一验它）；<b>③按身份分家</b>——<b>患者</b>看温柔的健康页、<b>医生</b>看临床台、<b>开发者</b>看全部机器；而且<b>同一件事对三种人有三种说法</b>（患者听"照护进行中"，医生看"诊断推理"，开发者看"step diagnose"）。下面每一块都能点着看。
+</div>
+
+<!-- ① 三道门 -->
+<h2>① 三道门：请求是怎么被一层层拦下的</h2>
+<p class="sub">一个"请求"就是<b>你的浏览器向后端要东西</b>（比如"给我所有病人的会话记录"）。之前它<b>畅通无阻</b>。现在要过三道门。点下面的按钮逐层装门，看同一个请求发生什么。</p>
+<div class="panel">
+  <div class="row" style="margin-bottom:6px">
+    <span style="font-size:12.5px;color:var(--muted)">装了几道门：</span>
+    <button class="btn" id="d0" onclick="setDoors(0)">0 · 原来的样子</button>
+    <button class="btn" id="d1" onclick="setDoors(1)">+M0 绑本机</button>
+    <button class="btn" id="d2" onclick="setDoors(2)">+M1 登录门</button>
+    <button class="btn on" id="d3" onclick="setDoors(3)">+M2 验工牌</button>
+  </div>
+  <div class="doors" id="doors"></div>
+  <div class="row" style="margin-top:8px">
+    <span style="font-size:12.5px;color:var(--muted)">谁在敲门：</span>
+    <button class="btn on" id="wLan" onclick="setWho('lan')">🏢 隔壁网络的陌生电脑</button>
+    <button class="btn" id="wPat" onclick="setWho('patient')">🌿 拿患者工牌的人</button>
+    <button class="btn" id="wDev" onclick="setWho('dev')">🔧 拿开发者工牌的人</button>
+  </div>
+  <div class="verdict" id="doorVerdict"></div>
+  <div class="analogy"><b>🏠 比方：</b>后端就像一栋放着病历的办公楼。<b>M0 绑本机</b>= 把所有门从"临街可推开"改成"只有内院（本机）能进" —— 隔壁网络的陌生电脑连门都摸不到。<b>M1 登录门</b>= 进楼要刷卡（登录拿工牌）。<b>M2 验工牌</b>= 每层楼的保安还会验你工牌是不是真的（下一节讲为什么工牌能防伪）。</div>
+  <div class="tech"><b>🔧 技术细节：</b>M0 = 三个后端服务（<code>:8100</code> 智能体 / <code>:8080</code> 传感器 / <code>:3000</code> 网关）从 <code>0.0.0.0</code>（所有网卡）改绑 <code>127.0.0.1</code>（只本机）。还堵了一个隐蔽洞：前端开发服务器的 <code>host:true</code> 会让局域网设备借它的"内网身份"转发进后端——等于白绑，也关掉了。M1/M2 是每个请求进后端先过一个<b>中间件</b>（middleware，像安检口，所有请求必经）。</div>
+</div>
+
+<!-- ② 工牌防伪 -->
+<h2>② 工牌为什么能防伪 —— 而且为什么"界面藏起来"根本不算锁</h2>
+<p class="sub">登录成功后你拿到一张 <b>token（通行证）</b>。它长这样，点开看它怎么防伪：</p>
+<div class="panel">
+  <div class="row"><button class="btn primary" onclick="tamperToken()">🖊️ 试着偷改工牌上的角色（患者→开发者）</button>
+    <button class="btn" onclick="resetToken()">↺ 重置</button></div>
+  <div style="margin-top:12px; font-family:var(--mono); font-size:12px; line-height:1.9">
+    <div>身份信息（谁都能看，甚至能改）：<br><span id="tokBody" style="background:var(--blue-bg);color:var(--blue-deep);padding:2px 7px;border-radius:5px">{"role":"patient","id":"P-001","name":"陈阿姨"}</span></div>
+    <div style="margin-top:8px">防伪签名（服务器用<b>密钥</b>算出的指纹）：<br><span id="tokSig" style="background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:5px">a3f9c1…（和上面的身份严格对应）</span></div>
+  </div>
+  <div class="verdict" id="tokVerdict" style="margin-top:12px"></div>
+  <div class="analogy"><b>🖊️ 比方：</b>工牌上印着你的名字和职位（身份信息，谁都能照着改）。但角落有一个<b>骑缝章</b>，是保安处用<b>只有他们有的印泥</b>盖的，且这个章的花纹是<b>照着你的名字职位算出来的</b>。你把"患者"涂改成"开发者"——名字变了，但骑缝章还是旧的，对不上，保安一眼看穿：假牌！你没有那盒印泥，永远盖不出配套的新章。</div>
+  <div class="tech"><b>🔧 技术细节：</b>token = <code>身份(base64) . HMAC-SHA256签名</code>。签名 = 用服务器密钥（存在 <code>auth_secret</code> 文件）对身份算的哈希。服务器每次收到 token，用同一把密钥重算签名，对不上就是伪造（返回 <code>401</code>）。密钥你拿不到，所以改了身份签名必然对不上。<b>关键推论：前端把菜单藏起来 ≠ 安全</b> —— 你随手改浏览器里存的角色、或干脆绕过界面直接发请求，前端拦不住；只有后端每个请求都验这张签名工牌，才是真锁。这就是为什么这两天既做了前端隐藏（防手滑误点），又做了后端验签（防真越权）。</div>
+</div>
+
+<!-- ③ 归属隔离器 -->
+<h2>③ 变量怎么隔离：同一个"给我数据"，每个人拿到的不一样</h2>
+<p class="sub">这是你问的"<b>变量怎么隔离</b>"的核心。后端有一个大柜子存所有人的会话/运行记录。切换下面的身份，看<b>同一个请求</b>（"给我会话列表"）返回什么——注意柜子没变，变的是<b>筛子</b>。</p>
+<div class="panel">
+  <div class="row" style="margin-bottom:4px"><span style="font-size:12.5px;color:var(--muted)">现在是谁在查：</span>
+    <button class="btn on" id="iP1" onclick="setIso('P-001')">🌿 陈阿姨 (P-001)</button>
+    <button class="btn" id="iP2" onclick="setIso('P-002')">🌿 王叔叔 (P-002)</button>
+    <button class="btn" id="iDr" onclick="setIso('doctor')">🩺 医生</button>
+  </div>
+  <div class="iso-grid">
+    <div>
+      <div class="db">
+        <div class="db-h">🗄️ 后端大柜子（真实全部数据）</div>
+        <div id="dbRows"></div>
+      </div>
+      <div style="font-size:11px;color:var(--soft);margin-top:6px">柜子里始终是这些，一条没删。</div>
+    </div>
+    <div class="screen">
+      <div class="screen-h" id="isoWho">GET /api/agent/sessions —— 这个人实际看到：</div>
+      <div id="isoScreen"></div>
+    </div>
+  </div>
+  <div class="analogy"><b>🗄️ 比方：</b>病历柜里每个病人一格，格子上贴着<b>主人的名字</b>（这就是 <code>owner</code>）。护工小陈来取，保安只让她开<b>贴着"陈"的格子</b>；护工小王只能开"王"的。而<b>医生</b>有主任钥匙，整柜都能看。柜子从没换，换的只是"你能开哪些格"。</div>
+  <div class="tech"><b>🔧 技术细节：</b>每条会话/运行记录多存了一个字段 <code>owner</code>（创建时记下"这是谁的"）。查询端点在返回前加一道<b>筛子</b>：<code>_owner_filter(request)</code> —— 如果你是患者，只返回 <code>owner == 你的编号</code> 的；医生/开发者返回全部。你的编号从<b>验过的工牌</b>里读（挂在 <code>request.state.user_info</code>），你伪造不了。所以隔离不是"前端不显示"，是<b>后端根本不把别人的数据发给你</b>。旧的、没记 owner 的老数据，患者严格看不到（宁可少给，不漏给）。</div>
+</div>
+
+<!-- ④ owner vs patient_id -->
+<h2>④ 两个"归属"标签：谁在操作 ≠ 为谁操作</h2>
+<p class="sub">这里有个精妙处，也是照护丝带能跑通的关键。一次"分析"有<b>两个主角</b>，得用两个标签分开记。</p>
+<div class="panel">
+  <div class="row">
+    <div class="flow-node" style="border-color:var(--violet);color:var(--violet)">🩺 医生<small>点了"发起分析"</small></div>
+    <span style="font-size:20px;color:var(--soft)">——为——></span>
+    <div class="flow-node" style="border-color:var(--green);color:var(--green)">🌿 陈阿姨 P-001<small>这次分析是给她的</small></div>
+  </div>
+  <div style="margin-top:12px;font-size:13.5px">
+    这一次运行记了两个标签：<br>
+    · <code>owner = doctor</code> —— <b>谁发起的</b>（操作者）<br>
+    · <code>patient_id = P-001</code> —— <b>为谁跑的</b>（服务对象）
+  </div>
+  <div class="analogy"><b>💊 比方：</b>护士给 3 床病人取药。<b>操作者</b>是护士（她刷的卡、她负责），<b>服务对象</b>是 3 床病人。如果只记"护士取了药"，病人自己永远查不到"有人在为我准备药"。所以要单独记<b>为谁</b>。患者今天页的照护丝带，查的是"<b>为我（patient_id）</b>跑的分析"——哪怕是医生发起的，她也看得到。而医生自己的"我发起过哪些"，查的是 <code>owner</code>。两个维度，各管各的。</div>
+  <div class="tech"><b>🔧 技术细节：</b><code>owner</code> 管"我的会话/我发起的运行"（第③节的隔离）；<code>patient_id</code> 管"为这个病人跑的照护"（照护丝带 <code>care_ribbon_for(patient_id)</code> 用它查）。医生发起时前端把 <code>patientId=选中病人</code> 塞进请求，后端 <code>run</code> 同时记下 owner 和 patient_id。少了这个区分，患者今天页就只能显示"自己亲手发起的"（她从不发起）→ 永远空白。</div>
+</div>
+
+<!-- ⑤ 三镜头 -->
+<h2>⑤ 三镜头：同一件事，对三种人三种说法</h2>
+<p class="sub">这是整个设计最漂亮的一点，也是你问的"数据流向"里最有意思的分叉。<b>同一次分析运行</b>，产生同一串事件；切换你的身份，看这串事件被翻译成完全不同的样子。</p>
+<div class="panel">
+  <div class="row" style="margin-bottom:4px"><span style="font-size:12.5px;color:var(--muted)">你是：</span>
+    <button class="btn on" id="lP" onclick="setLens('patient')">🌿 患者</button>
+    <button class="btn" id="lD" onclick="setLens('doctor')">🩺 医生</button>
+    <button class="btn" id="lV" onclick="setLens('dev')">🔧 开发者</button>
+    <span style="margin-left:auto"><button class="btn primary" onclick="playLens()">▶ 播放这次分析</button></span>
+  </div>
+  <div class="lens-out" id="lensOut"></div>
+  <div class="analogy"><b>🏥 比方：</b>一台手术正在进行。护士对着等候区的<b>家属</b>广播："手术进行中，一切顺利"；对着<b>主刀医生</b>的记录写："正在分离粘连、探查病灶"；对着<b>器械技师</b>喊："step 3，递止血钳"。<b>同一台手术，同一时刻，三种说法</b>——不是三台手术，是同一件事的三层翻译。你的健康 App 里，一次分析的每一步都预先写好了三种文案，系统按你的身份挑一种给你看。</div>
+  <div class="tech"><b>🔧 技术细节：</b>工作流的每一步（step）除了给 AI 的指令，还带一个可选的 <code>labels: {patient, doctor}</code> 字段。运行时这些文案<b>跟着事件流一起送出来</b>（<code>step_start</code>/<code>step_end</code> 事件带 labels）。前端按你的角色<b>投影</b>：患者取 <code>labels.patient</code>（"正在了解你的情况…"），医生取 <code>labels.doctor</code>（"诊断推理"），开发者不翻译、看原始 <code>step id + agent</code>。引擎本身不消费 labels，只透传——所以给旧工作流加 labels 完全不影响它跑，是<b>向后兼容</b>的纯装饰层。</div>
+</div>
+
+<!-- ⑥ 端到端数据流 -->
+<h2>⑥ 把它串起来：从医生点按钮到患者看见丝带</h2>
+<p class="sub">现在把前面所有零件拼成一条完整的路。点播放，看一次真实的"照护"数据怎么从医生流到患者。</p>
+<div class="panel">
+  <div class="row"><button class="btn primary" onclick="playPipe()">▶ 播放完整数据流</button>
+    <button class="btn" onclick="resetPipe()">↺ 重置</button></div>
+  <div class="pipe" id="pipe"></div>
+</div>
+
+<!-- ⑦ 之前 vs 现在 -->
+<h2>⑦ 和之前比，到底改了什么</h2>
+<div class="panel" style="padding:6px 18px 14px">
+  <table class="cmp">
+    <tr><th>方面</th><th>之前</th><th>这两天之后</th></tr>
+    <tr><td>后端门</td><td class="was">对整个局域网开放，60+ 接口零验证</td><td class="now">只对本机开 + 每个请求验签名工牌</td></tr>
+    <tr><td>进 App</td><td class="was">打开就是全部功能</td><td class="now">先登录，按角色只给该看的</td></tr>
+    <tr><td>身份</td><td class="was">没有身份概念</td><td class="now">患者(编号+配对码) / 医生·开发者(账号密码)，本地 SQLite 存</td></tr>
+    <tr><td>数据可见性</td><td class="was">谁都能看到所有人的会话/运行</td><td class="now">患者只见自己的（owner 筛子），医生见全部</td></tr>
+    <tr><td>同一次运行</td><td class="was">只有一种技术视图</td><td class="now">三镜头：患者叙事 / 医生流程 / 开发者原始</td></tr>
+    <tr><td>患者首页</td><td class="was">没有专属页</td><td class="now">"今天"页：呼吸圆环+手套状态+照护丝带+语音，医疗蓝主题</td></tr>
+    <tr><td>医生工作台</td><td class="was">无</td><td class="now">病人档案 + "为此患者发起分析" + 引用溯源审计</td></tr>
+  </table>
+</div>
+
+<h2>⑧ 速答卡</h2>
+<details class="qa"><summary>"前端隐藏"和"后端验证"到底差在哪？为什么两个都要做？</summary>
+<div class="a">前端隐藏 = 把菜单项藏起来，<b>防手滑</b>（患者不会误点到危险按钮），但改浏览器数据或绕过界面就破了。后端验证 = 每个请求验签名工牌 + 查权限表，<b>防真越权</b>（哪怕你直接发请求也被拒 <code>403</code>）。前者是体验（干净不吓人），后者是安全（真锁）。这两天先做前端（M1）再补后端（M2），并且明确告诉过你：只做前端时不能说"患者无法访问"，因为那不是真锁。</div></details>
+<details class="qa"><summary>"中间件"是什么？为什么所有请求都要过它？</summary>
+<div class="a">想象大楼只有一个安检口，进楼的每个人（每个请求）必经。中间件就是这个安检口的代码：它在请求真正到达"办事窗口"（具体接口）之前，先验工牌、查这个人能不能办这件事、给患者的敏感请求还会剥掉危险参数。放行了才往里送，不放行直接 <code>403</code> 打回。好处：安全逻辑集中在一处，不用每个窗口各写一遍。</div></details>
+<details class="qa"><summary>"运行时数据不进 git" 是什么意思？种子（seed）又是干嘛的？</summary>
+<div class="a">代码进 git（版本库），但<b>密钥、病人数据库、工作流定义</b>这类"每台机器自己的东西"不进（写在 <code>.gitignore</code> 里，避免泄漏 + 避免机器间打架）。可这带来一个问题：新工作流 <code>followup_review</code>（医生"发起分析"要用）写在不进 git 的文件里，别的机器就没有它。<b>种子</b>解决这个：程序第一次启动时，发现缺这个工作流就<b>自动补上</b>（像新手机首次开机自带几个默认 App）。已经有了就不动，尊重你的修改。</div></details>
+<details class="qa"><summary>为什么"发起分析"要新建 followup_review，不直接用现成的 clinic_sim？</summary>
+<div class="a">clinic_sim（模拟问诊）中间有一步<b>要真人回答</b>（患者扮演回答分诊问题）。如果医生一键发起后就走开，工作流会<b>卡在那一步干等</b>，照护丝带就停住了。所以新建了 <code>followup_review</code>：纯 AI、没有需要真人的步骤，医生点完就在后台自己跑到底，丝带能完整走完"了解→对照资料→核验→完成"。clinic_sim 保留给需要真人互动的完整问诊场景。</div></details>
+<details class="qa"><summary>数据"隔离"和"加密"是一回事吗？</summary>
+<div class="a">不是。这两天做的是<b>隔离</b>（访问控制）：数据都在，但后端<b>按身份决定发不发给你</b>——像图书馆的书都在架上，管理员按你的借书证决定让不让你借某本。<b>加密</b>是另一件事（把内容变成密文，没钥匙看不懂）。密钥（auth_secret）本身是加密存的思路，但会话/病人数据的保护这两天靠的是隔离 + 后端绑本机，不是全盘加密。</div></details>
+
+<div class="foot">docs/learn 系列 · 三视角分级讲解 —— 覆盖 M0 网络收口 / M1 登录分级 / M2 签名鉴权 / M3 归属过滤·三镜头·真实照护丝带。所有互动都是本页 JS 模拟，帮助理解机制，非真实后端。</div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  // ── ① 三道门 ──
+  let doors = 3, who = 'lan';
+  const DOOR_DEFS = [
+    { icn: '🏢', name: '街边门', desc: '原来：谁都能推' },
+    { icn: '🏠', name: 'M0 绑本机', desc: '只对内院开' },
+    { icn: '🪪', name: 'M1 登录', desc: '要刷卡进楼' },
+    { icn: '🛡️', name: 'M2 验工牌', desc: '保安验签名' },
+  ];
+  const WHO = {
+    lan: { label: '隔壁网络的陌生电脑', stopAt: 1, msg: (n) => n >= 1 ? '🚫 在 M0「绑本机」门前就被挡下 —— 它在楼外的街上，内院的门它连碰都碰不到。' : '⚠️ 门没装：陌生电脑长驱直入，能拿走任何病历。' },
+    patient: { label: '拿患者工牌的人', stopAt: 99, msg: (n) => n >= 3 ? '✅ 三道门全过：登录了、工牌是真的。但注意 —— 它只能看「自己的」数据（见第③节的筛子），越权拿别人的照样被打回。' : (n >= 2 ? '✅ 过了登录门。但还没验工牌真伪（M2），伪造的牌也能混进来。' : (n >= 1 ? '✅ 在内院了，但楼门没锁，谁都能进。' : '⚠️ 全裸奔。')) },
+    dev: { label: '拿开发者工牌的人', stopAt: 99, msg: (n) => n >= 3 ? '✅ 三道门全过 + 工牌验真：开发者能到全部楼层（配置、终端、编排）。' : '✅ 通过（门还没装齐）。' },
+  };
+  function renderDoors() {
+    const el = $('doors'); el.innerHTML = '';
+    const pkt = `<div class="arrow"><div class="pcol"><span class="pkt" id="thePkt">📨 请求</span></div></div>`;
+    el.insertAdjacentHTML('beforeend', pkt);
+    for (let i = 1; i <= 3; i++) {
+      el.insertAdjacentHTML('beforeend', '<div class="arrow">→</div>');
+      const on = i <= doors;
+      el.insertAdjacentHTML('beforeend',
+        `<div class="door ${on ? 'on' : ''}"><span class="icn">${DOOR_DEFS[i].icn}</span><b>${DOOR_DEFS[i].name}</b>${on ? DOOR_DEFS[i].desc : '（未装）'}</div>`);
+    }
+    el.insertAdjacentHTML('beforeend', '<div class="arrow">→</div><div class="arrow"><span style="font-size:12px;color:var(--muted)">🗄️ 病历</span></div>');
+    // verdict
+    const w = WHO[who];
+    const blocked = who === 'lan' && doors >= 1;
+    const p = $('thePkt');
+    p.className = 'pkt ' + (blocked ? 'blocked' : (doors >= 3 || who !== 'lan' ? 'pass' : ''));
+    p.textContent = blocked ? '🚫 请求' : '📨 请求';
+    $('doorVerdict').innerHTML = w.msg(doors);
+    ['d0','d1','d2','d3'].forEach((id, k) => $(id).classList.toggle('on', k === doors));
+    ['wLan','wPat','wDev'].forEach(id => $(id).classList.remove('on'));
+    $(who === 'lan' ? 'wLan' : who === 'patient' ? 'wPat' : 'wDev').classList.add('on');
+  }
+  window.setDoors = n => { doors = n; renderDoors(); };
+  window.setWho = w => { who = w; renderDoors(); };
+
+  // ── ② 工牌 ──
+  window.tamperToken = () => {
+    $('tokBody').textContent = '{"role":"developer","id":"P-001","name":"陈阿姨"}';
+    $('tokBody').style.background = '#f7e5e1'; $('tokBody').style.color = '#b8503d';
+    $('tokVerdict').innerHTML = '🚫 <b style="color:var(--red)">验签失败 → 401 拒绝。</b>你把 role 从 patient 改成 developer，但角落的防伪签名还是「patient 版」算出来的，对不上。服务器一算就露馅 —— 你没有那把密钥，改了身份配不出新签名。';
+  };
+  window.resetToken = () => {
+    $('tokBody').textContent = '{"role":"patient","id":"P-001","name":"陈阿姨"}';
+    $('tokBody').style.background = ''; $('tokBody').style.color = '';
+    $('tokVerdict').innerHTML = '✅ 身份和签名对得上 → 放行，按「患者」权限办事。';
+  };
+
+  // ── ③ 隔离器 ──
+  const DATA = [
+    { id: '会话 #a1 · 夜间胸闷', owner: 'P-001' },
+    { id: '会话 #a2 · 睡眠咨询', owner: 'P-002' },
+    { id: '运行 #r7 · 随访分析', owner: 'P-001' },
+    { id: '会话 #a3 · 用药提醒', owner: 'P-001' },
+    { id: '运行 #r8 · 睡眠比对', owner: 'P-002' },
+    { id: '会话 #x0 · 迁移前旧记录', owner: null },
+  ];
+  let isoWho = 'P-001';
+  function renderIso() {
+    const isPat = isoWho.startsWith('P-');
+    $('dbRows').innerHTML = DATA.map(d => {
+      const mine = isPat && d.owner === isoWho;
+      const visible = !isPat || mine;
+      return `<div class="db-row ${mine ? 'mine' : ''} ${visible ? '' : 'dim'}">
+        <span>${d.id}</span><span class="own">owner: ${d.owner ?? '—'}</span></div>`;
+    }).join('');
+    const shown = DATA.filter(d => !isPat || d.owner === isoWho);
+    $('isoWho').textContent = (isPat ? `患者 ${isoWho}` : '医生') + ' 发 GET /api/agent/sessions —— 实际看到：';
+    $('isoScreen').innerHTML = shown.length
+      ? shown.map(d => `<div class="card-mini">${d.id}</div>`).join('')
+      : '<div class="empty">（空）—— 你名下还没有记录</div>';
+    ['iP1','iP2','iDr'].forEach(id => $(id).classList.remove('on'));
+    $(isoWho === 'P-001' ? 'iP1' : isoWho === 'P-002' ? 'iP2' : 'iDr').classList.add('on');
+  }
+  window.setIso = w => { isoWho = w; renderIso(); };
+
+  // ── ⑤ 三镜头 ──
+  const STEPS = [
+    { patient: '正在了解你的情况…', doctor: '初诊评估', id: 'triage', agent: 'triage' },
+    { patient: '正在对照医生留下的资料…', doctor: '知识库检索与诊断推理', id: 'diagnosis', agent: 'doctor' },
+    { patient: '医生会亲自确认一遍结果…', doctor: '诊断复核验证', id: 'review', agent: 'verifier' },
+  ];
+  let lens = 'patient', lensProg = -1, lensTimer = null;
+  function renderLens() {
+    const out = $('lensOut');
+    const prog = lensProg;
+    if (lens === 'patient') {
+      out.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">🤍 照护进行中（患者今天页）</div>' +
+        STEPS.map((s, i) => {
+          const st = prog < 0 ? 'pend' : i < prog ? 'done' : i === prog ? 'act' : 'pend';
+          return `<div class="rib-step ${st}"><span class="d"></span>${s.patient}</div>`;
+        }).join('');
+    } else if (lens === 'doctor') {
+      out.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">🩺 临床流程（医生会诊面板）</div>' +
+        STEPS.map((s, i) => {
+          const cls = prog < 0 ? '' : i < prog ? 'done' : i === prog ? 'act' : '';
+          return `<span class="flow-node ${cls}">${s.doctor}<small>${s.id}</small></span>` + (i < 2 ? '<span style="color:var(--soft)"> → </span>' : '');
+        }).join('');
+    } else {
+      let lines = '';
+      STEPS.forEach((s, i) => {
+        if (prog < 0 || i > prog) return;
+        lines += `<span class="k">step_start</span> {"step":"${s.id}","agent":"${s.agent}","labels":{...}}\n`;
+        if (i < prog) lines += `<span class="hot">step_end</span>   {"step":"${s.id}","output":"…","ms":${1200 + i * 400}}\n`;
+      });
+      out.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">🔧 原始事件流（开发者事件台）</div><div class="devline">' + (lines || '（点播放看事件逐行到达）') + '</div>';
+    }
+    ['lP','lD','lV'].forEach(id => $(id).classList.remove('on'));
+    $(lens === 'patient' ? 'lP' : lens === 'doctor' ? 'lD' : 'lV').classList.add('on');
+  }
+  window.setLens = l => { lens = l; renderLens(); };
+  window.playLens = () => {
+    if (lensTimer) clearInterval(lensTimer);
+    lensProg = 0; renderLens();
+    lensTimer = setInterval(() => {
+      lensProg++;
+      if (lensProg > STEPS.length) { clearInterval(lensTimer); lensProg = STEPS.length; }
+      renderLens();
+    }, 1300);
+  };
+
+  // ── ⑥ 数据流 ──
+  const PIPE = [
+    { h: '医生点「为此患者发起分析」', p: '病人档案页选中陈阿姨，点按钮。前端把请求发往后端。', m: 'streamWorkflow(followup_review, {complaint}, patientId="P-001")' },
+    { h: '后端验工牌 + 记两个归属', p: '中间件验医生的签名工牌通过；启动运行，记下 owner=doctor、patient_id=P-001。', m: 'start_run(owner="doctor", patient_id="P-001")' },
+    { h: '工作流一步步跑，事件带 labels', p: 'triage→诊断→核验，每步发出事件，事件里带着三种说法的文案。', m: 'step_start {labels:{patient,doctor}}' },
+    { h: '事件落进运行记录', p: '每个事件累积存盘，patient_id 一起记着。', m: 'run_history: events[] + patient_id' },
+    { h: '患者今天页轮询「为我跑的」', p: '陈阿姨的手机每几秒问一次：有没有为我(P-001)跑的照护？', m: 'GET /api/agent/care-ribbon' },
+    { h: '后端按 patient_id 筛 + 取患者文案', p: '找到 patient_id=P-001 的运行，只挑出每步的 labels.patient，组装成丝带。', m: 'care_ribbon_for("P-001")' },
+    { h: '患者看见温柔的照护丝带', p: '"正在了解你的情况… ✓ 正在对照资料… 医生会确认…" —— 同一次分析，她看到的是照护叙事。', m: '🤍 照护进行中' },
+  ];
+  let pipeTimer = null;
+  function renderPipe(lit) {
+    $('pipe').innerHTML = PIPE.map((s, i) => `
+      <div class="pstep ${i <= lit ? 'lit' : ''}">
+        <div class="pcol"><div class="bul">${i + 1}</div>${i < PIPE.length - 1 ? '<div class="conn"></div>' : ''}</div>
+        <div class="pbody"><h4>${s.h}</h4><p>${s.p}</p><span class="m">${s.m}</span></div>
+      </div>`).join('');
+  }
+  window.playPipe = () => {
+    if (pipeTimer) clearInterval(pipeTimer);
+    let lit = 0; renderPipe(0);
+    pipeTimer = setInterval(() => { lit++; if (lit >= PIPE.length) clearInterval(pipeTimer); renderPipe(lit); }, 1100);
+  };
+  window.resetPipe = () => { if (pipeTimer) clearInterval(pipeTimer); renderPipe(-1); };
+
+  // init
+  renderDoors(); resetToken(); renderIso(); renderLens(); renderPipe(-1);
+})();
+</script>
+</body>
+</html>
