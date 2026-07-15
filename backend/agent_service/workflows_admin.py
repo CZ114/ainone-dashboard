@@ -107,3 +107,46 @@ def delete_workflow(wf_id: str) -> None:
             raise KeyError(f"未知 workflow: {wf_id}")
         del doc["workflows"][wf_id]
         _save_doc(doc)
+
+
+# ─── 种子: followup_review (患者照护丝带默认数据源) ───────────────────
+# workflows.json 是运行时数据 (gitignore, 不进 git), 但这个"随访分析"
+# workflow 是 M3 医生"为患者发起分析"的目标 + 患者照护丝带的数据源,
+# 需保证任何环境都存在 → 首启种子。纯 agent (无 human), 每步带 labels
+# 供三镜头投影。引用 triage/doctor/verifier agent (问诊场景已建)。
+_SEED_FOLLOWUP = {
+    "name": "随访分析 (纯 AI, 无需人工)",
+    "description": "医生一键为患者跑: 评估 → 检索知识库诊断 → 核验循环至 PASS。"
+                   "无 human 步骤, 后台跑完, 患者照护丝带完整呈现。",
+    "inputs": ["complaint"],
+    "output": "{diagnosis}",
+    "steps": [
+        {"type": "agent", "id": "triage", "agent": "triage",
+         "prompt": "患者主诉与近期情况:\n{complaint}\n\n请做初步评估, 列出需要关注的要点。",
+         "labels": {"patient": "正在了解你的情况…", "doctor": "初诊评估"}},
+        {"type": "agent", "id": "diagnosis", "agent": "doctor",
+         "prompt": "患者主诉:\n{complaint}\n\n初步评估:\n{triage}\n\n"
+                   "请先检索知识库, 再输出诊断分析与随访建议。",
+         "labels": {"patient": "正在对照医生留下的资料…", "doctor": "知识库检索与诊断推理"}},
+        {"type": "loop", "id": "revise", "max_iters": 3, "steps": [
+            {"type": "agent", "id": "review", "agent": "verifier",
+             "prompt": "请核验以下诊断分析。\n患者主诉: {complaint}\n\n"
+                       "诊断分析:\n{diagnosis}\n\n若无误请回复以 PASS 开头。",
+             "labels": {"patient": "医生会亲自确认一遍结果…", "doctor": "诊断复核验证"}},
+            {"type": "break_if", "when": {"var": "review", "regex": "^\\s*PASS\\b"}},
+            {"type": "agent", "id": "diagnosis", "agent": "doctor",
+             "prompt": "核验意见:\n{review}\n\n请逐条回应并输出修订后的完整诊断分析。",
+             "labels": {"patient": "医生正在调整诊断结果…", "doctor": "诊断反馈与修订"}},
+        ]},
+    ],
+    "id": "followup_review",
+}
+
+
+def ensure_seed() -> None:
+    """首启确保种子 workflow 存在; 已存在则不动 (尊重用户后续修改)。"""
+    with _lock:
+        doc = _load_doc()
+        if "followup_review" not in doc["workflows"]:
+            doc["workflows"]["followup_review"] = dict(_SEED_FOLLOWUP)
+            _save_doc(doc)

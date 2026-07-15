@@ -45,6 +45,7 @@ broker = PermissionBroker()
 aborts = AbortRegistry()
 manager = SessionManager()
 authdb.init_db()   # 本地身份库 patients.db (建表 + 首启 seed 演示账号)
+workflows_admin.ensure_seed()   # 确保 followup_review (照护丝带数据源) 存在
 # human_inputs 单例已移至 bridge.py (run_workflow 工具与端点共用)
 
 

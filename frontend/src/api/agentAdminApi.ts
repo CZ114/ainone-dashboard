@@ -387,13 +387,15 @@ export const agentAdminApi = {
     inputs: Record<string, string>,
     onEvent: (e: WorkflowEvent) => void,
     signal?: AbortSignal,
+    patientId?: string,
   ): Promise<void> {
     const res = await fetch(
       `${API_BASE}/api/agent/workflows/${encodeURIComponent(id)}/stream`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs }),
+        // patientId (可选): 医生为某患者跑 → run 记服务对象, 患者照护丝带按它查。
+        body: JSON.stringify({ inputs, patientId }),
         signal,
       },
     );

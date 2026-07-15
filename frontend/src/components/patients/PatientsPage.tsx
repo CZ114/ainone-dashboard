@@ -16,6 +16,7 @@ import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
 import { useAuth, useCan } from '../../contexts/RoleContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { agentAdminApi, type WorkflowEvent } from '../../api/agentAdminApi';
 
 // ---------- Wire types (agent_service /api/agent/patients) ------------------
 
@@ -131,6 +132,11 @@ interface PatientsText {
   statsTitle: string;
   statsPlaceholder: string;
   dismiss: string;
+  initiateAnalysis: string;
+  analysisRunning: string;
+  analysisStarted: string;
+  analysisDone: string;
+  analysisFailed: string;
 }
 
 const TEXT: Record<'zh' | 'en', PatientsText> = {
@@ -168,6 +174,11 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     statsPlaceholder:
       '该病人的日记/录音/会话/运行归属统计将在 M3 (owner 过滤) 落地后显示。',
     dismiss: '关闭',
+    initiateAnalysis: '▶ 为此患者发起分析',
+    analysisRunning: '分析中…',
+    analysisStarted: '已为该患者发起随访分析',
+    analysisDone: '随访分析完成',
+    analysisFailed: '分析出错',
   },
   en: {
     heading: 'Patients',
@@ -205,6 +216,11 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     statsPlaceholder:
       "This patient's diary/recording/session/run ownership stats will appear once M3 (owner filtering) lands.",
     dismiss: 'Dismiss',
+    initiateAnalysis: '▶ Initiate analysis',
+    analysisRunning: 'Analysing…',
+    analysisStarted: 'Follow-up analysis started for this patient',
+    analysisDone: 'Follow-up analysis done',
+    analysisFailed: 'Analysis failed',
   },
 };
 
@@ -256,6 +272,7 @@ export default function PatientsPage() {
   const [createDraft, setCreateDraft] = useState<FormDraft>(EMPTY_DRAFT);
 
   const [busy, setBusy] = useState(false);
+  const [workflowRunning, setWorkflowRunning] = useState(false);
   // One-time pairing code modal — the ONLY place plaintext appears.
   const [pairCode, setPairCode] = useState<{ id: string; name: string; code: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -362,6 +379,31 @@ export default function PatientsPage() {
       showToast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(false);
+    }
+  };
+
+  // ---- initiate a follow-up analysis workflow FOR this patient ----
+  // 无 human 的 followup_review, 带 patientId → run 归属服务对象患者,
+  // 患者今天页照护丝带据此显示真实进度。医生停在页面直到 Toast 反馈。
+  const handleInitiateAnalysis = async () => {
+    if (!selected) return;
+    setWorkflowRunning(true);
+    showToast(T.analysisStarted, 'info');
+    try {
+      await agentAdminApi.streamWorkflow(
+        'followup_review',
+        { complaint: selected.complaint || selected.name },
+        (e: WorkflowEvent) => {
+          if (e.type === 'workflow_end') showToast(T.analysisDone, 'success');
+          else if (e.type === 'error') showToast(T.analysisFailed, 'error');
+        },
+        undefined,
+        selected.id,
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setWorkflowRunning(false);
     }
   };
 
@@ -607,6 +649,14 @@ export default function PatientsPage() {
                         className="rounded-lg border border-status-danger/40 px-4 py-2 text-sm text-status-danger transition-colors hover:bg-status-danger/10 disabled:opacity-60"
                       >
                         {T.resetCode}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleInitiateAnalysis()}
+                        disabled={busy || workflowRunning}
+                        className="rounded-lg border border-accent px-4 py-2 text-sm text-accent transition-colors hover:bg-accent/10 disabled:opacity-60"
+                      >
+                        {workflowRunning ? T.analysisRunning : T.initiateAnalysis}
                       </button>
                     </div>
                   )}
