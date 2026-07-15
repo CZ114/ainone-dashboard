@@ -207,6 +207,7 @@ class WorkflowUpsertBody(BaseModel):
 
 class WorkflowRunBody(BaseModel):
     inputs: dict = {}
+    patientId: str | None = None   # 医生为哪个患者跑 (照护丝带归属)
 
 
 class WorkflowInputBody(BaseModel):
@@ -687,10 +688,11 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody, request: Request):
     """
     wf = _load_workflow_or_404(wf_id)
     q: queue.Queue = queue.Queue()
-    # run owner = 发起者 id (患者自跑归患者, 医生跑归医生); 患者只见自己发起的。
+    # run owner = 发起者 id; patient_id = 服务对象 (医生为谁跑, 照护丝带按它查)。
     _run_owner = getattr(request.state, "user_info", {}).get("id")
     handle = run_history.start_run(
-        wf_id, wf.spec.get("name") or wf_id, body.inputs, _run_owner)
+        wf_id, wf.spec.get("name") or wf_id, body.inputs, _run_owner,
+        patient_id=body.patientId)
 
     def ask_human(prompt: str) -> str:
         p = human_inputs.create()
@@ -749,6 +751,16 @@ def workflow_runs_list(request: Request, limit: int = 30):
 def workflow_runs_active(request: Request):
     """进行中的运行 (含聊天 agent 经 run_workflow 工具启动的) — 面板轮询用。"""
     return {"active": run_history.list_active(_owner_filter(request))}
+
+
+@app.get("/api/agent/care-ribbon")
+def care_ribbon(request: Request):
+    """患者照护丝带: 为该患者跑的 workflow 的 labels.patient 步骤叙事。
+    患者查自己 (token id); staff 可 ?patient_id= 查某患者。"""
+    ui = getattr(request.state, "user_info", {})
+    pid = (ui.get("id") if ui.get("role") == "patient"
+           else request.query_params.get("patient_id"))
+    return run_history.care_ribbon_for(pid or "")
 
 
 @app.get("/api/agent/workflow-runs/active/{run_id}")

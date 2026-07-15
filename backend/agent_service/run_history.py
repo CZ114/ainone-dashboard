@@ -112,12 +112,13 @@ _active_lock = threading.Lock()
 class RunHandle:
     """一次运行的追踪句柄: add_event 累积, finish 归档并摘除。"""
 
-    def __init__(self, run_id, workflow_id, name, inputs, owner=None):
+    def __init__(self, run_id, workflow_id, name, inputs, owner=None, patient_id=None):
         self.run_id = run_id
         self.workflow_id = workflow_id
         self.name = name
         self.inputs = inputs
-        self.owner = owner   # M3 归属: 患者编号 / staff 用户名
+        self.owner = owner            # M3 归属: 发起者 (患者编号 / staff 用户名)
+        self.patient_id = patient_id  # 服务对象患者 (为谁跑; 照护丝带按它查)
         self.started = time.time()
         self.events: list[dict] = []
         self._lock = threading.Lock()
@@ -134,6 +135,7 @@ class RunHandle:
                 "workflow_id": self.workflow_id,
                 "name": self.name,
                 "owner": self.owner,
+                "patient_id": self.patient_id,
                 "status": "running",
                 "started_at": datetime.fromtimestamp(self.started).isoformat(),
                 "events": list(self.events),
@@ -154,6 +156,7 @@ class RunHandle:
                 "workflow_id": self.workflow_id,
                 "name": self.name,
                 "owner": self.owner,
+                "patient_id": self.patient_id,
                 "status": status,
                 "inputs": self.inputs,
                 "started_at": datetime.fromtimestamp(self.started).isoformat(),
@@ -165,8 +168,9 @@ class RunHandle:
             pass
 
 
-def start_run(workflow_id: str, name: str, inputs: dict, owner=None) -> RunHandle:
-    h = RunHandle(new_run_id(), workflow_id, name, inputs, owner)
+def start_run(workflow_id: str, name: str, inputs: dict, owner=None,
+              patient_id=None) -> RunHandle:
+    h = RunHandle(new_run_id(), workflow_id, name, inputs, owner, patient_id)
     with _active_lock:
         _active[h.run_id] = h
     return h
@@ -191,3 +195,58 @@ def get_active(run_id: str) -> dict:
     if h is None:
         raise KeyError(f"运行不在进行中: {run_id}")
     return h.snapshot()
+
+
+# ─── 患者照护丝带 (M3 #34) ───────────────────────────────────────────
+# 患者今天页把"为他跑的" workflow 运行, 按 step 的 labels.patient 投影成
+# 一条护理叙事丝带。只取带 labels.patient 的步骤 (无叙事文案的技术步骤
+# 对患者不可见)。
+
+def _ribbon_steps(events: list[dict], running: bool) -> list[dict]:
+    """事件序列 → [{label, status}]。只收带 labels.patient 的步骤。
+    running 时第一个未完成步骤标 active, 其后 pending; 已结束的 run 全 done。"""
+    collected = []          # [(step_id, patient_label)]
+    ended = set()
+    for e in events:
+        lbl = e.get("labels")
+        pl = lbl.get("patient") if isinstance(lbl, dict) else None
+        if e.get("type") in ("step_start", "human_ask") and pl:
+            collected.append((e.get("step"), pl))
+        elif e.get("type") == "step_end":
+            ended.add(e.get("step"))
+    out = []
+    active_marked = False
+    for sid, label in collected:
+        if sid in ended:
+            out.append({"label": label, "status": "done"})
+        elif running and not active_marked:
+            out.append({"label": label, "status": "active"})
+            active_marked = True
+        else:
+            out.append({"label": label, "status": "pending" if running else "done"})
+    return out
+
+
+def care_ribbon_for(patient_id: str) -> dict:
+    """某患者的照护丝带: 优先进行中的 run, 否则最近一次为其跑的 run。
+    返回 {running, steps:[{label,status}]}。"""
+    if not patient_id:
+        return {"running": False, "steps": []}
+    with _active_lock:
+        handles = [h for h in _active.values() if h.patient_id == patient_id]
+    if handles:
+        h = max(handles, key=lambda x: x.started)
+        with h._lock:
+            events = list(h.events)
+        return {"running": True, "steps": _ribbon_steps(events, True)}
+    # 无进行中 → 最近一次为该患者跑完的 run
+    files = sorted(RUNS_DIR.glob("*.json"),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in files:
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if r.get("patient_id") == patient_id:
+            return {"running": False, "steps": _ribbon_steps(r.get("events", []), False)}
+    return {"running": False, "steps": []}

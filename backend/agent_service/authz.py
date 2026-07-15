@@ -99,6 +99,7 @@ POLICY: list[tuple[frozenset[str] | None, re.Pattern, tuple[str, ...]]] = [
     (None, re.compile(r"^/api/agent/sessions"), PATIENT),          # 历史读/清空 (owner 过滤是 M3)
     ({"GET"}, re.compile(r"^/api/agent/workflow-runs/active"), PATIENT),  # 照护丝带轮询
     ({"POST"}, re.compile(r"^/api/agent/workflows/input$"), PATIENT),     # human 问题卡作答
+    ({"GET"}, re.compile(r"^/api/agent/care-ribbon$"), PATIENT),          # 患者照护丝带
 
     # ── 医生档 ──
     ({"GET"}, re.compile(r"^/api/agent/(health|config)$"), STAFF),

@@ -15,6 +15,7 @@ import { useDiaryStore } from '../../store/diaryStore';
 import { BreathingRing } from './BreathingRing';
 import { InsightBars } from './InsightBars';
 import { DeviceStatusCard } from './DeviceStatusCard';
+import { CareRibbon } from './CareRibbon';
 
 const TEXT = {
   zh: {
@@ -132,6 +133,10 @@ export default function TodayPage() {
                 <p className="text-[13px] text-text-muted py-4">{t.noLetter}</p>
               )}
             </div>
+
+            {/* Care-in-progress ribbon — patient lens of a workflow run
+                a doctor started for them (labels.patient narrative). */}
+            <CareRibbon />
 
             {/* Wearable status in plain words */}
             <DeviceStatusCard device={insights.device} />
