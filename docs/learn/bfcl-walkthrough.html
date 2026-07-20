@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BFCL 速通 — 工具调用怎么评分 · 我的评测器怎么搭 · 凭什么可信</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --s1: #2a78d6; --s2: #1baf7a;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 30px 16px 90px; font-size: 14px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h2 { font-size: 18px; margin: 38px 0 6px; padding-left: 11px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .lead { color: var(--soft); font-size: 12.5px; font-family: var(--mono); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13.5px; }
+  .analogy b { color: var(--amber); }
+  .tech { border-left: 4px solid var(--blue); background: var(--blue-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13px; }
+  .tech b { color: var(--blue-deep); }
+  .btn { font: inherit; font-size: 13px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 7px 14px; transition: all .15s; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.on, .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { font-size: 12px; padding: 5px 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .elevator { border-left: 4px solid var(--green); background: var(--green-bg); font-size: 14px; }
+  .elevator b { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; background: var(--blue); color: #fff; border-radius: 6px; padding: 1px 9px; letter-spacing: .04em; margin-bottom: 6px; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+
+  /* ① 题型 + 例子 */
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .cat { font-size: 12px; border: 1.5px solid var(--border2); border-radius: 8px; padding: 4px 11px; background: var(--card); cursor: pointer; transition: all .15s; }
+  .cat.on { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-deep); font-weight: 700; }
+  .catdetail { margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; background: #f9fbfd; font-size: 13px; min-height: 56px; }
+  .nl2fc { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; justify-content: center; }
+  .nl2fc .box { border: 1.5px solid var(--border2); border-radius: 9px; padding: 8px 13px; font-size: 12.5px; background: var(--card); }
+  .nl2fc .box.q { border-color: var(--violet); background: var(--violet-bg); }
+  .nl2fc .box.f { border-color: var(--blue); background: var(--blue-bg); font-family: var(--mono); font-size: 12px; color: var(--blue-deep); }
+  .nl2fc .ar { color: var(--soft); font-size: 20px; }
+  .verline { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ver { font-size: 11px; font-family: var(--mono); border: 1px solid var(--border2); border-radius: 20px; padding: 2px 10px; color: var(--soft); }
+  .ver b { color: var(--blue-deep); }
+
+  /* ② AST 判分器玩具 */
+  .ast { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  @media (max-width: 800px) { .ast { grid-template-columns: 1fr; } }
+  .gold { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .gold .h { background: #2e3a48; color: #cdd8e4; font-family: var(--mono); font-size: 11px; padding: 6px 11px; }
+  .gold pre { font-family: var(--mono); font-size: 12px; line-height: 1.7; padding: 11px 13px; margin: 0; background: #f9fbfd; white-space: pre-wrap; word-break: break-word; }
+  .gold .k { color: var(--blue-deep); } .gold .cand { color: var(--green); } .gold .opt { color: var(--amber); }
+  .callpick .btn { display: block; width: 100%; text-align: left; margin-bottom: 5px; font-family: var(--mono); font-size: 11.5px; }
+  .callpick .btn.on { font-weight: 700; }
+  .checks { margin-top: 10px; }
+  .chk { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 8px; margin-bottom: 5px; font-size: 12.5px; border: 1px solid var(--border); background: #f9fbfd; transition: all .2s; }
+  .chk .ic { flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; background: var(--border2); }
+  .chk.pass .ic { background: var(--green); } .chk.pass { border-color: #cfe6d3; background: var(--green-bg); }
+  .chk.fail .ic { background: var(--red); } .chk.fail { border-color: #eecfc8; background: var(--red-bg); }
+  .chk .why { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .verdict { margin-top: 10px; padding: 9px 13px; border-radius: 9px; font-size: 13.5px; font-weight: 700; text-align: center; }
+  .verdict.pass { background: var(--green-bg); color: var(--green); border: 1.5px solid var(--green); }
+  .verdict.fail { background: var(--red-bg); color: var(--red); border: 1.5px solid var(--red); }
+
+  /* ③ 流水线 */
+  .pipe { display: flex; flex-direction: column; margin-top: 12px; }
+  .pstep { display: flex; gap: 12px; align-items: flex-start; }
+  .pcol { display: flex; flex-direction: column; align-items: center; }
+  .pstep .bul { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: var(--card); border: 2px solid var(--border2); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--soft); transition: all .3s; z-index: 1; }
+  .pstep.lit .bul { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 0 0 4px var(--blue-bg); }
+  .pstep.calib .bul { background: var(--violet); border-color: var(--violet); color: #fff; box-shadow: 0 0 0 4px var(--violet-bg); }
+  .pstep .conn { width: 2px; flex: 1; background: var(--border); min-height: 16px; align-self: stretch; }
+  .pbody { flex: 1; padding-bottom: 16px; }
+  .pbody h4 { font-size: 13.5px; } .pbody h4 .f { font-family: var(--mono); font-size: 11px; color: var(--soft); font-weight: 400; }
+  .pbody p { font-size: 12.5px; color: var(--muted); }
+  .pbody .data { font-family: var(--mono); font-size: 11px; color: var(--blue-deep); background: var(--blue-bg); padding: 3px 8px; border-radius: 6px; margin-top: 4px; display: none; white-space: pre-wrap; word-break: break-word; }
+  .pstep.lit .pbody .data, .pstep.calib .pbody .data { display: block; }
+  .pstep.calib .pbody .data { color: var(--violet); background: var(--violet-bg); }
+
+  /* ④ 对照表 */
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  table.cmp th { text-align: left; font-size: 11px; color: var(--muted); border-bottom: 1.5px solid var(--border2); padding: 7px 9px; }
+  table.cmp td { padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.cmp tr:last-child td { border-bottom: none; }
+  table.cmp td:first-child { font-weight: 700; white-space: nowrap; color: var(--text); }
+  .same { color: var(--green); } .diff { color: var(--blue-deep); }
+
+  /* ⑤ 总分 vs 逐题 */
+  .scorecmp { display: flex; gap: 14px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
+  .scard { border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; text-align: center; background: #f9fbfd; }
+  .scard .v { font-size: 26px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .scard .l { font-size: 11.5px; color: var(--muted); }
+  .scard.eq { border-color: var(--green); }
+  .reveal4 { display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .reveal4.show { display: grid; animation: pop .35s; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+  @media (max-width: 700px) { .reveal4 { grid-template-columns: repeat(2, 1fr); } }
+  .qcell { border-radius: 9px; padding: 10px; text-align: center; font-size: 12px; }
+  .qcell .n { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .qcell.ok { background: var(--green-bg); color: var(--green); }
+  .qcell.strict { background: var(--red-bg); color: var(--red); }
+  .qcell.loose { background: var(--amber-bg); color: var(--amber); }
+
+  /* ⑥ 三处修复 */
+  .fixes { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; }
+  .fix { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: #f9fbfd; }
+  .fix .fh { font-size: 13.5px; font-weight: 700; margin-bottom: 4px; }
+  .fix .badge { display: inline-block; font-size: 10.5px; border-radius: 5px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; }
+  .fix .badge.strict { background: var(--red-bg); color: var(--red); }
+  .fix .badge.loose { background: var(--amber-bg); color: var(--amber); }
+  .fix .ex { font-family: var(--mono); font-size: 11px; background: var(--blue-bg); color: var(--blue-deep); border-radius: 6px; padding: 6px 9px; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+
+  /* ⑦ multiturn */
+  .mt { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .mtstat { flex: 1; min-width: 120px; background: #f9fbfd; border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; }
+  .mtstat .v { font-size: 17px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .mtstat .l { font-size: 10.5px; color: var(--muted); }
+
+  /* 官方榜 */
+  .hrow { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .hrow .hl { width: 130px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .hrow .htrack { flex: 1; position: relative; padding-right: 46px; }
+  .hrow .hbar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); position: relative; }
+  .hrow .hv { position: absolute; right: -44px; top: -1px; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .qa { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+  .qa summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 13.5px; list-style: none; }
+  .qa summary::before { content: "❓ "; }
+  .qa summary:hover { background: var(--blue-bg); }
+  .qa .a { padding: 0 14px 12px; font-size: 13px; }
+  .foot { margin-top: 30px; color: var(--soft); font-size: 12px; border-top: 1px dashed var(--border2); padding-top: 12px; }
+  .xref { display: inline-block; font-size: 12px; color: var(--blue-deep); background: var(--blue-bg); border: 1px solid #cfe0f2; border-radius: 8px; padding: 4px 10px; margin-top: 6px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🧮 BFCL 速通 — 工具调用怎么评分、我的评测器怎么搭、凭什么可信</h1>
+<p class="sub">BFCL 是什么 · 一道题怎么判分（AST 匹配）· 我的评测器流水线 · <b>官方 vs 我的对比</b> · 双 harness 对拍怎么证明它可信。<span class="lead">全部来自论文/官方源码与仓库代码，点开自己玩。</span></p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版</span><br>
+  BFCL（伯克利函数调用排行榜）不考模型"聊天答得好不好"，而考<b>"该不该调工具、调哪个、参数填得对不对"</b>——把一句话变成结构正确的函数调用。判分主力是 <b>AST 匹配</b>：不运行代码，只静态检查函数名/参数是否和"标准答案"对得上。我自己写了一套评测 harness，直接拿 agent 框架的真代码去跑。问题来了：<b>我自己写的判分器，凭什么可信？</b>答案是<b>和官方各跑一批、逐题对判罚</b>——发现总分几乎一样（91.00 vs 91.25）却藏着 15 题分歧，补齐 3 处判卷语义后，同输入<b>逐题 400/400 完全一致</b>。
+</div>
+
+<!-- ① BFCL 是什么 -->
+<h2>① BFCL 是什么：不考聊天，考"把话变成函数调用"</h2>
+<div class="panel">
+  <div class="nl2fc">
+    <div class="box q">🗣️ "求底 10、高 5 的三角形面积"</div>
+    <div class="ar">→</div>
+    <div class="box f">calculate_triangle_area(base=10, height=5)</div>
+  </div>
+  <p class="sub" style="text-align:center;margin:8px 0 0">考的就是这一步：给一句话 + 一堆可用函数，模型能不能吐出<b>结构正确</b>的调用。点题型看每类考什么：</p>
+  <div class="cats" id="cats"></div>
+  <div class="catdetail" id="catDetail"></div>
+  <div class="verline">
+    <span class="ver"><b>V1</b> 首创 AST 判分</span>
+    <span class="ver"><b>V2</b> 加真实社区函数 + 相关性检测</span>
+    <span class="ver"><b>V3</b> 加多轮 multi_turn</span>
+    <span class="ver"><b>V4</b> 走向 agentic（web/记忆）</span>
+  </div>
+  <div class="tech"><b>🔧 技术细节：</b>BFCL 是伯克利 Gorilla 团队（Patil、Mao、Yan、Ji、Stoica、Gonzalez、Zhang 等，ICML 2025）做的开放基准，约 2000+ 条"问题–函数–答案"三元组，覆盖 Python/Java/JS/REST。它是业界评测工具调用能力的事实标准。总分 <code>Overall Accuracy</code> = 各子类别准确率的<b>非加权平均</b>（每类各算通过率再简单平均）。</div>
+</div>
+
+<!-- ② AST 判分器玩具 -->
+<h2>② 一道题怎么判分：AST 匹配（动手改改看）</h2>
+<p class="sub">AST 匹配 = 把模型的调用解析成语法树，<b>不运行</b>，只静态对答案。关键：金标不是"一个标准值"，而是<b>每个参数一张"可接受值候选表"</b>。左边是这道题的金标，点右边不同的"模型调用"，看判分器逐条亮灯。</p>
+<div class="panel">
+  <div class="ast">
+    <div>
+      <div class="gold">
+        <div class="h">✅ 金标 possible_answer（每参数一张候选表）</div>
+        <pre>calculate_triangle_area {
+  <span class="k">base</span>:   [ <span class="cand">10</span> ]
+  <span class="k">height</span>: [ <span class="cand">5</span> ]
+  <span class="k">unit</span>:   [ <span class="cand">"units"</span>, <span class="opt">""</span> ]   <span style="color:var(--amber)">← 含空串 = 可省</span>
+}</pre>
+      </div>
+      <div class="hint" style="margin-top:8px">💡 <code>base</code>/<code>height</code> 候选里没有空串 → <b>必填</b>；<code>unit</code> 候选含 <code>""</code> → <b>可省</b>。值只要落进候选表任一项就算对。</div>
+    </div>
+    <div>
+      <div class="hint" style="margin-bottom:6px">选一个"模型调用"试判：</div>
+      <div class="callpick" id="callpick"></div>
+      <div class="checks" id="checks"></div>
+      <div class="verdict" id="astVerdict"></div>
+    </div>
+  </div>
+  <div class="analogy"><b>📋 比方：</b>判分像<b>核对报销单</b>：①填的科目名对不对（函数名）②该填的栏都填了没（必填参数）③有没有多填不存在的栏（幻觉参数）④每栏的值在不在"允许清单"里（候选表）。全对才报销。注意"允许清单"可以有多个合法写法——比如城市既接受 <code>NYC</code> 也接受 <code>New York City</code>，字符串还会先<b>规范化</b>（去空格标点、转小写），所以 <code>x^2</code> 和 <code>x**2</code> 算同一个。</div>
+  <div class="tech"><b>🔧 技术细节（还有两条这里没演示）：</b><b>类型强校验</b>——布尔只认真布尔（字符串 <code>"true"</code> 被拒）；数值上 Python 允许 <code>10</code> 当 <code>10.0</code>，但 Java/JS 要求精确类型。<b>嵌套数组内型</b>——参数声明 <code>array&lt;float&gt;</code> 而模型给 <code>[12,15,18]</code>（int 元素）会判 <code>type_error:nested</code>（这条官方本身有争议，因为 JSON 里 12 无所谓 int/float，但校准以"判得和官方一样"为准照搬）。</div>
+</div>
+
+<!-- ③ 我的评测器流水线 -->
+<h2>③ 我的评测器怎么搭的：从题目到判分的 6 步流水线</h2>
+<p class="sub">点「▶ 播放」，看一道题怎么流过我的 harness。关键点：第 3 步真正调用的是 <b>agent 框架日常用的同一个 <code>invoke</code></b>——评测直接测真代码，不是测替身。</p>
+<div class="panel">
+  <div class="row" style="margin-bottom:6px">
+    <button class="btn primary" id="pipeBtn" onclick="pipePlay()">▶ 播放</button>
+    <button class="btn" onclick="pipeReset()">↺ 重置</button>
+    <span class="hint" id="pipeStat"></span>
+  </div>
+  <div class="pipe" id="pipe"></div>
+  <div class="tech"><b>🔧 几处刻意的设计（都有出处）：</b>① <b>存全部调用</b>而非首个——因为官方 simple 类要求调用数恰好 1，多调即错，只留首个就漏判了（还能离线重判，改判分器不用重烧 API）。② <b>温度压到 0.001、超时放到 180s</b>——对齐官方口径，且推理模型一题思考 ~40s，60s 会误伤长思考题。③ <b>失败分两类</b>：<code>no_call</code>（压根没调工具）vs 调了但参数错——性质不同要分开报。④ 解析失败不静默丢弃，标 <code>__unparseable__</code> 让它可见地失败，便于审计。</div>
+</div>
+
+<!-- ④ 官方 vs 我的 -->
+<h2>④ 官方评测器 vs 我的评测器：像在哪、不像在哪</h2>
+<div class="panel">
+  <table class="cmp">
+    <tr><th>维度</th><th>官方 bfcl-eval</th><th>我的 harness</th></tr>
+    <tr><td>判分语义</td><td colspan="2" class="same">✔ 完全一致——AST 规则（函数名/必填/幻觉/候选表/类型）逐条镜像官方源码，连"判得和官方一样、不评判官方对错"的哲学都照搬</td></tr>
+    <tr><td>被测对象</td><td>官方各 handler 适配各家 API</td><td class="diff">直接调 <code>AgentDeploy.invoke</code>——测的是 agent 框架的<b>真代码</b>（校准中真在这层抓到并修了 provider 串台 bug）</td></tr>
+    <tr><td>系统提示</td><td>FC 模式默认<b>不加</b> system prompt</td><td class="diff">默认加一段引导 <code>DEFAULT_SYSTEM</code>（逼模型调函数而非自己文本算答案），<code>--no-system</code> 可关；对拍时关掉对齐官方</td></tr>
+    <tr><td>结果留存</td><td>存结果供判分</td><td class="diff">首行 config + 每题全部调用 + 末行 summary；<code>no_call</code> 单列，异常记 ERROR 不中断整轮</td></tr>
+    <tr><td>带点函数名</td><td>各 handler 各自处理</td><td class="diff"><code>math.factorial</code> → 消毒成 <code>math_factorial</code>（OpenAI 只许 <code>[a-zA-Z0-9_-]</code>），留 <code>name_map</code> 反查表判分时还原</td></tr>
+  </table>
+  <div class="analogy"><b>⚖️ 比方：</b>两把尺子刻度必须一样（判分语义），但一把是官方的"通用卡尺"、一把是我按自己产线定制的。定制的好处是<b>量的就是我产线上的真零件</b>（真 agent 代码）——校准过程里，正是靠它量出了产线本身的一个隐藏瑕疵（provider 串台，密钥发错服务商）。坏处是：定制尺子凭什么和官方刻度一致？下一节就是来证明这个的。</div>
+</div>
+
+<!-- ⑤ 双 harness 对拍 -->
+<h2>⑤ 凭什么可信：和官方各跑一批、逐题对判罚</h2>
+<p class="sub">思路叫<b>"四钉法"</b>：把会影响结果的四个变量全钉死，剩下的分歧就 100% 归到"判分器"本身。四钉 = <b>同模型</b>（gpt-4o-mini，靠响应回显核实没被偷换）·<b>同数据</b>（400 题 simple_python，和官方 pip 包 SHA256 逐字节一致）·<b>同口径</b>（FC 模式、无 system、temp 0.001）·<b>各判各的</b>（判分器正是被测对象）。</p>
+<div class="panel">
+  <div class="hint" style="text-align:center">先看总分——几乎一模一样，你可能觉得"那就对了"：</div>
+  <div class="scorecmp">
+    <div class="scard"><div class="v">91.00%</div><div class="l">我的 harness（修复前）</div></div>
+    <div class="scard eq"><div class="v">91.25%</div><div class="l">官方 bfcl-eval</div></div>
+    <div class="scard"><div class="v">0.25pp</div><div class="l">总分差（看着没事）</div></div>
+  </div>
+  <div class="row" style="justify-content:center"><button class="btn primary" id="revealBtn" onclick="revealDiff()">🔍 把 400 题逐题拆开看</button></div>
+  <div class="reveal4" id="reveal4">
+    <div class="qcell ok"><div class="n">357</div>都判过 ✓</div>
+    <div class="qcell ok"><div class="n">28</div>都判错 ✓</div>
+    <div class="qcell strict"><div class="n">8</div>我太严<br>（我错·官过）</div>
+    <div class="qcell loose"><div class="n">7</div>我太松<br>（我过·官错）</div>
+  </div>
+  <div class="verdict" id="revealNote" style="display:none"></div>
+  <div class="analogy"><b>🎭 比方：</b>两个裁判给同一场比赛打的<b>总分</b>只差一点，看着像"英雄所见略同"。但把每一个判罚<b>逐条摊开</b>，发现有 15 处判得不一样——只不过一个裁判偏严 8 次、偏松 7 次，一多一少在总分上<b>几乎抵消</b>了。<b>总分会骗你，逐题不骗你</b>。这就是为什么不能只看排行榜数字，要逐题 diff。</div>
+  <div class="tech"><b>🔧 技术细节：</b>15 题分歧里，用 <code>same_output</code> 标签再分家：两侧模型<b>输出完全相同</b>但判罚不同 = 纯判分器分歧（11 题，判分器有责）；输出本就不同 = 生成侧采样噪声（4 题，如利率 <code>10</code> vs <code>0.1</code>，与判分器无关）。模型项逐题抵消后，那 11 题就是判分器要补的语义——见下一节。</div>
+</div>
+
+<!-- ⑥ 三处修复 -->
+<h2>⑥ 揪出的 3 处判卷语义差 —— 补完就 400/400 一致</h2>
+<div class="panel">
+  <div class="fixes">
+    <div class="fix">
+      <div class="fh">A · 字典金标是"每键候选表"，不是一个字面值 <span class="badge strict">我太严 · 判 FAIL 官判 PASS</span></div>
+      <div class="hint">金标 dict 的每个值其实是"该键的可接受值列表"。首版把整个 dict 当一个字面值整体比较 → 明明每键都命中候选却判错。修法：逐键校验，值落进该键候选表就算对。</div>
+      <div class="ex">题 89/94/96/260/337（5 题，同输出）
+金标 {department:[Science], school:[Bluebird High School, Bluebird HS]}
+模型 {department:Science, school:Bluebird High School}  → 逐键命中 → 应 PASS</div>
+    </div>
+    <div class="fix">
+      <div class="fh">B · simple 类调用数必须恰好 = 1 <span class="badge loose">我太松 · 判 PASS 官判 FAIL</span></div>
+      <div class="hint">官方规定 simple 类多调即 "Wrong number of functions"。首版只取第 1 个调用、忽略多余的 → 该错的没抓到。修法：调用数 ≠ 1 直接判错，且改存全部调用（旧结果连多余调用都没留）。</div>
+      <div class="ex">题 47/238/248（3 题，同输出，官方 n_calls=2）
+例 47：模型对 get_boiling_melting_points 发了 2 个调用 → 官方判 Wrong number of functions</div>
+    </div>
+    <div class="fix">
+      <div class="fh">C · 数组内型强校验（array&lt;float&gt; 给 int 元素判错） <span class="badge loose">我太松 · 判 PASS 官判 FAIL</span></div>
+      <div class="hint">参数声明 <code>array&lt;float&gt;</code> 而模型给 <code>[12,15,18]</code>（int）时官方判 <code>type_error:nested</code>。首版数值宽松放过了。修法：声明有 items 类型时逐元素用 <code>type()</code> 严格比。此规则官方本身有争议（JSON 无 int/float 之分），照搬并注明"以判得和官方一样为准"。</div>
+      <div class="ex">题 82/87/103（3 题纯判分器）
+numbers=[12,15,18,20,21,26,30]  声明 float 给 int → type_error:nested</div>
+    </div>
+  </div>
+  <div class="verdict pass" style="margin-top:12px">补齐这 3 条后，把官方跑出的 400 个输出喂给修好的判分器（纯离线、零 API 重烧）→ 逐题 <b>400/400 完全一致</b>，判分器偏差清零 ✓</div>
+  <div class="tech"><b>🔧 为什么这一步值钱：</b>校准完成后，我这把尺子和官方尺子在 <code>simple_python</code> 上<b>刻度证明一致</b>——此后我用它测任何模型，测出来的差异都能归因给<b>被测模型</b>，而不是"会不会是我判分器有 bug"。另附多模型筛查：llama-3.3-70b 两侧 96.0%=96.0%、GLM-4.7-flash 86.0% vs 87.0%（唯一那题经审计确认是"模型真没调用"，非判分器丢调用），印证判分语义与模型无关。</div>
+</div>
+
+<!-- ⑦ multiturn -->
+<h2>⑦ 更进一步：多轮 30 题，我的 Agent 循环 vs 官方循环</h2>
+<p class="sub">前面测的是"单轮吐一个调用对不对"。多轮（multi_turn）要跨轮记上下文、真执行工具、在变化的后端状态上操作——这里对拍的不再是判分器，而是<b>两个"跑 agent"的循环</b>本身（判卷统一交官方，测量差异钉零）。</p>
+<div class="panel">
+  <div class="mt">
+    <div class="mtstat"><div class="v">36.67%</div><div class="l">我的 Agent 循环（11/30）</div></div>
+    <div class="mtstat"><div class="v">26.67%</div><div class="l">官方循环（8/30）</div></div>
+    <div class="mtstat"><div class="v">90%</div><div class="l">逐题判罚一致（27/30）</div></div>
+    <div class="mtstat"><div class="v">0</div><div class="l">工程异常（补丁后）</div></div>
+  </div>
+  <div class="analogy"><b>🐞 比方：</b>对拍还顺手抓到一个<b>官方的 bug</b>：官方执行器给测试实例起名时，消毒只处理了 <code>[-./:]</code> 却<b>漏了等号 <code>=</code></b>；我的模型名带 <code>:include_venice_system_prompt=false</code> 后缀，残留的 <code>=</code> 混进 <code>eval()</code> 直接语法错误——第一次官方侧 22/30 撞满步数强退、0/30 全废。<b>单跑任一侧都发现不了</b>（单跑官方会误以为"模型不行"），两侧一比立刻显形。打了一个字符的正则补丁（补上 <code>=</code>）就好了。</div>
+  <div class="tech"><b>🔧 诚实边界：</b>3 题分歧全是"我过·官挂"（如 base_3：官方模型打转 23 步没达目标状态，我方 9 步完成），0 题反向。但 <b>30 题样本太小，明确不据此宣称"我的更强"</b>——结论只到"行为统计等价、判罚 90% 一致、零工程故障"。校准范围目前也仅 <code>simple_python</code> 单轮 + 这 30 题多轮，parallel / 更大 multi_turn 还没对拍。</div>
+</div>
+
+<!-- ⑧ 官方榜 + FAQ -->
+<h2>⑧ 官方榜单参照 + 速答卡</h2>
+<div class="panel">
+  <div class="hint" style="margin-bottom:4px">BFCL 官方榜单（V3 Overall Accuracy · 2025-10 快照）——我的对拍针对的是 <code>simple_python</code> 单类，不是这张总分榜，仅作参照：</div>
+  <div id="bfclLb"></div>
+  <div class="hint" style="margin-top:8px">⚠ BFCL 是活榜，随版本/时间大幅波动（Claude-3.5-Sonnet 在 2024-09 旧组成下曾报 90.2%，组成收紧后如今榜首约 78%），所以标了快照日期。</div>
+</div>
+<details class="qa"><summary>AST 匹配不运行代码，会不会放过"写对了但跑起来错"的调用？</summary><div class="a">会，这正是它的边界。所以 BFCL 还有<b>可执行评测</b>（executable）：真把调用跑起来、拿返回值和金标比，能抓到 AST 放过的语义错参。AST 的优点是快、稳、不依赖外部服务；缺点是只证"写得规范"不证"真能用"。我的 harness 目前对拍的是 AST 类（simple_python）。</div></details>
+<details class="qa"><summary>为什么总分几乎一样还非要逐题对？不是已经 91 对 91 了吗？</summary><div class="a">因为总分是<b>各题对错的汇总</b>，两个方向的错误会互相抵消。这次就是"我偏严 8 题 + 偏松 7 题"，净差 1 题 = 0.25pp，看着风平浪静，底下其实 15 题判得不一样。只信总分就会把一个有 3 处语义 bug 的判分器当成"没问题"。逐题 diff 才能把每处分歧揪出来归因。</div></details>
+<details class="qa"><summary>我的评测器加了引导 system prompt，算不算作弊/不公平？</summary><div class="a">这是与官方口径的一处<b>已知偏离</b>，config 里如实记录了，对拍时也关掉（<code>--no-system</code>）来对齐官方。加它的动机：不加的话推理模型经常自己把答案文本算完直接回话，测的就不是"函数调用能力"了。日常评测加、严格对拍关，两种口径都留着。</div></details>
+<details class="qa"><summary>"判得和官方一样"和"判得对"是一回事吗？</summary><div class="a">不是，我特意只追求前者。比如数组内型那条规则，官方判 <code>[12,15]</code>（int）不满足 <code>array&lt;float&gt;</code>——这在 JSON 语义上有争议（12 无所谓 int/float）。但校准的目标是让我的分数能和官方榜<b>可比</b>，所以照搬官方语义、不去评判官方对错。想改进判分是另一件事，得单独立项并保留旧口径对照。</div></details>
+
+<div class="foot">事实来源：BFCL 官方（Gorilla/Berkeley，ICML 2025，leaderboard.html + v3 blog）· 仓库 <code>evaluation/bfcl/</code>（loader/schema/adapter/ast_match/runner/diff_official）· 校准报告 <code>results/calibration_2026-07-09.md</code> 与 <code>m3_multiturn_calibration_2026-07-09.md</code>（逐字核实）。数字均可追溯到结果 JSONL 或报告原文。</div>
+
+<a class="xref" href="./progress-report-2026-07.html">↗ 回到进度页看 BFCL 对拍表与 AgentClinic 跑分</a>
+
+</div>
+<script>
+// ① 题型
+const CATS = [
+  ['simple', '只给 1 个函数，模型该发出恰好 1 个调用。多调即"Wrong number of functions"判错。最基础题型，也是我对拍的那一类。'],
+  ['multiple', '给 2–4 个候选函数，要选对其中 1 个并正确调用——考"多工具里挑对那一个"的判别力，仍是单次调用。'],
+  ['parallel', '一句话含多个意图，需一次并行发出多个调用。判分参数顺序无关、按集合乱序匹配。'],
+  ['parallel_multiple', 'parallel × multiple 组合：既要从多候选里挑，又要并行发多个——纯 AST 题型里最难一档。'],
+  ['irrelevance', '给的工具都不匹配需求，正确行为是"拒绝调用任何函数"。硬编一个调用即错——考"知道自己不知道"。'],
+  ['relevance', '给了确实相关的工具就该去调它（而非只用文字答）。与 irrelevance 互补，一起考"该出手才出手"。'],
+  ['multi_turn (V3)', '多轮有状态会话：跨轮记上下文、缺信息时反问、在变化的后端状态上操作。靠"状态比对"判分而非 AST。'],
+  ['executable', '真把调用跑起来看返回值（含 REST 真实请求）。证"真能用"，能抓到 AST 放过的语义错参。'],
+];
+const catsEl = document.getElementById('cats');
+CATS.forEach(([n,d],i) => {
+  catsEl.insertAdjacentHTML('beforeend', '<div class="cat'+(i===0?' on':'')+'" data-i="'+i+'">'+n+'</div>');
+});
+function pickCat(i){
+  document.querySelectorAll('.cat').forEach((el,j)=>el.classList.toggle('on', j===i));
+  document.getElementById('catDetail').innerHTML = '<b>'+CATS[i][0]+'</b>：'+CATS[i][1];
+}
+catsEl.querySelectorAll('.cat').forEach(el => el.onclick = () => pickCat(+el.dataset.i));
+pickCat(0);
+
+// ② AST 判分器 (在 JS 里真判, 镜像规则)
+const GOLD = { name: 'calculate_triangle_area', params: { base: [10], height: [5], unit: ['units', ''] } };
+const CALLS = [
+  { label: '✅ calculate_triangle_area(base=10, height=5)', name: 'calculate_triangle_area', args: { base: 10, height: 5 } },
+  { label: '✅ …(base=10, height=5, unit="units")', name: 'calculate_triangle_area', args: { base: 10, height: 5, unit: 'units' } },
+  { label: '❌ compute_area(base=10, height=5)  函数名错', name: 'compute_area', args: { base: 10, height: 5 } },
+  { label: '❌ …(base=10)  漏了必填 height', name: 'calculate_triangle_area', args: { base: 10 } },
+  { label: '❌ …(base=10, height=5, color="red")  幻觉参数', name: 'calculate_triangle_area', args: { base: 10, height: 5, color: 'red' } },
+  { label: '❌ …(base=8, height=5)  值不在候选表', name: 'calculate_triangle_area', args: { base: 8, height: 5 } },
+];
+function normStr(s){ return String(s).toLowerCase().replace(/[ ,.\/\-_*^]/g,'').replace(/'/g,'"'); }
+function valIn(v, cands){ return cands.some(c => (typeof c==='string'||typeof v==='string') ? normStr(c)===normStr(v) : c===v); }
+function judge(call){
+  const checks = [];
+  const nameOk = call.name === GOLD.name;
+  checks.push(['函数名匹配', nameOk, nameOk?'与金标同名':'"'+call.name+'" ≠ "'+GOLD.name+'"']);
+  // 必填齐: 候选不含 '' 的参数必须出现
+  const missing = Object.keys(GOLD.params).filter(k => !GOLD.params[k].includes('') && !(k in call.args));
+  checks.push(['必填参数齐全', missing.length===0, missing.length? '缺 '+missing.join(','):'base·height 都在']);
+  // 无幻觉
+  const extra = Object.keys(call.args).filter(k => !(k in GOLD.params));
+  checks.push(['无幻觉参数', extra.length===0, extra.length? '多了 '+extra.join(','):'没有多余参数']);
+  // 值落候选
+  const badVal = Object.keys(call.args).filter(k => (k in GOLD.params) && !valIn(call.args[k], GOLD.params[k]));
+  checks.push(['值落候选表', badVal.length===0, badVal.length? k2(badVal,call):'每个值都命中']);
+  const pass = checks.every(c => c[1]);
+  return { checks, pass };
+}
+function k2(bad, call){ return bad.map(k => k+'='+JSON.stringify(call.args[k])+' 不在候选').join('; '); }
+const pickEl = document.getElementById('callpick');
+CALLS.forEach((c,i) => pickEl.insertAdjacentHTML('beforeend', '<button class="btn small'+(i===0?' on':'')+'" data-i="'+i+'">'+c.label+'</button>'));
+function pickCall(i){
+  pickEl.querySelectorAll('.btn').forEach((b,j)=>b.classList.toggle('on', j===i));
+  const { checks, pass } = judge(CALLS[i]);
+  document.getElementById('checks').innerHTML = checks.map(([name,ok,why]) =>
+    '<div class="chk '+(ok?'pass':'fail')+'"><span class="ic">'+(ok?'✓':'✕')+'</span><span>'+name+'</span><span class="why">'+why+'</span></div>').join('');
+  const v = document.getElementById('astVerdict');
+  v.className = 'verdict ' + (pass?'pass':'fail');
+  v.textContent = pass ? '✓ PASS — 全部检查通过，判对' : '✕ FAIL — 有检查没过，判错';
+}
+pickEl.querySelectorAll('.btn').forEach(b => b.onclick = () => pickCall(+b.dataset.i));
+pickCall(0);
+
+// ③ 流水线
+const PIPE = [
+  ['1','加载题目 + 金标','<span class="f">loader.py</span>','读 BFCL 题目 JSONL + possible_answer 金标，按 id join 成一条 case','case = {id, 对话, 函数声明, ground_truth}'],
+  ['2','schema 转换 BFCL→OpenAI','<span class="f">schema.py</span>','类型名映射(dict→object…) + 带点函数名消毒(留反查表)','math.factorial → math_factorial  (name_map 记着原名)'],
+  ['3','组装请求发给模型','<span class="f">adapter.py · runner.py</span>','拼 messages + 默认引导 system，调 AgentDeploy.invoke —— 真 agent 代码','client.invoke(messages, tools, tool_choice)  ← 同一个 invoke'],
+  ['4','解析回来的 tool_calls','<span class="f">adapter.py</span>','取 tool_calls，arguments(JSON字符串) 解成 dict；坏的标 __unparseable__','[{name:"math_factorial", args:{n:5}}]'],
+  ['5','AST 判卷 vs 金标','<span class="f">ast_match.py</span>','name_map 还原函数名 → 调用数/必填/幻觉/候选表/类型 逐条查','(ok=True, reason="") 或 (False, "缺必填 height")'],
+  ['6','汇总落盘 JSONL','<span class="f">runner.py</span>','边跑边写：config + 每题全部调用 + summary；no_call 单列','accuracy = 通过数/总数，另报 no_call'],
+];
+const CALIB = ['✓','（验证工具）与官方逐题对拍','<span class="f">diff_official.py</span>','不在主判分链上：读我的结果 + 官方结果，逐题分四格归因，证明判分器可信','agree/我严/我松 + same_output 标签'];
+function buildPipe(){
+  const all = [...PIPE, CALIB];
+  document.getElementById('pipe').innerHTML = all.map((s,i)=>{
+    const last = i===all.length-1;
+    const isC = i===all.length-1;
+    return '<div class="pstep" id="ps'+i+'"'+(isC?' data-calib="1"':'')+'><div class="pcol"><div class="bul">'+s[0]+'</div>'+
+      (last?'':'<div class="conn"></div>')+'</div><div class="pbody"><h4>'+s[1]+' '+s[2]+'</h4><p>'+s[3]+'</p>'+
+      '<div class="data">'+s[4].replace(/</g,'&lt;')+'</div></div></div>';
+  }).join('');
+}
+let pipeTimer = null;
+function pipeReset(){
+  if(pipeTimer){clearInterval(pipeTimer);pipeTimer=null;}
+  document.querySelectorAll('.pstep').forEach(e=>e.classList.remove('lit','calib'));
+  document.getElementById('pipeStat').textContent='';
+  document.getElementById('pipeBtn').disabled=false;
+}
+function pipePlay(){
+  pipeReset(); document.getElementById('pipeBtn').disabled=true;
+  const steps = document.querySelectorAll('.pstep'); let i=0;
+  pipeTimer=setInterval(()=>{
+    const e=steps[i];
+    e.classList.add(e.dataset.calib?'calib':'lit');
+    document.getElementById('pipeStat').textContent = '第 '+(i+1)+'/'+steps.length+' 步';
+    i++;
+    if(i>=steps.length){clearInterval(pipeTimer);pipeTimer=null;document.getElementById('pipeBtn').disabled=false;
+      document.getElementById('pipeStat').innerHTML='✅ 一道题跑完并落盘（紫色第 7 步是可选的对拍校验，不在主判分链上）';}
+  }, 780);
+}
+buildPipe();
+
+// ⑤ 逐题揭示
+function revealDiff(){
+  document.getElementById('reveal4').classList.add('show');
+  const n = document.getElementById('revealNote');
+  n.style.display='block'; n.className='verdict fail';
+  n.innerHTML='15 题判得不一样！但"我太严 8 题"和"我太松 7 题"几乎抵消 → 总分只差 1 题(0.25pp)。总分骗过你，逐题不骗你。';
+  document.getElementById('revealBtn').disabled=true;
+}
+
+// ⑧ 官方榜
+const BFCL_LB = [['GLM-4.5',70.85],['Claude Opus 4.1',70.36],['Claude Sonnet 4',70.29],['GPT-5',59.22]];
+document.getElementById('bfclLb').innerHTML = BFCL_LB.map(([l,v]) =>
+  '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack"><div class="hbar" style="width:'+v+'%" title="'+l+': '+v+'%"><span class="hv">'+v+'%</span></div></div></div>').join('');
+
+// selftest
+window.__selftest = () => {
+  // AST toy: 正确判过, 各错误判错
+  const results = CALLS.map(c => judge(c).pass);
+  const toyOk = results[0]===true && results[1]===true && results[2]===false && results[3]===false && results[4]===false && results[5]===false;
+  // 具体错因
+  const missHeight = judge(CALLS[3]).checks.find(c=>c[0]==='必填参数齐全')[1]===false;
+  const halluc = judge(CALLS[4]).checks.find(c=>c[0]==='无幻觉参数')[1]===false;
+  const badval = judge(CALLS[5]).checks.find(c=>c[0]==='值落候选表')[1]===false;
+  pickCall(0); pipeReset(); pipePlay();
+  const pipeSteps = document.querySelectorAll('.pstep').length;
+  revealDiff();
+  const revealShown = document.getElementById('reveal4').classList.contains('show');
+  return { cats: CATS.length, toyOk, missHeight, halluc, badval, pipeSteps, revealShown, lbBars: document.querySelectorAll('#bfclLb .hbar').length };
+};
+</script>
+</body>
+</html>
