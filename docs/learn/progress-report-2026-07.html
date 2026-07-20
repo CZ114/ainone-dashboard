@@ -98,6 +98,7 @@
   .hrow .hl { width: 96px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
   .hrow .htrack { flex: 1; }
   .hrow .hbar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); position: relative; }
+  .hrow .hbar.human { background: #8a97a5; }
   .hrow .hv { position: absolute; right: -38px; top: -1px; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .statrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .stat { flex: 1; min-width: 110px; background: #f9fbfd; border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; }
@@ -253,23 +254,17 @@
     </div>
   </div>
   <div class="viz" style="margin-top:12px">
-    <h4>问诊轮数统计：诊断花了几个来回（框架下 A2 · 76 例）</h4>
-    <div class="vsub">每个病例医生问了几轮才交卷（上限 20 轮）· deepseek-v3.2 + GLM-4.6 合计</div>
-    <div class="statrow">
-      <div class="stat"><div class="v">12.1</div><div class="l">平均轮数</div></div>
-      <div class="stat"><div class="v">12</div><div class="l">中位数</div></div>
-      <div class="stat"><div class="v">4–20</div><div class="l">最少 / 最多</div></div>
-      <div class="stat"><div class="v">1 例</div><div class="l">撞到 20 轮上限</div></div>
+    <h4>问诊轮数：官方裸协议 vs 我的框架，谁能自己收敛</h4>
+    <div class="vsub">同批病例（case 80–106，27 例/模型）· 医生平均问几轮才结束（上限 20 轮，越低=越快收敛）</div>
+    <div class="legend"><span><span class="sw" style="background:var(--s2)"></span>A1 官方裸协议</span><span><span class="sw" style="background:var(--s1)"></span>A2 我的框架</span></span></div>
+    <div class="plot" id="plotT"></div>
+    <div class="xlab" id="xlabT"></div>
+    <div class="statrow" style="margin-top:14px">
+      <div class="stat"><div class="v">19.6 → 12.2</div><div class="l">平均轮数（官方 → 我的）</div></div>
+      <div class="stat"><div class="v">51 → 1</div><div class="l">耗满 20 轮还没结论（/54 例）</div></div>
+      <div class="stat"><div class="v">15% → 100%</div><div class="l">给出诊断（完成率，两模型均值）</div></div>
     </div>
-    <div style="font-size:11.5px;color:var(--muted);margin:12px 0 2px">轮数分布（横轴 = 用了几轮，纵轴 = 病例数）：</div>
-    <div class="hist" id="hist"></div>
-    <div class="xhist" id="xhist"></div>
-    <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--s1)"></span>答对（53 例）</span><span><span class="sw" style="background:var(--s2)"></span>答错（23 例）</span></div>
-    <div class="cmp2">
-      <div class="cbar"><span class="cl">答对平均</span><div class="ctrack"><div class="cfill" style="width:57%;background:var(--s1)"><span>11.4 轮</span></div></div></div>
-      <div class="cbar"><span class="cl">答错平均</span><div class="ctrack"><div class="cfill" style="width:68.5%;background:var(--s2)"><span>13.7 轮</span></div></div></div>
-    </div>
-    <div class="vnote"><b>有意思的发现</b>：<b>答对的更快、答错的反而磨蹭更多轮</b>（11.4 vs 13.7）——模型拿不准时会越问越多，但没问到点子上，多问的那几轮是"心虚打转"不是"深思熟虑"。而且 76 例里<b>只有 1 例真的问满 20 轮</b>，说明医生位基本都能在预算内自己收敛，不是被上限硬掐停。<span class="src">turns 字段 · deepseek_80_106 + glm_A2 系列</span></div>
+    <div class="vnote"><b>核心对比</b>：官方裸协议下，强模型基本<b>耗到 20 轮上限也没喊出诊断</b>——deepseek 24/27、GLM <b>27/27 全部撞顶</b>（那条 20 轮虚线就是天花板）；换上我的框架，同样的模型 <b>~12 轮就自己收敛并 100% 给出诊断</b>。轮数少不是"草率"，而是"高效收束"：官方那 19–20 轮是<b>在打转、烧完预算</b>，我的 12 轮是<b>问到就交卷</b>。这跟左上完成率图（官方 0–30% vs 我的 100%）是同一件事的两个侧面。<span class="src">turns 字段 · A1/A2 同批 case 80–106</span></div>
   </div>
   <div class="two">
     <div class="viz">
@@ -300,6 +295,22 @@
         <li><b>跨语言检索被验证</b>：中文问题"如何降血压"与英文答案相似度 0.92，无关内容仅 0.3-0.4。<span class="src">test_phase6_rag.ipynb</span></li>
         <li><b>下一步</b>：入库时空 meta 会报错的小 bug（notebook 刚暴露），待修。<span class="src">store.py 未提交</span></li>
       </ul>
+    </div>
+  </div>
+  <div style="font-size:12.5px;color:var(--muted);margin:18px 0 2px"><b>参照系 · 这两个基准的官方原始数据长什么样</b>（我上面的评测就是在这两个考场里做的）：</div>
+  <div class="two">
+    <div class="viz">
+      <h4>AgentClinic 论文成绩单（官方原文）</h4>
+      <div class="vsub">MedQA 子集诊断准确率 · arXiv 2405.07960 v5 · 越高越强</div>
+      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>AI 模型</span><span><span class="sw" style="background:#8a97a5"></span>人类医生（对照）</span></div>
+      <div id="acPaper"></div>
+      <div class="vnote"><b>人类医生也只有 54%</b>（±28.5，个体差异极大）——这考试对谁都难；GPT-4o(34.2%)反而低于 GPT-4(51.6%)，论文原文如此。同一批题从选择题改成问诊，最弱模型准确率掉到不足原来的十分之一。</div>
+    </div>
+    <div class="viz">
+      <h4>BFCL 官方榜单（工具调用总分）</h4>
+      <div class="vsub">Overall Accuracy · V3 · 2025-10 快照（klavis 整理自官方榜）· 越高越强</div>
+      <div id="bfclLb"></div>
+      <div class="vnote"><b>BFCL 是活榜</b>，随版本/时间大幅波动（Claude-3.5-Sonnet 在 2024-09 旧组成下曾报 90.2%，组成收紧后如今榜首约 78%）——所以这里标了快照日期。榜首 GLM-4.5 正是我评测里测过的 GLM 系列。我的 harness 对拍针对的是 <code>simple_python</code> 单类，不是这张总分榜。</div>
     </div>
   </div>
 </div>
@@ -364,20 +375,54 @@ document.getElementById('hbars').innerHTML = HB.map(([l,v]) =>
   '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack" style="position:relative;padding-right:40px">'+
   '<div class="hbar" style="width:'+(v*100)+'%"><span class="hv">'+v.toFixed(2)+'</span></div></div></div>').join('');
 
-// AgentClinic 轮数直方图 (真实 turns 字段: deepseek+GLM A2, 76例, [轮数,答对数,答错数])
-const TURNS = [[4,2,0],[5,0,0],[6,1,0],[7,4,2],[8,5,0],[9,4,0],[10,5,1],[11,8,2],[12,5,1],[13,4,4],[14,4,4],[15,5,2],[16,3,2],[17,1,3],[18,0,2],[19,1,0],[20,1,0]];
-const UNIT = 9; // 每例 9px
-const hist = document.getElementById('hist'), xhist = document.getElementById('xhist');
-TURNS.forEach(([t,c,w]) => {
-  const total = c + w;
-  let segs = '';
-  if (w > 0) segs += '<div class="seg w'+(w>0?' top':'')+'" style="height:'+(w*UNIT)+'px"></div>';
-  if (c > 0) segs += '<div class="seg c'+(w===0?' top':'')+'" style="height:'+(c*UNIT)+'px"></div>';
-  const lab = total > 0 ? '<span class="tot">'+total+'</span>' : '';
-  hist.insertAdjacentHTML('beforeend',
-    '<div class="hcol" title="'+t+' 轮：答对 '+c+' · 答错 '+w+'">'+lab+segs+'</div>');
-  xhist.insertAdjacentHTML('beforeend', '<span>'+t+'</span>');
-});
+// AgentClinic 轮数对比 (真实 turns 字段, 同批 case 80-106, 27例/模型)
+// 官方裸协议(A1) vs 我的框架(A2) 平均轮数
+const TURNROWS = [
+  { model: 'deepseek-v3.2', a1: 19.1, a2: 11.6, n1: '官方裸: 24/27 撞满20轮 · 完成率30%', n2: '我的框架: 1例撞顶 · 完成率100%' },
+  { model: 'GLM-4.6', a1: 20.0, a2: 12.7, n1: '官方裸: 27/27 全部撞满20轮 · 完成率0%', n2: '我的框架: 0例撞顶 · 完成率100%' },
+];
+const HT = 175, MAXT = 20;
+function tbar(val, color, tip){
+  const h = Math.max(val/MAXT*HT, 2);
+  return '<div class="bar1" style="height:'+h+'px;background:'+color+'" data-t="'+tip+'"><span class="vl">'+val.toFixed(1)+'</span></div>';
+}
+(function buildTurns(){
+  const plot = document.getElementById('plotT');
+  [0,5,10,15,20].forEach(v => {
+    const y = HT - v/MAXT*HT;
+    const cap = v===20;
+    plot.insertAdjacentHTML('beforeend',
+      '<div class="gline" style="top:'+y+'px'+(cap?';border-top:2px dashed var(--red);height:0':'')+'"></div>'+
+      '<div class="glab" style="top:'+y+'px'+(cap?';color:var(--red);font-weight:700':'')+'">'+v+(cap?' 上限':'')+'</div>');
+  });
+  TURNROWS.forEach(r => {
+    plot.insertAdjacentHTML('beforeend',
+      '<div class="grp">'+tbar(r.a1,'var(--s2)',r.model+' · '+r.n1)+tbar(r.a2,'var(--s1)',r.model+' · '+r.n2)+'</div>');
+    document.getElementById('xlabT').insertAdjacentHTML('beforeend','<span>'+r.model+'</span>');
+  });
+})();
+
+// ⑤补 官方基准上的模型表现 (论文/榜单原始数据)
+// AgentClinic 论文 (arXiv 2405.07960 v5, MedQA 子集准确率)
+const AC_PAPER = [
+  ['Claude-3.5', 62.1, false], ['OpenBioLLM-70B', 58.3, false], ['人类医生', 54, true],
+  ['GPT-4', 51.6, false], ['GPT-4o', 34.2, false], ['Llama-3 70B', 19, false], ['Llama-2 70B', 4.5, false],
+];
+// BFCL 官方榜单 (V3, klavis 2025-10 快照, overall accuracy)
+const BFCL_LB = [
+  ['GLM-4.5', 70.85], ['Claude Opus 4.1', 70.36], ['Claude Sonnet 4', 70.29], ['GPT-5', 59.22],
+];
+function hbars(containerId, rows, max, unit){
+  const el = document.getElementById(containerId);
+  el.innerHTML = rows.map(row => {
+    const [l, v, human] = row;
+    const w = (v / max * 100);
+    return '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack" style="position:relative;padding-right:44px">'+
+      '<div class="hbar'+(human?' human':'')+'" style="width:'+w+'%" title="'+l+': '+v+unit+'"><span class="hv">'+v+unit+'</span></div></div></div>';
+  }).join('');
+}
+hbars('acPaper', AC_PAPER, 100, '%');
+hbars('bfclLb', BFCL_LB, 100, '%');
 
 window.__selftest = () => ({
   bars: document.querySelectorAll('.bar1').length,
@@ -389,10 +434,13 @@ window.__selftest = () => ({
   legend: document.querySelectorAll('.legend .sw').length,
   calRows: document.querySelectorAll('table.cal tr').length,
   paperCited: document.body.innerText.includes('npj Digital Medicine'),
-  histCols: document.querySelectorAll('#hist .hcol').length,
-  histCorrectSegs: document.querySelectorAll('#hist .seg.c').length,
-  histWrongSegs: document.querySelectorAll('#hist .seg.w').length,
+  turnBars: document.querySelectorAll('#plotT .bar1').length,
+  turnCapLine: document.body.innerText.includes('20 上限'),
+  acPaperBars: document.querySelectorAll('#acPaper .hbar').length,
+  acHumanBar: document.querySelectorAll('#acPaper .hbar.human').length,
+  bfclLbBars: document.querySelectorAll('#bfclLb .hbar').length,
   noMinimax: !document.body.innerText.toLowerCase().includes('minimax'),
+  noCorrectWrongTurns: !document.body.innerText.includes('答对平均'),
 });
 </script>
 </body>
