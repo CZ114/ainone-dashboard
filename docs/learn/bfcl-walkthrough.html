@@ -141,6 +141,15 @@
   .qa .a { padding: 0 14px 12px; font-size: 13px; }
   .foot { margin-top: 30px; color: var(--soft); font-size: 12px; border-top: 1px dashed var(--border2); padding-top: 12px; }
   .xref { display: inline-block; font-size: 12px; color: var(--blue-deep); background: var(--blue-bg); border: 1px solid #cfe0f2; border-radius: 8px; padding: 4px 10px; margin-top: 6px; text-decoration: none; }
+  /* 术语小抄 */
+  .gloss { border-left: 4px solid var(--violet); background: var(--violet-bg); }
+  .gloss b { color: var(--violet); }
+  .glist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; margin-top: 10px; }
+  @media (max-width: 720px) { .glist { grid-template-columns: 1fr; } }
+  .gterm { font-size: 12.5px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+  .gterm b { color: var(--violet); font-family: var(--mono); font-size: 12px; }
+  .gterm .gp { color: var(--muted); }
+  .term { border-bottom: 1px dotted var(--violet); cursor: help; }
 </style>
 </head>
 <body>
@@ -151,7 +160,25 @@
 
 <div class="panel elevator">
   <span class="tag">30 秒电梯版</span><br>
-  BFCL（伯克利函数调用排行榜）不考模型"聊天答得好不好"，而考<b>"该不该调工具、调哪个、参数填得对不对"</b>——把一句话变成结构正确的函数调用。判分主力是 <b>AST 匹配</b>：不运行代码，只静态检查函数名/参数是否和"标准答案"对得上。我自己写了一套评测 harness，直接拿 agent 框架的真代码去跑。问题来了：<b>我自己写的判分器，凭什么可信？</b>答案是<b>和官方各跑一批、逐题对判罚</b>——发现总分几乎一样（91.00 vs 91.25）却藏着 15 题分歧，补齐 3 处判卷语义后，同输入<b>逐题 400/400 完全一致</b>。
+  BFCL（伯克利函数调用排行榜）不考模型"聊天答得好不好"，而考<b>"该不该调工具、调哪个、参数填得对不对"</b>——把一句话变成结构正确的<span class="term" title="模型不自己算答案，而是生成一条'调用某个工具'的指令">函数调用</span>。判分主力是 <b><span class="term" title="Abstract Syntax Tree 抽象语法树：把代码拆成结构，像把句子拆成主谓宾。这里指不运行、只对结构">AST 匹配</span></b>：不跑代码，只静态检查函数名/参数是否和"标准答案"对得上。我自己写了一套<span class="term" title="harness：一套自动'出题→喂给模型→给答案打分'的评测程序">评测器</span>，直接拿 agent 框架的真代码去跑。问题来了：<b>我自己写的判分器，凭什么可信？</b>答案是<b>和官方各跑一批、逐题对判罚</b>——总分几乎一样（91.00 vs 91.25）却藏着 15 题分歧，补齐 3 处判卷规则后，同输入<b>逐题 400/400 完全一致</b>。
+</div>
+
+<div class="panel gloss">
+  <span class="tag" style="background:var(--violet)">🔤 先扫一眼术语</span> <span class="hint">下面这些词看不懂就回这查（正文里带虚线的词，鼠标停上去也有提示）：</span>
+  <div class="glist">
+    <div class="gterm"><b>函数/工具调用</b> <span class="gp">模型不自己算，而是吐出"调用某工具(参数=…)"的指令，交给程序去执行</span></div>
+    <div class="gterm"><b>AST 抽象语法树</b> <span class="gp">把代码拆成结构树；"AST 匹配"= 不运行、只比结构对不对</span></div>
+    <div class="gterm"><b>harness 评测器</b> <span class="gp">一套"自动出题→喂模型→打分"的程序（这里就是我写的那套）</span></div>
+    <div class="gterm"><b>判分器 / matcher</b> <span class="gp">评测器里"对答案"的那一小段程序，本文的主角</span></div>
+    <div class="gterm"><b>金标 / ground truth</b> <span class="gp">标准答案。BFCL 的金标特别：每个参数给一张"可接受值清单"</span></div>
+    <div class="gterm"><b>schema</b> <span class="gp">函数的"说明书/表格格式"——它叫什么、要哪些参数、什么类型</span></div>
+    <div class="gterm"><b>tool_calls</b> <span class="gp">模型输出里那段"我要调用的工具+参数"，程序解析它来判分</span></div>
+    <div class="gterm"><b>FC 模式</b> <span class="gp">Function Calling 模式：让模型走"调工具"的正式通道，而不是用文字回答</span></div>
+    <div class="gterm"><b>provider 服务商</b> <span class="gp">提供模型接口的公司，如 OpenAI / DeepSeek / 智谱</span></div>
+    <div class="gterm"><b>temperature 温度</b> <span class="gp">模型的"随机度"旋钮，越低越稳定；评测压到 0.001 求可复现</span></div>
+    <div class="gterm"><b>token</b> <span class="gp">模型处理文字的最小单位（约等于一个词/字的碎片）</span></div>
+    <div class="gterm"><b>多轮 multi_turn</b> <span class="gp">来回好几轮、要记住前文、还会真去操作后台的对话</span></div>
+  </div>
 </div>
 
 <!-- ① BFCL 是什么 -->
@@ -230,7 +257,7 @@
 
 <!-- ⑤ 双 harness 对拍 -->
 <h2>⑤ 凭什么可信：和官方各跑一批、逐题对判罚</h2>
-<p class="sub">思路叫<b>"四钉法"</b>：把会影响结果的四个变量全钉死，剩下的分歧就 100% 归到"判分器"本身。四钉 = <b>同模型</b>（gpt-4o-mini，靠响应回显核实没被偷换）·<b>同数据</b>（400 题 simple_python，和官方 pip 包 SHA256 逐字节一致）·<b>同口径</b>（FC 模式、无 system、temp 0.001）·<b>各判各的</b>（判分器正是被测对象）。</p>
+<p class="sub">思路叫<b>"四钉法"</b>：把会影响结果的四个变量全钉死，剩下的分歧就 100% 归到"判分器"本身。四钉 = <b>同模型</b>（gpt-4o-mini，靠响应回显核实没被偷换）·<b>同数据</b>（400 题 simple_python，和官方 <span class="term" title="pip 包：Python 的现成软件包，一条命令就能装">pip 包</span>的题 <span class="term" title="SHA256：文件的数字指纹，两份文件指纹相同=一字不差">SHA256</span> 逐字节一致）·<b>同口径</b>（FC 模式、无 system、temp 0.001）·<b>各判各的</b>（判分器正是被测对象）。</p>
 <div class="panel">
   <div class="hint" style="text-align:center">先看总分——几乎一模一样，你可能觉得"那就对了"：</div>
   <div class="scorecmp">
@@ -288,7 +315,7 @@ numbers=[12,15,18,20,21,26,30]  声明 float 给 int → type_error:nested</div>
     <div class="mtstat"><div class="v">90%</div><div class="l">逐题判罚一致（27/30）</div></div>
     <div class="mtstat"><div class="v">0</div><div class="l">工程异常（补丁后）</div></div>
   </div>
-  <div class="analogy"><b>🐞 比方：</b>对拍还顺手抓到一个<b>官方的 bug</b>：官方执行器给测试实例起名时，消毒只处理了 <code>[-./:]</code> 却<b>漏了等号 <code>=</code></b>；我的模型名带 <code>:include_venice_system_prompt=false</code> 后缀，残留的 <code>=</code> 混进 <code>eval()</code> 直接语法错误——第一次官方侧 22/30 撞满步数强退、0/30 全废。<b>单跑任一侧都发现不了</b>（单跑官方会误以为"模型不行"），两侧一比立刻显形。打了一个字符的正则补丁（补上 <code>=</code>）就好了。</div>
+  <div class="analogy"><b>🐞 比方：</b>对拍还顺手抓到一个<b>官方的 bug</b>：官方执行器给测试实例起名时，消毒只处理了 <code>[-./:]</code> 却<b>漏了等号 <code>=</code></b>；我的模型名带 <code>:include_venice_system_prompt=false</code> 后缀，残留的 <code>=</code> 混进 <span class="term" title="eval()：把一段字符串当代码直接运行；字符串里混了非法字符就会语法报错"><code>eval()</code></span> 直接语法错误——第一次官方侧 22/30 撞满步数强退、0/30 全废。<b>单跑任一侧都发现不了</b>（单跑官方会误以为"模型不行"），两侧一比立刻显形。打了一个字符的正则补丁（补上 <code>=</code>）就好了。</div>
   <div class="tech"><b>🔧 诚实边界：</b>3 题分歧全是"我过·官挂"（如 base_3：官方模型打转 23 步没达目标状态，我方 9 步完成），0 题反向。但 <b>30 题样本太小，明确不据此宣称"我的更强"</b>——结论只到"行为统计等价、判罚 90% 一致、零工程故障"。校准范围目前也仅 <code>simple_python</code> 单轮 + 这 30 题多轮，parallel / 更大 multi_turn 还没对拍。</div>
 </div>
 

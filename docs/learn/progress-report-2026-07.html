@@ -140,8 +140,8 @@
 <p class="sub">五个调研 agent 分头核实 git 记录与代码后汇总。每条都有出处，数字都是真实读到的。</p>
 
 <div class="panel elevator">
-  <span class="tag">30 秒电梯版</span><br>
-  这一周干了四件大事：<b>① 界面分家</b>——病人/医生/开发者登录后看到三个完全不同的世界，病人有了温柔的"今天"主页；<b>② 工作流分割</b>——把"要真人插话"的问诊流程拆出一条纯 AI 版，医生一键发起、后台自己跑完；<b>③ 框架变硬核</b>——缓存优化让长对话省近一个量级的钱、接新模型只加一行代码、还正式打包成了 Python 库；<b>④ 拿出了真数据</b>——同一批病例：模型裸跑要么答不完（GLM 0 分），套上框架 100% 稳定收尾。
+  <span class="tag">30 秒电梯版 · 四件事</span><br>
+  <b>① 界面分家</b>（患者/医生/开发者三套界面）· <b>② 工作流分割</b>（拆出纯 AI 随访，医生一键后台跑完）· <b>③ 框架变硬核</b>（缓存优化、接模型只加一行、打包成 Python 库）· <b>④ 拿出真数据</b>（同批病例：裸跑答不完，套框架 100% 收尾）。
 </div>
 
 <div class="tiles">
@@ -149,7 +149,7 @@
   <div class="tile"><div class="v">3 种</div><div class="l">登录角色，界面各不相同</div></div>
   <div class="tile"><div class="v">5 个</div><div class="l">病人端全新组件</div></div>
   <div class="tile"><div class="v">9 家</div><div class="l">可切换的模型服务商</div></div>
-  <div class="tile"><div class="v">8 页</div><div class="l">新写的交互教学页</div></div>
+  <div class="tile"><div class="v">11 页</div><div class="l">新写的交互教学页</div></div>
 </div>
 
 <!-- ① UI -->
@@ -166,11 +166,11 @@
     <div class="fig-cap">同一后端，登录后按身份"变脸"；病人自动进入浅色医疗蓝主题（nord）</div>
   </div>
   <ul class="pts">
-    <li><b>正式登录页</b>：病人用编号+配对码（按钮特意做大方便点按），医护用账号密码；没登录时应用完全不加载。<span class="src">LoginGate.tsx · dd65e7f</span></li>
-    <li><b>病人"今天"主页</b>：8 秒一循环的呼吸引导圆环（圆心是真实心率）、通俗状态条、智能手套连接卡（零技术黑话）、信件式健康日记。<span class="src">TodayPage 等 5 组件 · 31e6a26</span></li>
-    <li><b>照护丝带</b>：医生发起的分析在病人页变成温柔的进度句子（"正在了解你最近的情况…"），每 4 秒刷新。<span class="src">CareRibbon.tsx · 9ab4c54</span></li>
-    <li><b>医生病人档案页</b>：建档、大字号一次性配对码（明文只显示一次，后台只存哈希）、一键发起分析。<span class="src">PatientsPage.tsx · 8da3d34</span></li>
-    <li><b>可视化工作流画布</b>：拖方块连箭头编排 AI 流程，画布和 JSON 双向同步（单文件 1035 行）。<span class="src">WorkflowCanvas.tsx · 78f32e4</span></li>
+    <li><b>正式登录页</b>：病人编号+配对码，医护账号密码。<span class="src">LoginGate.tsx · dd65e7f</span></li>
+    <li><b>病人"今天"主页</b>：呼吸圆环、状态条、手套连接卡、健康日记。<span class="src">TodayPage 等 5 组件 · 31e6a26</span></li>
+    <li><b>照护丝带</b>：医生发起的分析在病人页变成温柔的进度句子。<span class="src">CareRibbon.tsx · 9ab4c54</span></li>
+    <li><b>医生病人档案页</b>：建档、一次性配对码、一键发起分析。<span class="src">PatientsPage.tsx · 8da3d34</span></li>
+    <li><b>可视化工作流画布</b>：拖方块连箭头编排 AI 流程，画布↔JSON 双向同步。<span class="src">WorkflowCanvas.tsx · 78f32e4</span></li>
   </ul>
 </div>
 
@@ -190,12 +190,12 @@
       <span class="stp ai">核验 ↺×3</span><span class="a2">→</span>
       <span class="stp okk">✓ 后台一口气跑完</span>
     </div>
-    <div class="fig-cap">红色那步会停下来等人，医生没法"点完就走"——去掉它，才有一键后台分析和完整的照护丝带</div>
+    <div class="fig-cap">红色那步会停下来等人——去掉它，才有医生一键后台分析</div>
   </div>
   <ul class="pts">
-    <li><b>labels 三套解说词</b>：框架引擎给每步加了可选的小标签（21 行改动），同一步骤患者看"正在了解你的情况…"、医生看"初诊评估"、开发者看 <code>triage</code>——数据只存一份，界面按身份投影。<span class="src">workflow.py · 194bc16</span></li>
-    <li><b>种子机制</b>：工作流定义文件不进 git，换电脑会消失——所以把 followup_review 写死在代码里，服务启动时缺了自动补、有了绝不覆盖。<span class="src">workflows_admin.py ensure_seed</span></li>
-    <li><b>归属隔离</b>：每次分析记下"为哪位患者跑的"，患者只能查到自己的照护丝带，医护才能指定查人。<span class="src">run_history.py care_ribbon_for · 9ab4c54</span></li>
+    <li><b>labels 三套解说词</b>：同一步骤，患者/医生/开发者看三种文案（数据一份，界面按身份投影）。<span class="src">workflow.py · 194bc16</span></li>
+    <li><b>种子机制</b>：工作流定义不进 git，启动时缺了自动补。<span class="src">workflows_admin.py ensure_seed</span></li>
+    <li><b>归属隔离</b>：患者只能查自己的照护丝带，医护才能指定查人。<span class="src">run_history.py · 9ab4c54</span></li>
   </ul>
   <div class="lens3">
     <div class="lz">🌿 <b>患者镜头</b>"医生会亲自确认一遍结果…"</div>
@@ -208,9 +208,9 @@
 <h2>③ agent 框架：更省、更开放、成正式软件包</h2>
 <div class="panel">
   <ul class="pts">
-    <li><b>缓存优化（省钱提速）</b>：每轮变化的"临时小抄"从对话开头挪到末尾——前面的历史逐字不变、缓存一直命中，长对话下成本和响应速度差近一个量级。改动仅 +17/−5 行。<span class="src">core/agent.py · 1bae6c3</span></li>
-    <li><b>接入新模型服务商只加 1 行</b>：模型接入层是张"服务商登记表"，加一家就是加一行，现在 9 家可随意切换。<span class="src">core/llm.py · bb8de55</span></li>
-    <li><b>正式打包</b>：框架有了名字 <code>music-agent 0.1.0</code>，可以 pip 安装进任何项目——从"我项目里的一堆代码"变成"可复用软件包"。<span class="src">pyproject.toml · 7118b21</span></li>
+    <li><b>缓存优化（省钱提速）</b>：注入尾置保住缓存前缀，长对话成本差近一个量级。<span class="src">core/agent.py · 1bae6c3</span></li>
+    <li><b>接入新模型服务商只加 1 行</b>：现 9 家可切换。<span class="src">core/llm.py · bb8de55</span></li>
+    <li><b>正式打包</b>：<code>music-agent 0.1.0</code>，可 pip 安装。<span class="src">pyproject.toml · 7118b21</span></li>
   </ul>
   <div style="font-size:12px;color:var(--muted);margin-top:10px">框架能力全景（10 项，全部在代码中核实）：</div>
   <div class="caps">
@@ -233,7 +233,7 @@
       <span class="stp">💬 限定轮数内下诊断</span><span class="a2">→</span>
       <span class="stp okk">⚖️ 裁判比对标准答案</span>
     </div>
-    <div class="fig-cap"><b>测试是什么</b>：AgentClinic 模拟问诊基准（Schmidgall 等，arXiv 2024 · <i>npj Digital Medicine</i> 2026 正式见刊）——AI 医生问诊 AI 扮演的病人、可以开检查单，必须在限定轮数内给出诊断，裁判按标准答案判对错。病人/检验/裁判三个角色<b>逐字镜像官方实现</b>（提示词、temperature 都照搬），只把"医生位"换成被测对象：<b>A1 = 官方裸文本协议原版复刻</b>（科学对照组）vs <b>A2 = 套上自研框架</b>（原生工具 + 消息管理 + 结构化循环）。</div>
+    <div class="fig-cap"><b>AgentClinic</b>（Schmidgall 等，arXiv 2024·npj Digital Medicine 2026）：AI 医生问诊 AI 病人、开检查、限轮数下诊断、裁判对答案。只把"医生位"换成被测对象——<b>A1 官方裸协议</b>（对照）vs <b>A2 我的框架</b>。<a href="./agentclinic-walkthrough.html" style="color:var(--blue-deep)">↗ 详解页</a></div>
   </div>
   <div class="two" style="grid-template-columns:1fr 1fr">
     <div class="viz">
@@ -242,7 +242,7 @@
       <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>套上自研框架</span><span><span class="sw" style="background:var(--s2)"></span>官方裸协议直跑</span></div>
       <div class="plot" id="plotC"></div>
       <div class="xlab" id="xlabC"></div>
-      <div class="vnote">强推理模型在裸文本协议下"越问越偏、忘了下结论"——GLM 27 例<b>全部跑飞</b>、deepseek 七成没收尾；套上框架后三个模型全部 <b>100% 稳定完成</b>。诚实边界：0% 有"模型-协议不匹配"成分，属病态弱基线，0→100 不能当普适增益；但"框架让强模型可靠完成"是硬实证。</div>
+      <div class="vnote">裸协议下 GLM <b>27 例全部跑飞</b>、deepseek 七成没收尾；套框架全部 <b>100% 完成</b>。（0% 是病态弱基线，别当普适增益。）</div>
     </div>
     <div class="viz">
       <h4>准确率：框架下换强模型才提分</h4>
@@ -250,7 +250,7 @@
       <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>套上自研框架</span><span><span class="sw" style="background:var(--s2)"></span>官方裸协议直跑</span></div>
       <div class="plot" id="plot"></div>
       <div class="xlab" id="xlab"></div>
-      <div class="vnote">准确率由<b>模型强弱 + 病例难度</b>决定（常规批 ~78%、罕见病难批 ~54%），两个强模型框架下趋同于 ~70%——框架管"可靠完成"，不管"诊断上限"。llama 弱但不话痨，裸跑也能收尾，框架对它无准确率增益（裸跑 62.5% 为 80 题基线口径）。</div>
+      <div class="vnote">准确率由<b>模型强弱 + 病例难度</b>决定，两强模型框架下 ~70%——框架管"可靠完成"，不管"诊断上限"。</div>
     </div>
   </div>
   <div class="viz" style="margin-top:12px">
@@ -264,7 +264,7 @@
       <div class="stat"><div class="v">51 → 1</div><div class="l">耗满 20 轮还没结论（/54 例）</div></div>
       <div class="stat"><div class="v">15% → 100%</div><div class="l">给出诊断（完成率，两模型均值）</div></div>
     </div>
-    <div class="vnote"><b>核心对比</b>：官方裸协议下，强模型基本<b>耗到 20 轮上限也没喊出诊断</b>——deepseek 24/27、GLM <b>27/27 全部撞顶</b>（那条 20 轮虚线就是天花板）；换上我的框架，同样的模型 <b>~12 轮就自己收敛并 100% 给出诊断</b>。轮数少不是"草率"，而是"高效收束"：官方那 19–20 轮是<b>在打转、烧完预算</b>，我的 12 轮是<b>问到就交卷</b>。这跟左上完成率图（官方 0–30% vs 我的 100%）是同一件事的两个侧面。<span class="src">turns 字段 · A1/A2 同批 case 80–106</span></div>
+    <div class="vnote">官方裸协议下强模型<b>耗满 20 轮也没下诊断</b>（GLM 27/27 全撞顶）；我的框架 <b>~12 轮就收敛、100% 给诊断</b>。<span class="src">turns 字段 · A1/A2 同批 case 80–106</span></div>
   </div>
   <div class="two">
     <div class="viz">
@@ -277,7 +277,7 @@
         <tr><td>换模型 GLM-4.7-flash · 100 题</td><td>86.0%</td><td>87.0%</td><td class="bt">1 题为模型采样噪声</td></tr>
         <tr><td>多轮 30 题 · 我的 Agent 循环 vs 官方循环<br><span class="bt">（同用官方判卷）</span></td><td>36.67%</td><td>26.67%</td><td class="bt">判罚一致率 90% · 工程异常 0</td></tr>
       </table>
-      <div class="vnote">先证"量尺可信"再谈跑分：修复自建判卷器 3 处语义（调用数/字典金标/数组内型）后，与官方工具<b>同输入逐题 400/400 一致</b>——此后测出的任何差异都归被测对象，不归量尺。多轮题里自研循环还比官方循环高 10pp、零工程故障。</div>
+      <div class="vnote">修 3 处判卷语义后，与官方<b>逐题 400/400 一致</b>——量尺可信，差异才归被测对象。<a href="./bfcl-walkthrough.html" style="color:var(--blue-deep)">↗ 详解页</a></div>
     </div>
     <div>
       <div class="viz">
@@ -292,25 +292,25 @@
         <div id="hbars"></div>
       </div>
       <ul class="pts" style="margin-top:8px">
-        <li><b>跨语言检索被验证</b>：中文问题"如何降血压"与英文答案相似度 0.92，无关内容仅 0.3-0.4。<span class="src">test_phase6_rag.ipynb</span></li>
-        <li><b>下一步</b>：入库时空 meta 会报错的小 bug（notebook 刚暴露），待修。<span class="src">store.py 未提交</span></li>
+        <li><b>跨语言检索</b>：中文问 vs 英文答相似度 0.92，无关内容仅 0.3–0.4。<span class="src">test_phase6_rag.ipynb</span></li>
+        <li><b>下一步</b>：入库空 meta 报错的小 bug，待修。<span class="src">store.py 未提交</span></li>
       </ul>
     </div>
   </div>
-  <div style="font-size:12.5px;color:var(--muted);margin:18px 0 2px"><b>参照系 · 这两个基准的官方原始数据长什么样</b>（我上面的评测就是在这两个考场里做的）：</div>
+  <div style="font-size:12.5px;color:var(--muted);margin:18px 0 2px"><b>参照系 · 两个基准的官方原始数据</b>：</div>
   <div class="two">
     <div class="viz">
       <h4>AgentClinic 论文成绩单（官方原文）</h4>
       <div class="vsub">MedQA 子集诊断准确率 · arXiv 2405.07960 v5 · 越高越强</div>
       <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>AI 模型</span><span><span class="sw" style="background:#8a97a5"></span>人类医生（对照）</span></div>
       <div id="acPaper"></div>
-      <div class="vnote"><b>人类医生也只有 54%</b>（±28.5，个体差异极大）——这考试对谁都难；GPT-4o(34.2%)反而低于 GPT-4(51.6%)，论文原文如此。同一批题从选择题改成问诊，最弱模型准确率掉到不足原来的十分之一。</div>
+      <div class="vnote"><b>人类医生也只有 54%</b>（±28.5）——这考试对谁都难。选择题改问诊后，最弱模型掉到不足原来的十分之一。</div>
     </div>
     <div class="viz">
       <h4>BFCL 官方榜单（工具调用总分）</h4>
       <div class="vsub">Overall Accuracy · V3 · 2025-10 快照（klavis 整理自官方榜）· 越高越强</div>
       <div id="bfclLb"></div>
-      <div class="vnote"><b>BFCL 是活榜</b>，随版本/时间大幅波动（Claude-3.5-Sonnet 在 2024-09 旧组成下曾报 90.2%，组成收紧后如今榜首约 78%）——所以这里标了快照日期。榜首 GLM-4.5 正是我评测里测过的 GLM 系列。我的 harness 对拍针对的是 <code>simple_python</code> 单类，不是这张总分榜。</div>
+      <div class="vnote"><b>BFCL 是活榜</b>，随版本/时间大幅波动，故标快照日期。我的对拍只针对 <code>simple_python</code> 单类，不是这张总分榜。</div>
     </div>
   </div>
 </div>
@@ -319,9 +319,9 @@
 <h2>⑤ 顺手做掉的其他事</h2>
 <div class="panel">
   <ul class="pts">
-    <li><b>后台真门禁</b>：HMAC 签名"电子工牌"（12 小时过期）+ 默认拒绝的权限表 + 三个后端只监听本机；患者数据按归属隔离，只能看自己的。<span class="src">authz.py / authdb.py · 9c38835 等</span></li>
-    <li><b>8 页交互教学页</b>：工作流引擎、agent 接入、JSON 消息流、KV Cache、embedding、三视角分级、引擎内部……全是本窗口新写，当面试复习材料在维护。<span class="src">docs/learn/</span></li>
-    <li><b>语音通道 + think 剥离</b>：新开 /voice 端点、网关改纯透传（删 219 行旧代码）；推理模型的思考文本不再串进用户回复。<span class="src">5e59e44 / 473359e</span></li>
+    <li><b>后台真门禁</b>：HMAC 签名工牌 + 权限表 + 只监听本机 + 数据按归属隔离。<span class="src">authz.py / authdb.py · 9c38835 等</span></li>
+    <li><b>11 页交互教学页</b>：工作流引擎、KV Cache、embedding、三视角分级、AgentClinic、BFCL……<span class="src">docs/learn/</span></li>
+    <li><b>语音通道 + think 剥离</b>：新开 /voice 端点、网关改纯透传。<span class="src">5e59e44 / 473359e</span></li>
   </ul>
 </div>
 
