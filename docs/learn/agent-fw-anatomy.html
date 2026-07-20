@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 框架本体 ④ 解剖 — 27 个文件怎么咬合</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.6; padding: 26px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 23px; margin-bottom: 2px; }
+  h2 { font-size: 17px; margin: 30px 0 6px; padding-left: 10px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .nav a { font-size: 12.5px; text-decoration: none; color: var(--blue-deep); background: var(--card); border: 1.5px solid var(--border2); border-radius: 20px; padding: 5px 14px; }
+  .nav a.here { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .nav a:hover:not(.here) { border-color: var(--blue); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .tile .v { font-size: 19px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 10.5px; color: var(--muted); }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-top: 10px; }
+
+  /* 城市地图 */
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .btn { font: inherit; font-size: 12.5px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 6px 13px; transition: all .15s; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.on { background: var(--amber); border-color: var(--amber); color: #fff; font-weight: 700; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .city { position: relative; min-height: 470px; background: #f9fbfd; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .city svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .district { position: absolute; border: 1.5px dashed var(--border2); border-radius: 12px; padding: 24px 8px 8px; }
+  .district .dn { position: absolute; top: 5px; left: 10px; font-size: 10px; letter-spacing: .06em; color: var(--soft); font-family: var(--mono); }
+  .node { position: absolute; font-family: var(--mono); font-size: 10.5px; border: 1.5px solid var(--border2); background: var(--card); border-radius: 8px; padding: 3px 8px; cursor: pointer; transition: all .18s; z-index: 2; white-space: nowrap; }
+  .node small { display: block; font-size: 8.5px; color: var(--soft); font-family: system-ui; }
+  .node:hover { border-color: var(--blue); transform: translateY(-1px); }
+  .node.sel { border-color: var(--blue); background: var(--blue-bg); font-weight: 700; box-shadow: 0 0 0 3px var(--blue-bg); }
+  .node.dim { opacity: .22; }
+  .node.brick { border-color: var(--amber); background: var(--amber-bg); box-shadow: 0 0 0 3px var(--amber-bg); }
+  .edge { stroke: #c3d2e2; stroke-width: 1.3; fill: none; marker-end: url(#arr); transition: all .18s; }
+  .edge.hot-in { stroke: var(--green); stroke-width: 2.2; }
+  .edge.hot-out { stroke: var(--blue); stroke-width: 2.2; }
+  .edge.faded { opacity: .12; }
+  .edge.duck { stroke: var(--violet); stroke-dasharray: 5 4; stroke-width: 1.8; }
+  .legend { display: flex; gap: 14px; font-size: 11px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .legend .sw { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 4px; vertical-align: 3px; }
+  .infocard { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px 14px; margin-top: 8px; font-size: 12.5px; min-height: 46px; }
+  .infocard b { color: var(--blue-deep); }
+  .infocard .m { font-family: var(--mono); font-size: 11px; color: var(--soft); }
+
+  /* 行数条形 */
+  .fr { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .fr .fn { width: 250px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-align: right; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fr .ft { flex: 1; }
+  .fr .fb { height: 12px; border-radius: 0 3px 3px 0; position: relative; transition: opacity .15s; }
+  .fr .fb:hover { opacity: .8; }
+  .fr .fv { position: absolute; right: -40px; top: -2px; font-size: 9.5px; color: var(--soft); font-family: var(--mono); }
+  .pk-core { background: #2a78d6; } .pk-tools { background: #7a5ba6; } .pk-ret { background: #1baf7a; } .pk-orch { background: #b9822f; }
+  .pkleg { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .pkleg .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 9px 13px; margin-top: 10px; font-size: 12.5px; }
+  .analogy b { color: var(--amber); }
+  .foot { margin-top: 24px; color: var(--soft); font-size: 11px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🫀 agent 框架本体 · ④ 解剖</h1>
+<p class="sub">不讲应用，只看 <code>project/agent/</code> 这个包自己：27 个文件怎么咬合。依赖图的每条边都来自真实 <code>import</code> 语句。<b>点任意模块</b>看它连着谁。</p>
+<div class="nav">
+  <a href="./agent-arch-map.html">① 全景地图</a>
+  <a href="./agent-arch-loop.html">② send 旅程</a>
+  <a href="./agent-arch-plugins.html">③ 能力开关</a>
+  <a class="here" href="#">④ 本体解剖 🫀</a>
+  <a href="./agent-fw-design.html">⑤ 设计骨架 🦴</a>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="v">27 / 4607</div><div class="l">文件数 / 总行数（不含评测）</div></div>
+  <div class="tile"><div class="v">4 个</div><div class="l">子包 core·tools·retrieval·orchestration</div></div>
+  <div class="tile"><div class="v">9 个</div><div class="l">零依赖模块（可单独拿走）</div></div>
+  <div class="tile"><div class="v">0 条</div><div class="l">编排层 → core 的 import（鸭子类型）</div></div>
+</div>
+
+<h2>依赖城市图：谁 import 谁</h2>
+<div class="panel">
+  <div class="ctl">
+    <button class="btn" id="bBrick" onclick="toggleBricks()">🧱 点亮零依赖砖</button>
+    <button class="btn" onclick="resetCity()">↺ 复位</button>
+    <span class="hint" id="cityHint">点模块 → 🔵蓝=它 import 谁（用料）· 🟢绿=谁 import 它（被谁用）</span>
+  </div>
+  <div class="city" id="city">
+    <svg id="edges"><defs><marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#c3d2e2"/></marker></defs></svg>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#c3d2e2"></span>import 指向（A→B = A 用了 B）</span>
+    <span><span class="sw" style="background:var(--violet)"></span>虚线 = 鸭子类型（不 import，只约定 .send()）</span>
+    <span><span class="sw" style="background:var(--amber);height:10px;width:10px;border-radius:3px"></span>零依赖砖</span>
+  </div>
+  <div class="infocard" id="info">👆 点上面任意模块。先试试 <b>workflow</b>——编排引擎对 core <b>一条 import 都没有</b>。</div>
+  <div class="analogy"><b>🏙 比方：</b>这是个小城市：<b>agent.py 是市中心枢纽</b>（唯一的"总装车间"，把五路零件拧在一起）；<b>registry 是工具城的车站</b>（executor/MCP/skills/web 全部只接它）；<b>workflow 是空中的调度塔</b>——跟地面没有一条路相连，只靠无线电（约定 <code>.send()</code>）指挥。</div>
+</div>
+
+<h2>体重表：每个文件多重（真实行数）</h2>
+<div class="panel">
+  <div class="pkleg"><span><span class="sw pk-core"></span>core</span><span><span class="sw pk-tools"></span>tools</span><span><span class="sw pk-ret"></span>retrieval</span><span><span class="sw pk-orch"></span>orchestration</span></div>
+  <div id="bars"></div>
+</div>
+
+<div class="foot">数据一键再生：对 <code>project/agent/</code>（排除 evaluation/__pycache__）统计行数 + 正则抓 <code>from … import</code>。依赖边 17 条 + 1 条鸭子虚线，与源码逐条对应。</div>
+
+</div>
+<script>
+// 真实数据 (2026-07-20 提取)
+const NODES = {
+  llm:      { x: 4,  y: 76, t: 'llm.py', s: '253 · LLM 客户端', d: 'core', brick: true,  duty: '统一 LLM 客户端 AgentDeploy。9 家服务商表驱动。零内部依赖——单拿这个文件就能调模型。' },
+  audit:    { x: 4,  y: 84, t: 'audit.py', s: '242 · 审计', d: 'core', brick: true, duty: 'AuditLog 三模式落盘 + resume 数据源。零内部依赖。' },
+  cmp:      { x: 4,  y: 92, t: 'compaction.py', s: '384 · 压缩', d: 'core', brick: true, duty: 'TokenBudgetCompactor 5 阶段压缩流水线。零内部依赖。' },
+  inj:      { x: 22, y: 60, t: 'injection.py', s: '54 · 格式底座', d: 'ctx', brick: true, duty: '最小公共底座：<system-reminder> 包装与格式化。context 和 memory 都踩在它上面。' },
+  prov:     { x: 22, y: 74, t: 'providers.py', s: '88 · 三工厂', d: 'ctx', duty: 'state/callable/timestamped 三个 provider 工厂。' },
+  mgr:      { x: 22, y: 88, t: 'manager.py', s: '294 · 注入管理', d: 'ctx', duty: 'ContextManager：providers + state + persistent_reminders，compose() 组装注入。' },
+  mstore:   { x: 40, y: 60, t: 'memory/store.py', s: '235 · 记忆仓', d: 'mem', brick: true, duty: 'FileMemoryStore：一条记忆一个 .md，原子写。零内部依赖。' },
+  mprov:    { x: 40, y: 74, t: 'memory/provider.py', s: '97 · 记忆注入', d: 'mem', duty: 'Tier-1 类目摘要注入。' },
+  mtools:   { x: 40, y: 88, t: 'memory/tools.py', s: '216 · 记忆工具', d: 'mem', duty: 'remember/list/recall/forget 四工厂。' },
+  agent:    { x: 40, y: 26, t: '⭐ agent.py', s: '468 · 总装车间', d: 'core2', duty: '全框架唯一的"总装车间"：把 context/memory/retrieval/executor 五路零件拧成 Agent 主循环。最重的文件（468 行）。' },
+  reg:      { x: 66, y: 55, t: 'registry.py', s: '276 · 注册表', d: 'tools', brick: true, duty: '工具城的车站：schema 自动推导 + parallel/审批元数据。零内部依赖。' },
+  exe:      { x: 82, y: 40, t: 'executor.py', s: '120 · 执行器', d: 'tools', duty: 'dispatch_all：串行先跑 + 并行分组 + 审批。' },
+  mcp:      { x: 82, y: 55, t: 'mcp.py', s: '334 · MCP', d: 'tools', duty: '外部工具服务器挂载（stdio/HTTP/SSE），持久连接池。' },
+  skl:      { x: 82, y: 70, t: 'skills.py', s: '255 · 技能', d: 'tools', duty: 'FileSkillStore + 4 技能工具（run_script 4 护栏）。' },
+  web:      { x: 82, y: 85, t: 'web.py', s: '87 · 网络', d: 'tools', duty: 'web_search（Tavily）+ web_fetch。' },
+  emb:      { x: 60, y: 20, t: 'embed.py', s: '119 · 向量化', d: 'ret', brick: true, duty: 'BGE-M3 / Dummy 两实现，Embedder ABC。零内部依赖。' },
+  rstore:   { x: 60, y: 34, t: 'ret/store.py', s: '105 · 向量库', d: 'ret', brick: true, duty: 'ChromaStore（余弦），VectorStore ABC。零内部依赖。' },
+  ing:      { x: 78, y: 20, t: 'ingest.py', s: '291 · 入库', d: 'ret', duty: 'PDF/MD → markdown 切块 → 向量 → 库。' },
+  rtools:   { x: 78, y: 8, t: 'ret/tools.py', s: '86 · retrieve', d: 'ret', duty: 'make_retrieve 工厂 → (schema, handler)。' },
+  wf:       { x: 8, y: 10, t: '🛰 workflow.py', s: '368 · 编排引擎', d: 'orch', brick: true, duty: '六组件编排引擎。对 core 一条 import 都没有——只约定节点有 .send()（鸭子类型），FakeAgent 也能跑。' },
+};
+// 真实 import 边: [from, to]  (A→B = A import 了 B)
+const EDGES = [
+  ['agent','mgr'],['agent','mprov'],['agent','mtools'],['agent','rtools'],['agent','exe'],
+  ['mgr','inj'],['mgr','prov'],['prov','inj'],
+  ['mprov','inj'],['mtools','inj'],
+  ['ing','emb'],['ing','rstore'],['rtools','emb'],['rtools','rstore'],
+  ['exe','reg'],['mcp','reg'],['skl','reg'],['web','reg'],
+];
+const DUCK = ['wf','agent'];
+
+const city = document.getElementById('city');
+const svg = document.getElementById('edges');
+// 行政区
+const DISTRICTS = [
+  { n:'orchestration/ 调度塔', x:2, y:2, w:20, h:22 },
+  { n:'retrieval/ 检索区', x:55, y:2, w:43, h:42 },
+  { n:'core/ 基石区', x:2, y:52, w:16, h:46 },
+  { n:'core/context/', x:20, y:52, w:16, h:46 },
+  { n:'core/memory/', x:38, y:52, w:16, h:46 },
+  { n:'tools/ 工具城', x:62, y:48, w:36, h:50 },
+];
+DISTRICTS.forEach(d => {
+  city.insertAdjacentHTML('beforeend',
+    '<div class="district" style="left:'+d.x+'%;top:'+d.y+'%;width:'+d.w+'%;height:'+d.h+'%"><span class="dn">'+d.n+'</span></div>');
+});
+Object.entries(NODES).forEach(([k, n]) => {
+  city.insertAdjacentHTML('beforeend',
+    '<div class="node" id="n_'+k+'" style="left:'+n.x+'%;top:'+n.y+'%">'+n.t+'<small>'+n.s+' 行</small></div>');
+});
+function center(k){
+  const el = document.getElementById('n_'+k), c = city.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return [r.left - c.left + r.width/2, r.top - c.top + r.height/2];
+}
+let edgeEls = [];
+function drawEdges(){
+  edgeEls.forEach(e=>e.remove()); edgeEls = [];
+  EDGES.forEach(([a,b],i) => {
+    const [x1,y1] = center(a), [x2,y2] = center(b);
+    const mx = (x1+x2)/2, my = (y1+y2)/2 - 18;
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', 'M'+x1+','+y1+' Q'+mx+','+my+' '+x2+','+y2);
+    p.setAttribute('class','edge'); p.dataset.a = a; p.dataset.b = b;
+    svg.appendChild(p); edgeEls.push(p);
+  });
+  const [x1,y1] = center(DUCK[0]), [x2,y2] = center(DUCK[1]);
+  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d','M'+x1+','+y1+' Q'+((x1+x2)/2)+','+(Math.min(y1,y2)-30)+' '+x2+','+y2);
+  p.setAttribute('class','edge duck'); p.dataset.a='wf'; p.dataset.b='agent';
+  svg.appendChild(p); edgeEls.push(p);
+}
+let sel = null, bricksOn = false;
+function select(k){
+  sel = k;
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('sel','dim'));
+  edgeEls.forEach(e => e.classList.remove('hot-in','hot-out','faded'));
+  if (!k) { document.getElementById('info').innerHTML = '👆 点上面任意模块。'; return; }
+  const related = new Set([k]);
+  edgeEls.forEach(e => {
+    if (e.dataset.a === k) { e.classList.add('hot-out'); related.add(e.dataset.b); }
+    else if (e.dataset.b === k) { e.classList.add('hot-in'); related.add(e.dataset.a); }
+    else e.classList.add('faded');
+  });
+  Object.keys(NODES).forEach(kk => {
+    const el = document.getElementById('n_'+kk);
+    if (kk === k) el.classList.add('sel');
+    else if (!related.has(kk)) el.classList.add('dim');
+  });
+  const uses = EDGES.filter(e=>e[0]===k).map(e=>NODES[e[1]].t);
+  const used = EDGES.filter(e=>e[1]===k).map(e=>NODES[e[0]].t);
+  const n = NODES[k];
+  document.getElementById('info').innerHTML = '<b>'+n.t+'</b> <span class="m">'+n.s+' 行'+(n.brick?' · 🧱 零依赖砖':'')+'</span><br>'+n.duty+
+    '<br><span class="m">🔵 它用了: '+(uses.length?uses.join(', '):(k==='wf'?'（无 import — 只约定 .send()）':'无（零依赖）'))+' · 🟢 谁用它: '+(used.length?used.join(', '):'—')+'</span>';
+}
+document.querySelectorAll('.node').forEach(el => el.addEventListener('click', e => { e.stopPropagation(); select(el.id.slice(2)); }));
+function toggleBricks(){
+  bricksOn = !bricksOn;
+  document.getElementById('bBrick').classList.toggle('on', bricksOn);
+  Object.entries(NODES).forEach(([k,n]) => document.getElementById('n_'+k).classList.toggle('brick', bricksOn && !!n.brick));
+  document.getElementById('cityHint').textContent = bricksOn
+    ? '🧱 亮起的 9 个模块没有任何包内 import——每块都能单独拿去别的项目用。'
+    : '点模块 → 🔵蓝=它 import 谁 · 🟢绿=谁 import 它';
+}
+function resetCity(){ select(null); if(bricksOn) toggleBricks(); }
+drawEdges();
+window.addEventListener('resize', () => { drawEdges(); if(sel) select(sel); });
+
+// 体重表 (真实行数)
+const FILES = [
+  ['core/agent.py',468,'core'],['core/compaction.py',384,'core'],['orchestration/workflow.py',368,'orch'],
+  ['tools/mcp.py',334,'tools'],['core/context/manager.py',294,'core'],['retrieval/ingest.py',291,'ret'],
+  ['tools/registry.py',276,'tools'],['tools/skills.py',255,'tools'],['core/llm.py',253,'core'],
+  ['core/audit.py',242,'core'],['core/memory/store.py',235,'core'],['core/memory/tools.py',216,'core'],
+  ['tools/executor.py',120,'tools'],['retrieval/embed.py',119,'ret'],['retrieval/store.py',105,'ret'],
+  ['core/memory/provider.py',97,'core'],['core/context/providers.py',88,'core'],['tools/web.py',87,'tools'],
+  ['retrieval/tools.py',86,'ret'],['__init__.py',85,'core'],['core/context/injection.py',54,'core'],
+];
+const PK = { core:'pk-core', tools:'pk-tools', ret:'pk-ret', orch:'pk-orch' };
+document.getElementById('bars').innerHTML = FILES.map(([f,n,p]) =>
+  '<div class="fr"><span class="fn">'+f+'</span><div class="ft" style="position:relative;padding-right:44px">'+
+  '<div class="fb '+PK[p]+'" style="width:'+(n/468*100)+'%" title="'+f+': '+n+' 行"><span class="fv">'+n+'</span></div></div></div>').join('');
+
+window.__selftest = () => {
+  select('wf');
+  const duckInfo = document.getElementById('info').innerText.includes('.send()');
+  select('agent');
+  const agentOut = edgeEls.filter(e=>e.classList.contains('hot-out')).length;
+  const agentIn = edgeEls.filter(e=>e.classList.contains('hot-in')).length;
+  toggleBricks();
+  const bricks = document.querySelectorAll('.node.brick').length;
+  toggleBricks(); select(null);
+  return { nodes: Object.keys(NODES).length, edges: edgeEls.length, duckInfo, agentOut, agentIn, bricks, bars: FILES.length };
+};
+</script>
+</body>
+</html>

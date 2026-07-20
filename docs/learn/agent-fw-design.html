@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 框架本体 ⑤ 设计骨架 — 五条筋</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.6; padding: 26px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 23px; margin-bottom: 2px; }
+  h2 { font-size: 17px; margin: 30px 0 6px; padding-left: 10px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .nav a { font-size: 12.5px; text-decoration: none; color: var(--blue-deep); background: var(--card); border: 1.5px solid var(--border2); border-radius: 20px; padding: 5px 14px; }
+  .nav a.here { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .nav a:hover:not(.here) { border-color: var(--blue); }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-top: 10px; }
+  .btn { font: inherit; font-size: 12.5px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 6px 13px; transition: all .15s; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.on { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .codebox { font-family: var(--mono); font-size: 11px; background: #2e3a48; color: #cdd8e4; border-radius: 9px; padding: 10px 13px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
+  .codebox .k { color: #7fb0e6; } .codebox .g { color: #9fd48a; } .codebox .y { color: #e6c07f; } .codebox .cm { color: #5a8a5e; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ok { color: var(--green); font-weight: 700; }
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 8px 12px; margin-top: 8px; font-size: 12.5px; }
+  .analogy b { color: var(--amber); }
+  .chip { display: inline-block; font-family: var(--mono); font-size: 10.5px; background: var(--violet-bg); color: var(--violet); border-radius: 6px; padding: 2px 9px; margin: 2px; }
+  .chip.new { animation: pop .35s; background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+  @keyframes pop { from { transform: scale(.8); opacity: 0; } }
+  .msgline { font-family: var(--mono); font-size: 10.5px; border-radius: 7px; padding: 4px 9px; margin: 3px 0; animation: pop .3s; }
+  .msgline.asst { background: var(--green-bg); color: var(--green); }
+  .msgline.tool { background: var(--violet-bg); color: var(--violet); }
+  .msgline.errm { background: var(--red-bg); color: var(--red); }
+  /* Phase 时间线 */
+  .tl { display: flex; gap: 0; overflow-x: auto; padding: 14px 4px 6px; }
+  .ph { flex: 1; min-width: 116px; position: relative; padding: 0 6px; }
+  .ph::before { content: ""; position: absolute; top: 7px; left: 0; right: 0; height: 3px; background: var(--border2); }
+  .ph .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--blue); border: 3px solid #fff; box-shadow: 0 0 0 1.5px var(--border2); position: relative; z-index: 1; margin-bottom: 6px; }
+  .ph h5 { font-size: 11.5px; }
+  .ph p { font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .ph .zero { font-size: 9px; color: var(--green); font-family: var(--mono); }
+  .foot { margin-top: 24px; color: var(--soft); font-size: 11px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🦴 agent 框架本体 · ⑤ 设计骨架</h1>
+<p class="sub">4607 行能长成一个"全家桶"而不塌，靠的是五条筋。每条都能点着玩。</p>
+<div class="nav">
+  <a href="./agent-arch-map.html">① 全景地图</a>
+  <a href="./agent-arch-loop.html">② send 旅程</a>
+  <a href="./agent-arch-plugins.html">③ 能力开关</a>
+  <a href="./agent-fw-anatomy.html">④ 本体解剖 🫀</a>
+  <a class="here" href="#">⑤ 设计骨架 🦴</a>
+</div>
+
+<h2>筋① 🧱 五块独立砖：大件互相不认识</h2>
+<div class="panel">
+  <div class="row">
+    <span class="chip">llm.py 253行</span><span class="chip">workflow.py 368行</span><span class="chip">audit.py 242行</span><span class="chip">compaction.py 384行</span><span class="chip">registry.py 276行</span>
+    <span class="hint">← 五个最大的子系统，包内 import 数全是 <b>0</b>（另有 4 块小砖）。</span>
+  </div>
+  <div class="analogy"><b>🧱 意义：</b>砖不咬合就能<b>单独拿走</b>（把 llm.py 复制到任何项目立刻能用），也能<b>单独测试</b>（workflow 用 FakeAgent 测、不烧 API）。全框架唯一的"总装车间"是 agent.py。<a href="./agent-fw-anatomy.html" style="color:var(--blue-deep)">↗ 回解剖图点亮它们</a></div>
+</div>
+
+<h2>筋② 🦆 鸭子类型：编排引擎不问出身，只认 .send()</h2>
+<div class="panel">
+  <div class="row">
+    <span class="hint">给引擎塞哪种节点？</span>
+    <button class="btn on" id="dReal" onclick="duck('real')">真 Agent（烧 API）</button>
+    <button class="btn" id="dFake" onclick="duck('fake')">FakeAgent（测试替身）</button>
+  </div>
+  <div class="codebox" id="duckCode"></div>
+  <div class="hint" id="duckOut"></div>
+  <div class="analogy"><b>🦆 意义：</b>引擎源码对 core <b>一条 import 都没有</b>（解剖图已证）。"长得像鸭子、会嘎嘎叫，就当鸭子用"——所以 13 项工作流语义回归全用 FakeAgent 跑，零 API 成本、毫秒级完成。</div>
+</div>
+
+<h2>筋③ 🏭 工厂函数：工具都是"配好料再出厂"</h2>
+<div class="panel">
+  <div class="row">
+    <button class="btn" onclick="makeTool('retrieve')">🏭 make_retrieve(store, embedder)</button>
+    <button class="btn" onclick="makeTool('remember')">🏭 make_remember(memory)</button>
+    <span class="hint">点工厂 → 产出 (schema, handler) 装进 registry</span>
+  </div>
+  <div style="margin-top:8px"><span class="hint">registry 里现在有：</span><span id="factoryOut"></span></div>
+  <div class="analogy"><b>🏭 意义：</b>工厂把依赖（store/embedder）<b>闭包进 handler</b>，返回统一的 <code>(schema, handler)</code> 二元组——registry 不需要知道工具背后连着什么，换个库/换个记忆仓，工厂重新出一颗就行。memory 4 件套、retrieve、share_state 的 setter 全是这个模子。</div>
+</div>
+
+<h2>筋④ 🔌 ABC 换芯：接口不动，实现随便换</h2>
+<div class="panel">
+  <div class="row">
+    <span class="hint">Embedder 芯：</span>
+    <button class="btn on" id="eBge" onclick="chip('bge')">BGE-M3（真模型 2GB）</button>
+    <button class="btn" id="eDum" onclick="chip('dummy')">DummyEmbedder（假向量 0MB）</button>
+  </div>
+  <div class="codebox" id="chipCode"></div>
+  <div class="analogy"><b>🔌 意义：</b>四个 ABC 插座：<code>Embedder</code> / <code>VectorStore</code> / <code>MemoryStore</code> / <code>Compactor</code>。调用方永远写一样的代码，芯随便换——内存紧张时 <code>AGENT_EMBEDDER=dummy</code> 一秒降级就是靠这个。</div>
+</div>
+
+<h2>筋⑤ 📮 错误变数据：不抛异常，塞回对话让模型自救</h2>
+<div class="panel">
+  <div class="row">
+    <button class="btn" onclick="failDemo()">💥 让工具执行失败试试</button>
+    <button class="btn" onclick="failReset()">↺ 清空</button>
+  </div>
+  <div id="failStack" style="margin-top:8px"></div>
+  <div class="analogy"><b>📮 意义：</b>工具崩了、记忆写超限、share_state 给了非法值——一律不抛异常，包成 <code>{"error": …}</code> 当作<b>正常数据</b>塞回对话。模型读到错误原因，自己换参数重试。框架稳（不崩），模型也学得会。</div>
+</div>
+
+<h2>年轮：七个 Phase 怎么叠上来（core 零改动）</h2>
+<div class="panel">
+  <div class="tl">
+    <div class="ph"><div class="dot"></div><h5>P1 接入</h5><p>llm.py 表驱动客户端</p></div>
+    <div class="ph"><div class="dot"></div><h5>P2 循环+注入</h5><p>agent.py 工具循环 · ContextManager</p><span class="zero">后改注入尾置 +17行</span></div>
+    <div class="ph"><div class="dot"></div><h5>P3 记忆+压缩</h5><p>memory/ · compaction</p><span class="zero">构造参数插入, core 不动</span></div>
+    <div class="ph"><div class="dot"></div><h5>P4 审计+续聊</h5><p>audit.py · resume</p></div>
+    <div class="ph"><div class="dot"></div><h5>P5 技能</h5><p>skills.py /命令</p></div>
+    <div class="ph"><div class="dot"></div><h5>P6 RAG+评测</h5><p>retrieval/ · BFCL/AgentClinic</p><span class="zero">评测不进发行物</span></div>
+    <div class="ph"><div class="dot"></div><h5>P7 编排</h5><p>orchestration/ 六组件</p><span class="zero">零 core import（鸭子）</span></div>
+  </div>
+</div>
+
+<div class="foot">五条筋全部有源码实证：独立砖=import 图 0 出边 · 鸭子=workflow.py 无 core import + smoke_workflow_semantics 13 项 · 工厂=make_* 函数族 · ABC=四个抽象基类 · 错误变数据=executor/memory/share_state 的 error dict 约定。</div>
+
+</div>
+<script>
+// 筋② 鸭子
+function duck(kind){
+  document.getElementById('dReal').classList.toggle('on', kind==='real');
+  document.getElementById('dFake').classList.toggle('on', kind==='fake');
+  document.getElementById('duckCode').innerHTML = kind==='real'
+    ? '<span class="cm"># dashboard 生产环境</span>\n<span class="k">def</span> build_agent(name):\n    <span class="k">return</span> Agent(AgentDeploy(...), system_prompt, registry)  <span class="cm"># 真模型</span>\n\nwf.run(inputs, build_agent)   <span class="y"># 引擎只调 node.send(prompt)</span>'
+    : '<span class="cm"># 语义回归测试 (smoke_workflow_semantics.py)</span>\n<span class="k">class</span> <span class="g">FakeAgent</span>:\n    <span class="k">def</span> send(self, prompt):  <span class="cm"># 会嘎嘎叫就行</span>\n        <span class="k">return</span> <span class="g">"预设回答"</span>\n\nwf.run(inputs, <span class="k">lambda</span> n: FakeAgent())   <span class="y"># 同一个引擎, 照跑</span>';
+  document.getElementById('duckOut').innerHTML = kind==='real'
+    ? '▶ 跑一条工作流 ≈ 数十秒、烧 API 钱。'
+    : '▶ 13 项语义回归 <span class="ok">毫秒级全过 ✓</span>，一分钱不花——引擎从没发现节点是假的。';
+}
+duck('real');
+// 筋③ 工厂
+const made = new Set();
+function makeTool(t){
+  made.add(t==='retrieve' ? 'retrieve(query, top_k)' : 'remember(name, content)');
+  document.getElementById('factoryOut').innerHTML = [...made].map(x=>'<span class="chip new">'+x+'</span>').join('');
+}
+// 筋④ 换芯
+function chip(kind){
+  document.getElementById('eBge').classList.toggle('on', kind==='bge');
+  document.getElementById('eDum').classList.toggle('on', kind==='dummy');
+  document.getElementById('chipCode').innerHTML =
+    '<span class="cm"># 调用方代码一个字不变：</span>\nvec = embedder.encode([<span class="g">"如何降血压"</span>])   <span class="cm"># Embedder ABC 约定</span>\n\n<span class="cm"># 芯是哪颗：</span>\n' +
+    (kind==='bge'
+      ? 'embedder = <span class="y">SentenceTransformerEmbedder()</span>  <span class="cm"># BGE-M3, 1024维, 真语义 (中英跨语言 0.92)</span>'
+      : 'embedder = <span class="y">DummyEmbedder()</span>            <span class="cm"># SHA-256 假向量, 1024维, 0 内存, 测试/降级用</span>');
+}
+chip('bge');
+// 筋⑤ 错误变数据
+let failN = 0;
+function failDemo(){
+  const s = document.getElementById('failStack');
+  if (failN === 0) {
+    s.insertAdjacentHTML('beforeend','<div class="msgline asst">assistant · tool_calls: retrieve(top_k=999)</div>');
+    s.insertAdjacentHTML('beforeend','<div class="msgline errm">tool · {"error": "top_k 超界"} ← 没抛异常, 包成数据塞回对话</div>');
+    failN = 1;
+  } else if (failN === 1) {
+    s.insertAdjacentHTML('beforeend','<div class="msgline asst">assistant · 读到错误, 自纠 → retrieve(top_k=5)</div>');
+    s.insertAdjacentHTML('beforeend','<div class="msgline tool">tool · {ok: true, hits: 3 条} ✓ 模型自己救回来了</div>');
+    failN = 2;
+  }
+}
+function failReset(){ document.getElementById('failStack').innerHTML=''; failN = 0; }
+window.__selftest = () => {
+  duck('fake');
+  const duckOk = document.getElementById('duckOut').innerText.includes('毫秒');
+  makeTool('retrieve'); makeTool('remember');
+  const chips = document.querySelectorAll('#factoryOut .chip').length;
+  chip('dummy');
+  const chipOk = document.getElementById('chipCode').innerText.includes('DummyEmbedder');
+  failReset(); failDemo(); failDemo();
+  const heal = document.getElementById('failStack').innerText.includes('自纠');
+  duck('real'); chip('bge');
+  return { duckOk, chips, chipOk, heal, phases: document.querySelectorAll('.ph').length };
+};
+</script>
+</body>
+</html>
