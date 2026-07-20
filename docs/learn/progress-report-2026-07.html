@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>近期进度总结 · 2026-07 中旬</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --s1: #2a78d6; --s2: #1baf7a;   /* 图表系列色 (已过校验) */
+    --grid: #e1e0d9; --axis: #c3c2b7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.65; padding: 30px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h2 { font-size: 18px; margin: 34px 0 6px; padding-left: 11px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+  .elevator { border-left: 4px solid var(--green); background: var(--green-bg); font-size: 14px; }
+  .elevator b { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; background: var(--blue); color: #fff; border-radius: 6px; padding: 1px 9px; margin-bottom: 6px; }
+
+  /* 数字带 */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  .tile .v { font-size: 22px; font-weight: 700; color: var(--blue-deep); }
+  .tile .l { font-size: 11.5px; color: var(--muted); }
+
+  /* 要点列表 */
+  ul.pts { list-style: none; margin-top: 8px; }
+  ul.pts li { padding: 7px 0 7px 24px; position: relative; font-size: 13.5px; border-bottom: 1px dashed var(--border); }
+  ul.pts li:last-child { border-bottom: none; }
+  ul.pts li::before { content: "✦"; position: absolute; left: 4px; color: var(--blue); }
+  ul.pts b { color: var(--blue-deep); }
+  ul.pts .d { color: var(--muted); font-size: 12.5px; }
+  .src { font-family: var(--mono); font-size: 10px; color: var(--soft); }
+
+  /* UI 线框配图 */
+  .fig { background: #f9fbfd; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 10px; overflow-x: auto; }
+  .fig-cap { font-size: 11.5px; color: var(--soft); text-align: center; margin-top: 8px; }
+  .screens { display: flex; gap: 14px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+  .scr { width: 148px; border: 2px solid var(--border2); border-radius: 12px; background: var(--card); padding: 9px; }
+  .scr h5 { font-size: 11px; text-align: center; margin-bottom: 6px; }
+  .scr .bar { height: 8px; border-radius: 4px; background: var(--blue-bg); margin: 4px 0; }
+  .scr .ring { width: 52px; height: 52px; border-radius: 50%; border: 5px solid var(--s1); margin: 6px auto; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--blue-deep); animation: br 8s ease-in-out infinite; }
+  @keyframes br { 0%,100% { transform: scale(.88);} 50% { transform: scale(1.05);} }
+  .scr .row2 { display: flex; gap: 4px; }
+  .scr .chip2 { flex: 1; height: 18px; border-radius: 5px; background: var(--green-bg); border: 1px solid #cfe6d3; }
+  .scr .term { background: #2e3a48; border-radius: 6px; padding: 5px 7px; font-family: var(--mono); font-size: 8.5px; color: #9fd48a; line-height: 1.8; }
+  .login { width: 150px; border: 2px solid var(--blue); border-radius: 12px; background: var(--blue-bg); padding: 10px; text-align: center; font-size: 11px; }
+  .login .inp { background: #fff; border: 1px solid var(--border2); border-radius: 6px; height: 16px; margin: 5px 0; }
+  .fork { display: flex; align-items: center; color: var(--soft); font-size: 20px; padding: 0 4px; }
+
+  /* 工作流分叉配图 */
+  .lane { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .lane .nm { font-size: 11.5px; font-weight: 700; width: 118px; flex-shrink: 0; }
+  .stp { font-size: 11px; border: 1.5px solid var(--border2); background: var(--card); border-radius: 7px; padding: 3px 9px; white-space: nowrap; }
+  .stp.hum { border-color: var(--red); background: var(--red-bg); color: var(--red); font-weight: 700; }
+  .stp.ai { border-color: var(--s1); color: var(--blue-deep); }
+  .stp.okk { border-color: var(--green); background: var(--green-bg); color: var(--green); font-weight: 700; }
+  .a2 { color: var(--soft); font-size: 13px; }
+  .lens3 { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .lens3 .lz { flex: 1; min-width: 160px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; background: var(--card); }
+  .lens3 .lz b { display: block; font-size: 11px; margin-bottom: 2px; }
+
+  /* 能力积木 */
+  .caps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .cap { font-size: 11.5px; border: 1.5px solid var(--border2); border-radius: 8px; padding: 4px 11px; background: var(--card); }
+  .cap.new { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); font-weight: 700; }
+
+  /* 图表 (dataviz 规范) */
+  .viz { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 10px; }
+  .viz h4 { font-size: 13.5px; }
+  .viz .vsub { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
+  .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .plot { position: relative; height: 190px; display: flex; align-items: flex-end; gap: 34px; justify-content: center; padding: 0 8px; border-bottom: 2px solid var(--axis); }
+  .gline { position: absolute; left: 0; right: 0; height: 1px; background: var(--grid); }
+  .glab { position: absolute; left: -2px; transform: translateY(-50%); font-size: 9.5px; color: var(--soft); font-family: var(--mono); }
+  .grp { display: flex; gap: 2px; align-items: flex-end; position: relative; z-index: 1; }
+  .bar1 { width: 34px; border-radius: 4px 4px 0 0; position: relative; transition: opacity .15s; cursor: default; }
+  .bar1 .vl { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .bar1:hover { opacity: .82; }
+  .xlab { display: flex; gap: 34px; justify-content: center; padding: 6px 8px 0; }
+  .xlab span { width: 70px; text-align: center; font-size: 11px; color: var(--muted); }
+  .vnote { font-size: 11px; color: var(--soft); margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
+  .tip { position: fixed; background: #2e3a48; color: #e6edf3; font-size: 11px; padding: 5px 9px; border-radius: 6px; pointer-events: none; z-index: 99; display: none; max-width: 240px; line-height: 1.5; }
+  /* 横条 (RAG 分题型) */
+  .hrow { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+  .hrow .hl { width: 96px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .hrow .htrack { flex: 1; }
+  .hrow .hbar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); position: relative; }
+  .hrow .hv { position: absolute; right: -38px; top: -1px; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .statrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .stat { flex: 1; min-width: 110px; background: #f9fbfd; border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; }
+  .stat .v { font-size: 17px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 10.5px; color: var(--muted); }
+
+  .two { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+  @media (max-width: 780px) { .two { grid-template-columns: 1fr; } }
+  .foot { margin-top: 28px; color: var(--soft); font-size: 11.5px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>📈 近期进度总结 <span style="font-size:13px;color:var(--soft);font-weight:400">2026-07-08 ~ 07-15 · 两个仓库</span></h1>
+<p class="sub">五个调研 agent 分头核实 git 记录与代码后汇总。每条都有出处，数字都是真实读到的。</p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版</span><br>
+  这一周干了四件大事：<b>① 界面分家</b>——病人/医生/开发者登录后看到三个完全不同的世界，病人有了温柔的"今天"主页；<b>② 工作流分割</b>——把"要真人插话"的问诊流程拆出一条纯 AI 版，医生一键发起、后台自己跑完；<b>③ 框架变硬核</b>——缓存优化让长对话省近一个量级的钱、接新模型只加一行代码、还正式打包成了 Python 库；<b>④ 拿出了真数据</b>——同一批病例：模型裸跑要么答不完（GLM 0 分），套上框架 100% 稳定收尾。
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="v">45 + 22</div><div class="l">一周提交数（dashboard + 框架仓库）</div></div>
+  <div class="tile"><div class="v">3 种</div><div class="l">登录角色，界面各不相同</div></div>
+  <div class="tile"><div class="v">5 个</div><div class="l">病人端全新组件</div></div>
+  <div class="tile"><div class="v">9 家</div><div class="l">可切换的模型服务商</div></div>
+  <div class="tile"><div class="v">8 页</div><div class="l">新写的交互教学页</div></div>
+</div>
+
+<!-- ① UI -->
+<h2>① UI 更新：一个软件，三张面孔</h2>
+<div class="panel">
+  <div class="fig">
+    <div class="screens">
+      <div class="login">🔐 登录页<div class="inp"></div><div class="inp"></div><div style="background:var(--blue);color:#fff;border-radius:6px;font-size:10px;padding:2px">进入</div><div style="font-size:9px;color:var(--muted);margin-top:4px">病人: 编号+配对码<br>医护: 账号密码</div></div>
+      <div class="fork">⟶</div>
+      <div class="scr"><h5>🌿 病人 · 今天</h5><div class="ring">72</div><div class="bar" style="width:85%"></div><div class="bar" style="width:60%"></div><div class="bar" style="width:72%"></div><div class="row2"><div class="chip2"></div><div class="chip2"></div><div class="chip2"></div></div><div style="font-size:8.5px;color:var(--soft);text-align:center;margin-top:3px">呼吸圆环·状态条·手套卡·照护丝带</div></div>
+      <div class="scr"><h5>🩺 医生 · 病人档案</h5><div class="bar" style="background:var(--green-bg)"></div><div class="bar" style="background:var(--green-bg);width:80%"></div><div class="bar" style="background:var(--green-bg);width:90%"></div><div style="border:1px dashed var(--border2);border-radius:5px;font-size:9px;text-align:center;padding:2px;margin-top:4px">▶ 为此患者发起分析</div><div style="font-size:8.5px;color:var(--soft);text-align:center;margin-top:3px">建档·一次性配对码·临床叙事</div></div>
+      <div class="scr"><h5>🔧 开发者 · 全部</h5><div class="term">$ step triage 1.2s<br>$ step diagnosis…<br>$ event stream ok</div><div style="font-size:8.5px;color:var(--soft);text-align:center;margin-top:3px">原始事件·终端·配置全开</div></div>
+    </div>
+    <div class="fig-cap">同一后端，登录后按身份"变脸"；病人自动进入浅色医疗蓝主题（nord）</div>
+  </div>
+  <ul class="pts">
+    <li><b>正式登录页</b>：病人用编号+配对码（按钮特意做大方便点按），医护用账号密码；没登录时应用完全不加载。<span class="src">LoginGate.tsx · dd65e7f</span></li>
+    <li><b>病人"今天"主页</b>：8 秒一循环的呼吸引导圆环（圆心是真实心率）、通俗状态条、智能手套连接卡（零技术黑话）、信件式健康日记。<span class="src">TodayPage 等 5 组件 · 31e6a26</span></li>
+    <li><b>照护丝带</b>：医生发起的分析在病人页变成温柔的进度句子（"正在了解你最近的情况…"），每 4 秒刷新。<span class="src">CareRibbon.tsx · 9ab4c54</span></li>
+    <li><b>医生病人档案页</b>：建档、大字号一次性配对码（明文只显示一次，后台只存哈希）、一键发起分析。<span class="src">PatientsPage.tsx · 8da3d34</span></li>
+    <li><b>可视化工作流画布</b>：拖方块连箭头编排 AI 流程，画布和 JSON 双向同步（单文件 1035 行）。<span class="src">WorkflowCanvas.tsx · 78f32e4</span></li>
+  </ul>
+</div>
+
+<!-- ② 工作流分割 -->
+<h2>② 工作流分割：为什么要拆出一条"纯 AI"流程</h2>
+<div class="panel">
+  <div class="fig">
+    <div class="lane"><span class="nm">clinic_sim<br><span style="font-weight:400;color:var(--soft);font-size:10px">模拟问诊（原）</span></span>
+      <span class="stp ai">分诊</span><span class="a2">→</span>
+      <span class="stp hum">⏸ 等真人打字回答</span><span class="a2">→</span>
+      <span class="stp ai">诊断</span><span class="a2">→</span>
+      <span class="stp ai">核验 ↺×3</span>
+    </div>
+    <div class="lane"><span class="nm">followup_review<br><span style="font-weight:400;color:var(--soft);font-size:10px">随访分析（新拆）</span></span>
+      <span class="stp ai">评估</span><span class="a2">→</span>
+      <span class="stp ai">查知识库诊断</span><span class="a2">→</span>
+      <span class="stp ai">核验 ↺×3</span><span class="a2">→</span>
+      <span class="stp okk">✓ 后台一口气跑完</span>
+    </div>
+    <div class="fig-cap">红色那步会停下来等人，医生没法"点完就走"——去掉它，才有一键后台分析和完整的照护丝带</div>
+  </div>
+  <ul class="pts">
+    <li><b>labels 三套解说词</b>：框架引擎给每步加了可选的小标签（21 行改动），同一步骤患者看"正在了解你的情况…"、医生看"初诊评估"、开发者看 <code>triage</code>——数据只存一份，界面按身份投影。<span class="src">workflow.py · 194bc16</span></li>
+    <li><b>种子机制</b>：工作流定义文件不进 git，换电脑会消失——所以把 followup_review 写死在代码里，服务启动时缺了自动补、有了绝不覆盖。<span class="src">workflows_admin.py ensure_seed</span></li>
+    <li><b>归属隔离</b>：每次分析记下"为哪位患者跑的"，患者只能查到自己的照护丝带，医护才能指定查人。<span class="src">run_history.py care_ribbon_for · 9ab4c54</span></li>
+  </ul>
+  <div class="lens3">
+    <div class="lz">🌿 <b>患者镜头</b>"医生会亲自确认一遍结果…"</div>
+    <div class="lz">🩺 <b>医生镜头</b>"诊断复核验证"</div>
+    <div class="lz">🔧 <b>开发者镜头</b><code>step review · 1.8s</code></div>
+  </div>
+</div>
+
+<!-- ③ agent 框架 -->
+<h2>③ agent 框架：更省、更开放、成正式软件包</h2>
+<div class="panel">
+  <ul class="pts">
+    <li><b>缓存优化（省钱提速）</b>：每轮变化的"临时小抄"从对话开头挪到末尾——前面的历史逐字不变、缓存一直命中，长对话下成本和响应速度差近一个量级。改动仅 +17/−5 行。<span class="src">core/agent.py · 1bae6c3</span></li>
+    <li><b>接入 MiniMax 只加了 1 行</b>：模型接入层是张"服务商登记表"，加一家就是加一行，现在 9 家可随意切换。<span class="src">core/llm.py · bb8de55</span></li>
+    <li><b>正式打包</b>：框架有了名字 <code>music-agent 0.1.0</code>，可以 pip 安装进任何项目——从"我项目里的一堆代码"变成"可复用软件包"。<span class="src">pyproject.toml · 7118b21</span></li>
+  </ul>
+  <div style="font-size:12px;color:var(--muted);margin-top:10px">框架能力全景（10 项，全部在代码中核实）：</div>
+  <div class="caps">
+    <span class="cap">对话 + 流式</span><span class="cap">动态注入</span><span class="cap">跨会话记忆</span><span class="cap">历史压缩</span><span class="cap">技能 /命令</span><span class="cap">知识库检索</span><span class="cap">MCP 外部工具</span><span class="cap">审计落盘</span><span class="cap">断点续聊</span><span class="cap new">多 agent 编排 + human 步骤 🆕</span>
+  </div>
+</div>
+
+<!-- ④ RAG 与评测 -->
+<h2>④ RAG 与评测：拿出真数据了</h2>
+<div class="panel">
+  <div class="two">
+    <div class="viz">
+      <h4>医疗诊断跑分：框架下 vs 裸协议</h4>
+      <div class="vsub">同一批 AgentClinic 病例 · 准确率（%）</div>
+      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>套上自研框架</span><span><span class="sw" style="background:var(--s2)"></span>官方裸协议直跑</span></div>
+      <div class="plot" id="plot"></div>
+      <div class="xlab" id="xlab"></div>
+      <div class="vnote">诚实备注：裸协议只测了常规批（27 例）；框架的贡献主要是"<b>100% 稳定完成</b>"——裸跑时 deepseek 只有 30% 病例给出诊断、GLM 27 例全部跑飞（0 完成）；llama 这种不话痨的弱模型裸跑也能收尾，框架对它无准确率增益。准确率高低由模型强弱+病例难度决定（常规批 ~78%，罕见病难批 ~54%）。</div>
+    </div>
+    <div>
+      <div class="viz">
+        <h4>RAG 检索首版基线</h4>
+        <div class="vsub">24 道人工精标题 · 160 文档块 · BGE-M3</div>
+        <div class="statrow">
+          <div class="stat"><div class="v">0.633</div><div class="l">Recall@5</div></div>
+          <div class="stat"><div class="v">0.612</div><div class="l">MRR</div></div>
+          <div class="stat"><div class="v">12/24</div><div class="l">第一名直接命中</div></div>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin:10px 0 2px">分题型 Recall@5（难题分低 = 量尺可信）：</div>
+        <div id="hbars"></div>
+      </div>
+      <ul class="pts" style="margin-top:8px">
+        <li><b>评测尺子可信</b>：判卷器与官方 bfcl-eval 逐题对拍 400/400 一致。<span class="src">总览图①格</span></li>
+        <li><b>跨语言检索被验证</b>：中文问题"如何降血压"与英文答案相似度 0.92，无关内容仅 0.3-0.4。<span class="src">test_phase6_rag.ipynb</span></li>
+        <li><b>下一步</b>：入库时空 meta 会报错的小 bug（notebook 刚暴露），待修。<span class="src">store.py 未提交</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ 其他 -->
+<h2>⑤ 顺手做掉的其他事</h2>
+<div class="panel">
+  <ul class="pts">
+    <li><b>后台真门禁</b>：HMAC 签名"电子工牌"（12 小时过期）+ 默认拒绝的权限表 + 三个后端只监听本机；患者数据按归属隔离，只能看自己的。<span class="src">authz.py / authdb.py · 9c38835 等</span></li>
+    <li><b>8 页交互教学页</b>：工作流引擎、agent 接入、JSON 消息流、KV Cache、embedding、三视角分级、引擎内部……全是本窗口新写，当面试复习材料在维护。<span class="src">docs/learn/</span></li>
+    <li><b>语音通道 + think 剥离</b>：新开 /voice 端点、网关改纯透传（删 219 行旧代码）；推理模型的思考文本不再串进用户回复。<span class="src">5e59e44 / 473359e</span></li>
+  </ul>
+</div>
+
+<div class="foot">数据来源：5 个并行调研 agent 对两仓库 git log / 代码 / notebook 输出逐条核实（2026-07-08 起，dashboard dev 分支 45 commits + 框架仓库 22 commits）。图表配色已过 CVD 色觉安全校验。</div>
+
+</div>
+<div class="tip" id="tip"></div>
+<script>
+// 跑分数据 (真实核实值)
+const BARS = [
+  { model: 'llama-3.3', a2: 57.5, a1: 62.5, n2: '23/40 · 完成率100%', n1: '50/80 (80题基线) · 弱模型裸跑也能收尾' },
+  { model: 'deepseek-v3.2', a2: 70.0, a1: 22.2, n2: '28/40 · 完成率100%', n1: '6/27 仅常规批 · 完成率仅30%' },
+  { model: 'GLM-4.6', a2: 69.4, a1: 0, n2: '25/36 (API余额止步36例) · 完成率100%', n1: '0/27 全部跑飞未给出诊断' },
+];
+const H = 190, MAX = 100;
+const plot = document.getElementById('plot');
+// 网格线 0/25/50/75/100
+[0,25,50,75,100].forEach(v => {
+  const y = H - v/MAX*H;
+  plot.insertAdjacentHTML('beforeend', '<div class="gline" style="top:'+y+'px"></div><div class="glab" style="top:'+y+'px">'+v+'</div>');
+});
+const tip = document.getElementById('tip');
+function bar(val, color, note, model, cond){
+  const h = Math.max(val/MAX*H, 2);
+  return '<div class="bar1" style="height:'+h+'px;background:'+color+'" data-t="'+model+' · '+cond+'：'+val+'%（'+note+'）">'+
+    '<span class="vl">'+val+'%</span></div>';
+}
+BARS.forEach(b => {
+  plot.insertAdjacentHTML('beforeend',
+    '<div class="grp">'+bar(b.a2,'var(--s1)',b.n2,b.model,'框架下')+bar(b.a1,'var(--s2)',b.n1,b.model,'裸协议')+'</div>');
+  document.getElementById('xlab').insertAdjacentHTML('beforeend','<span>'+b.model+'</span>');
+});
+document.querySelectorAll('.bar1').forEach(el => {
+  el.addEventListener('mousemove', e => {
+    tip.style.display='block'; tip.textContent = el.dataset.t;
+    tip.style.left = Math.min(e.clientX+12, innerWidth-260)+'px'; tip.style.top = (e.clientY+14)+'px';
+  });
+  el.addEventListener('mouseleave', () => tip.style.display='none');
+});
+// RAG 分题型横条 (单系列, 直接标数)
+const HB = [ ['简单查找', .82], ['对比题', .52], ['综合题', .41] ];
+document.getElementById('hbars').innerHTML = HB.map(([l,v]) =>
+  '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack" style="position:relative;padding-right:40px">'+
+  '<div class="hbar" style="width:'+(v*100)+'%"><span class="hv">'+v.toFixed(2)+'</span></div></div></div>').join('');
+
+window.__selftest = () => ({
+  bars: document.querySelectorAll('.bar1').length,
+  glmZeroLabel: [...document.querySelectorAll('.bar1 .vl')].some(e=>e.textContent==='0%'),
+  hbars: document.querySelectorAll('.hbar').length,
+  gridlines: document.querySelectorAll('.gline').length,
+  legend: document.querySelectorAll('.legend .sw').length,
+});
+</script>
+</body>
+</html>
