@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 能力评测 — 我的框架到底行不行</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --s1: #2a78d6; --s2: #1baf7a;
+    --grid: #e1e0d9; --axis: #c3c2b7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.65; padding: 30px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h2 { font-size: 18px; margin: 36px 0 6px; padding-left: 11px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .lead { color: var(--soft); font-size: 12.5px; font-family: var(--mono); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  b.k { color: var(--blue-deep); }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+  .elevator { border-left: 4px solid var(--green); background: var(--green-bg); font-size: 14px; }
+  .elevator b { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; background: var(--blue); color: #fff; border-radius: 6px; padding: 1px 9px; margin-bottom: 6px; }
+  .step-badge { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; border-radius: 20px; padding: 2px 12px; margin-bottom: 4px; }
+  .b1 { background: var(--violet); } .b2 { background: var(--green); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  .tile .v { font-size: 22px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 11.5px; color: var(--muted); }
+
+  ul.pts { list-style: none; margin-top: 8px; }
+  ul.pts li { padding: 7px 0 7px 24px; position: relative; font-size: 13.5px; border-bottom: 1px dashed var(--border); }
+  ul.pts li:last-child { border-bottom: none; }
+  ul.pts li::before { content: "✦"; position: absolute; left: 4px; color: var(--blue); }
+  ul.pts b { color: var(--blue-deep); }
+  .src { font-family: var(--mono); font-size: 10px; color: var(--soft); }
+
+  .arena { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 720px) { .arena { grid-template-columns: 1fr; } }
+  .card2 { border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; background: #f9fbfd; }
+  .card2 h3 { font-size: 14.5px; margin-bottom: 3px; }
+  .card2 .who { font-size: 11px; color: var(--soft); font-family: var(--mono); margin-bottom: 7px; }
+  .card2 p { font-size: 12.5px; color: var(--muted); }
+  .card2 .eg { font-family: var(--mono); font-size: 11px; background: var(--blue-bg); color: var(--blue-deep); border-radius: 6px; padding: 5px 8px; margin: 7px 0; display: block; }
+
+  .fig { background: #f9fbfd; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 10px; overflow-x: auto; }
+  .fig-cap { font-size: 11.5px; color: var(--soft); text-align: center; margin-top: 8px; }
+  .lane { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; justify-content: center; }
+  .stp { font-size: 11px; border: 1.5px solid var(--border2); background: var(--card); border-radius: 7px; padding: 3px 9px; white-space: nowrap; }
+  .stp.ai { border-color: var(--s1); color: var(--blue-deep); }
+  .stp.okk { border-color: var(--green); background: var(--green-bg); color: var(--green); font-weight: 700; }
+  .a2 { color: var(--soft); font-size: 13px; }
+
+  .viz { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 10px; }
+  .viz h4 { font-size: 13.5px; }
+  .viz .vsub { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
+  .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .plot { position: relative; height: 190px; display: flex; align-items: flex-end; gap: 34px; justify-content: center; padding: 0 8px; border-bottom: 2px solid var(--axis); }
+  .gline { position: absolute; left: 0; right: 0; height: 1px; background: var(--grid); }
+  .glab { position: absolute; left: -2px; transform: translateY(-50%); font-size: 9.5px; color: var(--soft); font-family: var(--mono); }
+  .grp { display: flex; gap: 2px; align-items: flex-end; position: relative; z-index: 1; }
+  .bar1 { width: 34px; border-radius: 4px 4px 0 0; position: relative; transition: opacity .15s; cursor: default; }
+  .bar1 .vl { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .bar1:hover { opacity: .82; }
+  .xlab { display: flex; gap: 34px; justify-content: center; padding: 6px 8px 0; }
+  .xlab span { width: 70px; text-align: center; font-size: 11px; color: var(--muted); }
+  .vnote { font-size: 11px; color: var(--soft); margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
+  .vnote b { color: var(--muted); }
+  .tip { position: fixed; background: #2e3a48; color: #e6edf3; font-size: 11px; padding: 5px 9px; border-radius: 6px; pointer-events: none; z-index: 99; display: none; max-width: 250px; line-height: 1.5; }
+  .hrow { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+  .hrow .hl { width: 110px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .hrow .htrack { flex: 1; }
+  .hrow .hbar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); position: relative; }
+  .hrow .hbar.human { background: #8a97a5; }
+  .hrow .hv { position: absolute; right: -40px; top: -1px; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .statrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { flex: 1; min-width: 120px; background: #f9fbfd; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  .stat .v { font-size: 17px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 10.5px; color: var(--muted); }
+  table.cal { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  table.cal th { text-align: left; font-size: 10.5px; color: var(--muted); border-bottom: 1.5px solid var(--border2); padding: 5px 8px; font-weight: 600; }
+  table.cal td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; font-variant-numeric: tabular-nums; }
+  table.cal tr:last-child td { border-bottom: none; }
+  table.cal .eq { color: var(--green); font-weight: 700; }
+  table.cal .bt { font-size: 11px; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 780px) { .two { grid-template-columns: 1fr; } }
+  .concl { border-left: 4px solid var(--amber); background: var(--amber-bg); }
+  .concl b { color: var(--amber); }
+  .xref { display: inline-block; font-size: 12px; color: var(--blue-deep); background: var(--blue-bg); border: 1px solid #cfe0f2; border-radius: 8px; padding: 4px 10px; margin-top: 8px; text-decoration: none; }
+  .xref:hover { background: #d8e6f6; }
+  .foot { margin-top: 28px; color: var(--soft); font-size: 11.5px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🧪 agent 能力评测 — 我的框架到底行不行</h1>
+<p class="sub">用两个公开学术基准把"框架有没有用"量出来。<span class="lead">全部真数据，鼠标停在柱子上看每个数字的口径。</span></p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版 · 两层故事</span><br>
+  评一个 agent 框架"行不行"，得先回答一个更根本的问题：<b>我自己写的评分尺子可信吗？</b>所以分两层：<b>第一层 · 量尺可信</b>——拿工具调用基准 <b>BFCL</b>，我的评测器和官方各判一批，逐题对到 <b>400/400 完全一致</b>；<b>第二层 · 框架有用</b>——在可信的尺子上测医疗问诊基准 <b>AgentClinic</b>：强模型<b>裸跑几乎交不出诊断</b>（GLM 27/27 全跑飞），套上我的框架后 <b>100% 稳定完成</b>。一句话：<b>框架的价值是"工程可靠性"，不是"让模型更聪明"。</b>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="v">400/400</div><div class="l">我的判卷与官方逐题一致</div></div>
+  <div class="tile"><div class="v">0% → 100%</div><div class="l">GLM 完成率（裸跑 → 框架）</div></div>
+  <div class="tile"><div class="v">2 个</div><div class="l">公开学术基准（BFCL·AgentClinic）</div></div>
+  <div class="tile"><div class="v">9 家</div><div class="l">可测的模型服务商</div></div>
+</div>
+
+<!-- ① 两个考场 -->
+<h2>① 两个考场：分别测 agent 的哪种能力</h2>
+<div class="arena">
+  <div class="card2">
+    <h3>🔧 BFCL · 工具调用</h3>
+    <div class="who">Berkeley Function-Calling Leaderboard · ICML 2025</div>
+    <p>考"该不该调工具、调哪个、参数填得对不对"——把一句话变成结构正确的函数调用。</p>
+    <span class="eg">"求底10高5的三角形面积" → area(base=10, height=5)</span>
+    <p>判分主力是 <b class="k">AST 匹配</b>（不运行代码，只静态比结构对不对）。</p>
+    <a class="xref" href="./bfcl-walkthrough.html">↗ BFCL 详解页（评分/术语/对拍）</a>
+  </div>
+  <div class="card2">
+    <h3>🩺 AgentClinic · 模拟问诊</h3>
+    <div class="who">Schmidgall 等 · arXiv 2024 / npj Digital Medicine 2026</div>
+    <p>AI 医生问诊 AI 扮演的病人、可以开检查，必须在<b>限定 20 轮内</b>给出诊断，裁判按标准答案判对错。</p>
+    <span class="eg">病人/检验/裁判逐字镜像官方，只把"医生位"换成被测对象</span>
+    <p>对照组 <b class="k">A1 官方裸协议</b> vs 实验组 <b class="k">A2 我的框架</b>。</p>
+    <a class="xref" href="./agentclinic-walkthrough.html">↗ AgentClinic 详解页（论文/流程/真实回放）</a>
+  </div>
+</div>
+
+<!-- ② 第一层 -->
+<h2>② 第一层 · 量尺可信吗？（BFCL 与官方对拍）</h2>
+<div class="panel">
+  <span class="step-badge b1">先证测量工具，再谈跑分</span>
+  <p class="sub" style="margin-top:4px">思路叫<b>"四钉法"</b>：把会影响结果的四个变量全钉死——<b>同模型 · 同数据 · 同口径 · 各判各的</b>，剩下的判罚分歧就 100% 归到"判分器"本身。我的评测器和官方 <code>bfcl-eval</code> 各跑一批，逐题比。</p>
+  <table class="cal">
+    <tr><th>批次</th><th>我的测评器</th><th>官方 bfcl-eval</th><th>结果</th></tr>
+    <tr><td>单轮 400 题 · gpt-4o-mini</td><td>91.25%</td><td>91.25%</td><td class="eq">修 3 处判卷规则后，逐题 400/400 一致</td></tr>
+    <tr><td>换模型 llama-3.3 · 100 题</td><td>96.0%</td><td>96.0%</td><td class="eq">判卷零分歧</td></tr>
+    <tr><td>换模型 GLM-4.7-flash · 100 题</td><td>86.0%</td><td>87.0%</td><td class="bt">仅 1 题是模型采样噪声（非判卷差异）</td></tr>
+    <tr><td>多轮 30 题 · 我的循环 vs 官方循环<br><span class="bt">（同用官方判卷）</span></td><td>36.67%</td><td>26.67%</td><td class="bt">判罚一致率 90% · 工程异常 0</td></tr>
+  </table>
+  <div class="vnote">关键陷阱：总分几乎一样（91.00 vs 91.25）却藏着 15 题判罚不同——<b>只看总分会被两股反向偏差对消骗过</b>，必须逐题 diff 才现形。补齐 3 处判卷语义（调用数规则 / 字典金标 / 数组内型）后同输入 400/400 一致。此后测出的任何差异都归被测对象，不归量尺。<span class="src">calibration_2026-07-09.md</span></div>
+</div>
+
+<!-- ③ 第二层 -->
+<h2>③ 第二层 · 框架有用吗？（AgentClinic 同批病例对照）</h2>
+<div class="panel">
+  <span class="step-badge b2">可信的尺子上，测框架的价值</span>
+  <div class="fig">
+    <div class="lane">
+      <span class="stp">📋 OSCE 标准化病例</span><span class="a2">→</span>
+      <span class="stp ai">🩺 AI 医生（被测位）</span><span class="a2">⇄</span>
+      <span class="stp">🤒 AI 病人</span><span class="a2">＋</span>
+      <span class="stp">🧪 检验台</span><span class="a2">→</span>
+      <span class="stp">💬 ≤20 轮下诊断</span><span class="a2">→</span>
+      <span class="stp okk">⚖️ 裁判对答案</span>
+    </div>
+    <div class="fig-cap">只把"医生位"换成被测对象：<b>A1 官方裸协议</b>（对照） vs <b>A2 我的框架</b></div>
+  </div>
+  <div class="two" style="grid-template-columns:1fr 1fr">
+    <div class="viz">
+      <h4>完成率：框架功劳的全部来源</h4>
+      <div class="vsub">同批病例 · 能在 20 轮内给出诊断的比例（%）</div>
+      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>套上我的框架</span><span><span class="sw" style="background:var(--s2)"></span>官方裸协议直跑</span></div>
+      <div class="plot" id="plotC"></div>
+      <div class="xlab" id="xlabC"></div>
+      <div class="vnote">裸协议下 GLM <b>27 例全部跑飞</b>、deepseek 七成没收尾；套框架全部 <b>100% 完成</b>。（0% 是病态弱基线，别当普适增益。）</div>
+    </div>
+    <div class="viz">
+      <h4>准确率：换强模型才提分</h4>
+      <div class="vsub">同一批 AgentClinic 病例 · 准确率（%）</div>
+      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>套上我的框架</span><span><span class="sw" style="background:var(--s2)"></span>官方裸协议直跑</span></div>
+      <div class="plot" id="plot"></div>
+      <div class="xlab" id="xlab"></div>
+      <div class="vnote">准确率由<b>模型强弱 + 病例难度</b>决定，两强模型框架下 ~70%——框架管"可靠完成"，不管"诊断上限"。</div>
+    </div>
+  </div>
+  <div class="viz">
+    <h4>问诊轮数：谁能自己收敛？</h4>
+    <div class="vsub">同批病例（case 80–106，27 例/模型）· 医生平均问几轮才结束（上限 20 轮，越低=越快收敛）</div>
+    <div class="legend"><span><span class="sw" style="background:var(--s2)"></span>A1 官方裸协议</span><span><span class="sw" style="background:var(--s1)"></span>A2 我的框架</span></span></div>
+    <div class="plot" id="plotT"></div>
+    <div class="xlab" id="xlabT"></div>
+    <div class="vnote">官方裸协议下强模型<b>耗满 20 轮也没下诊断</b>（GLM 27/27 全撞顶，那条红虚线就是天花板）；我的框架 <b>~12 轮就收敛、100% 给诊断</b>。轮数少不是草率，是高效收束。<span class="src">turns 字段 · A1/A2 同批 case 80–106</span></div>
+  </div>
+</div>
+
+<!-- ④ 参照系 -->
+<h2>④ 参照系 · 两个基准的官方原始成绩</h2>
+<p class="sub">我上面的评测就是在这两个"考场"里做的。看看官方论文/榜单上，各家模型考成什么样：</p>
+<div class="two">
+  <div class="viz">
+    <h4>AgentClinic 论文成绩单（官方原文）</h4>
+    <div class="vsub">MedQA 子集诊断准确率 · arXiv 2405.07960 v5 · 越高越强</div>
+    <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>AI 模型</span><span><span class="sw" style="background:#8a97a5"></span>人类医生（对照）</span></div>
+    <div id="acPaper"></div>
+    <div class="vnote"><b>人类医生也只有 54%</b>（±28.5）——这考试对谁都难。选择题改成问诊后，最弱模型准确率掉到不足原来的十分之一。</div>
+  </div>
+  <div class="viz">
+    <h4>BFCL 官方榜单（工具调用总分）</h4>
+    <div class="vsub">Overall Accuracy · V3 · 2025-10 快照 · 越高越强</div>
+    <div id="bfclLb"></div>
+    <div class="vnote"><b>BFCL 是活榜</b>，随版本/时间大幅波动，故标快照日期。我的对拍只针对 <code>simple_python</code> 单类，不是这张总分榜。</div>
+  </div>
+</div>
+
+<!-- 结论 -->
+<h2>⑤ 一句话结论</h2>
+<div class="panel concl">
+  <b>💡 框架的价值 = 工程可靠性，不是诊断智力。</b><br>
+  同样的模型，裸协议下强推理模型"越问越偏、忘了下结论"（GLM 完成率 0%），套上框架（原生工具 + 消息管理 + 结构化循环）后 100% 稳定收尾、~12 轮就收敛。而两个强模型框架下准确率都趋同于 ~70%——说明<b>框架没让模型更聪明，只是让它可靠地把该做的事做完</b>。诊断准不准的上限，由模型强弱和病例难度封顶，不由框架决定。而这套结论之所以站得住，是因为量尺本身先跟官方对到了 400/400。
+</div>
+
+<div class="foot">数据来源：<code>project/agent/evaluation/</code> 真实结果文件——AgentClinic（<code>agentclinic_harness_crossmodel_2026-07-11.md</code> + <code>turns</code> 字段）· BFCL（<code>calibration_2026-07-09.md</code>）· 官方原始成绩取自 arXiv 2405.07960 v5 与 BFCL 官方榜单快照。图表配色已过 CVD 色觉安全校验，数字均可追溯到结果文件或论文原文。</div>
+
+</div>
+<div class="tip" id="tip"></div>
+<script>
+const H = 190, MAX = 100;
+const tip = document.getElementById('tip');
+function bar(val, color, note, model, cond){
+  const h = Math.max(val/MAX*H, 2);
+  return '<div class="bar1" style="height:'+h+'px;background:'+color+'" data-t="'+model+' · '+cond+'：'+val+'%（'+note+'）"><span class="vl">'+val+'%</span></div>';
+}
+// AgentClinic 准确率 (agentclinic_harness_crossmodel_2026-07-11.md)
+const ACC = [
+  { model: 'llama-3.3', a2: 57.5, a1: 62.5, n2: '23/40 · 完成率100%', n1: '50/80 (80题基线) · 弱模型裸跑也能收尾' },
+  { model: 'deepseek-v3.2', a2: 70.0, a1: 22.2, n2: '28/40 · 完成率100%', n1: '6/27 仅常规批 · 完成率仅30%' },
+  { model: 'GLM-4.6', a2: 69.4, a1: 0, n2: '25/36 (API余额止步36例) · 完成率100%', n1: '0/27 全部跑飞未给出诊断' },
+];
+const COMP = [
+  { model: 'llama-3.3', a2: 100, a1: 100, n2: '框架下 100% 收尾', n1: '~100% · 不话痨, 裸协议也规矩收尾 (80题基线)' },
+  { model: 'deepseek-v3.2', a2: 100, a1: 30, n2: '27/27 全部收尾', n1: '仅 30% 病例给出诊断 (话痨推理, 越问越偏)' },
+  { model: 'GLM-4.6', a2: 100, a1: 0, n2: '27/27 全部收尾', n1: '27/27 全部跑飞, 一个诊断都没给出' },
+];
+function buildGrouped(plotId, xlabId, rows){
+  const plot = document.getElementById(plotId);
+  [0,25,50,75,100].forEach(v => {
+    const y = H - v/MAX*H;
+    plot.insertAdjacentHTML('beforeend', '<div class="gline" style="top:'+y+'px"></div><div class="glab" style="top:'+y+'px">'+v+'</div>');
+  });
+  rows.forEach(b => {
+    plot.insertAdjacentHTML('beforeend',
+      '<div class="grp">'+bar(b.a2,'var(--s1)',b.n2,b.model,'框架下')+bar(b.a1,'var(--s2)',b.n1,b.model,'裸协议')+'</div>');
+    document.getElementById(xlabId).insertAdjacentHTML('beforeend','<span>'+b.model+'</span>');
+  });
+}
+buildGrouped('plot', 'xlab', ACC);
+buildGrouped('plotC', 'xlabC', COMP);
+
+// AgentClinic 轮数对比 (真实 turns, 同批 case 80-106, 27例/模型)
+const TURNROWS = [
+  { model: 'deepseek-v3.2', a1: 19.1, a2: 11.6, n1: '官方裸: 24/27 撞满20轮 · 完成率30%', n2: '我的框架: 1例撞顶 · 完成率100%' },
+  { model: 'GLM-4.6', a1: 20.0, a2: 12.7, n1: '官方裸: 27/27 全部撞满20轮 · 完成率0%', n2: '我的框架: 0例撞顶 · 完成率100%' },
+];
+const HT = 175, MAXT = 20;
+function tbar(val, color, t){
+  const h = Math.max(val/MAXT*HT, 2);
+  return '<div class="bar1" style="height:'+h+'px;background:'+color+'" data-t="'+t+'"><span class="vl">'+val.toFixed(1)+'</span></div>';
+}
+(function buildTurns(){
+  const plot = document.getElementById('plotT');
+  [0,5,10,15,20].forEach(v => {
+    const y = HT - v/MAXT*HT;
+    const cap = v===20;
+    plot.insertAdjacentHTML('beforeend',
+      '<div class="gline" style="top:'+y+'px'+(cap?';border-top:2px dashed var(--red);height:0':'')+'"></div>'+
+      '<div class="glab" style="top:'+y+'px'+(cap?';color:var(--red);font-weight:700':'')+'">'+v+(cap?' 上限':'')+'</div>');
+  });
+  TURNROWS.forEach(r => {
+    plot.insertAdjacentHTML('beforeend',
+      '<div class="grp">'+tbar(r.a1,'var(--s2)',r.model+' · '+r.n1)+tbar(r.a2,'var(--s1)',r.model+' · '+r.n2)+'</div>');
+    document.getElementById('xlabT').insertAdjacentHTML('beforeend','<span>'+r.model+'</span>');
+  });
+})();
+
+// 官方原始成绩
+const AC_PAPER = [
+  ['Claude-3.5', 62.1, false], ['OpenBioLLM-70B', 58.3, false], ['人类医生', 54, true],
+  ['GPT-4', 51.6, false], ['GPT-4o', 34.2, false], ['Llama-3 70B', 19, false], ['Llama-2 70B', 4.5, false],
+];
+const BFCL_LB = [
+  ['GLM-4.5', 70.85, false], ['Claude Opus 4.1', 70.36, false], ['Claude Sonnet 4', 70.29, false], ['GPT-5', 59.22, false],
+];
+function hbars(containerId, rows, max, unit){
+  const el = document.getElementById(containerId);
+  el.innerHTML = rows.map(row => {
+    const [l, v, human] = row;
+    const w = (v / max * 100);
+    return '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack" style="position:relative;padding-right:44px">'+
+      '<div class="hbar'+(human?' human':'')+'" style="width:'+w+'%" title="'+l+': '+v+unit+'"><span class="hv">'+v+unit+'</span></div></div></div>';
+  }).join('');
+}
+hbars('acPaper', AC_PAPER, 100, '%');
+hbars('bfclLb', BFCL_LB, 100, '%');
+
+// 悬停提示
+document.querySelectorAll('.bar1').forEach(el => {
+  el.addEventListener('mousemove', e => {
+    tip.style.display='block'; tip.textContent = el.dataset.t;
+    tip.style.left = Math.min(e.clientX+12, innerWidth-260)+'px'; tip.style.top = (e.clientY+14)+'px';
+  });
+  el.addEventListener('mouseleave', () => tip.style.display='none');
+});
+
+window.__selftest = () => ({
+  compBars: document.querySelectorAll('#plotC .bar1').length,
+  accBars: document.querySelectorAll('#plot .bar1').length,
+  turnBars: document.querySelectorAll('#plotT .bar1').length,
+  compZero: [...document.querySelectorAll('#plotC .vl')].some(e=>e.textContent==='0%'),
+  turnCap: document.body.innerText.includes('20 上限'),
+  calRows: document.querySelectorAll('table.cal tr').length,
+  acPaperBars: document.querySelectorAll('#acPaper .hbar').length,
+  acHuman: document.querySelectorAll('#acPaper .hbar.human').length,
+  bfclLbBars: document.querySelectorAll('#bfclLb .hbar').length,
+  links: document.querySelectorAll('a.xref').length,
+  noMinimax: !document.body.innerText.toLowerCase().includes('minimax'),
+});
+</script>
+</body>
+</html>
