@@ -109,6 +109,23 @@
   table.cal tr:last-child td { border-bottom: none; }
   table.cal .eq { color: var(--green); font-weight: 700; }
   table.cal .bt { font-size: 11px; color: var(--muted); }
+  /* 轮数直方图 */
+  .hist { display: flex; align-items: flex-end; gap: 3px; height: 110px; border-bottom: 2px solid var(--axis); padding: 0 2px; }
+  .hcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; position: relative; cursor: default; }
+  .hcol .seg { width: 100%; }
+  .hcol .seg.top { border-radius: 3px 3px 0 0; }
+  .hcol .seg.c { background: var(--s1); }
+  .hcol .seg.w { background: var(--s2); }
+  .hcol:hover { opacity: .82; }
+  .hcol .tot { position: absolute; top: -15px; left: 0; right: 0; text-align: center; font-size: 9.5px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .xhist { display: flex; gap: 3px; padding: 3px 2px 0; }
+  .xhist span { flex: 1; text-align: center; font-size: 9px; color: var(--soft); font-family: var(--mono); min-width: 0; }
+  .cmp2 { margin: 8px 0 4px; }
+  .cbar { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .cbar .cl { width: 68px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .cbar .ctrack { flex: 1; }
+  .cbar .cfill { height: 16px; border-radius: 0 4px 4px 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 7px; }
+  .cbar .cfill span { font-size: 10.5px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 
   .two { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
   @media (max-width: 780px) { .two { grid-template-columns: 1fr; } }
@@ -191,7 +208,7 @@
 <div class="panel">
   <ul class="pts">
     <li><b>缓存优化（省钱提速）</b>：每轮变化的"临时小抄"从对话开头挪到末尾——前面的历史逐字不变、缓存一直命中，长对话下成本和响应速度差近一个量级。改动仅 +17/−5 行。<span class="src">core/agent.py · 1bae6c3</span></li>
-    <li><b>接入 MiniMax 只加了 1 行</b>：模型接入层是张"服务商登记表"，加一家就是加一行，现在 9 家可随意切换。<span class="src">core/llm.py · bb8de55</span></li>
+    <li><b>接入新模型服务商只加 1 行</b>：模型接入层是张"服务商登记表"，加一家就是加一行，现在 9 家可随意切换。<span class="src">core/llm.py · bb8de55</span></li>
     <li><b>正式打包</b>：框架有了名字 <code>music-agent 0.1.0</code>，可以 pip 安装进任何项目——从"我项目里的一堆代码"变成"可复用软件包"。<span class="src">pyproject.toml · 7118b21</span></li>
   </ul>
   <div style="font-size:12px;color:var(--muted);margin-top:10px">框架能力全景（10 项，全部在代码中核实）：</div>
@@ -234,6 +251,25 @@
       <div class="xlab" id="xlab"></div>
       <div class="vnote">准确率由<b>模型强弱 + 病例难度</b>决定（常规批 ~78%、罕见病难批 ~54%），两个强模型框架下趋同于 ~70%——框架管"可靠完成"，不管"诊断上限"。llama 弱但不话痨，裸跑也能收尾，框架对它无准确率增益（裸跑 62.5% 为 80 题基线口径）。</div>
     </div>
+  </div>
+  <div class="viz" style="margin-top:12px">
+    <h4>问诊轮数统计：诊断花了几个来回（框架下 A2 · 76 例）</h4>
+    <div class="vsub">每个病例医生问了几轮才交卷（上限 20 轮）· deepseek-v3.2 + GLM-4.6 合计</div>
+    <div class="statrow">
+      <div class="stat"><div class="v">12.1</div><div class="l">平均轮数</div></div>
+      <div class="stat"><div class="v">12</div><div class="l">中位数</div></div>
+      <div class="stat"><div class="v">4–20</div><div class="l">最少 / 最多</div></div>
+      <div class="stat"><div class="v">1 例</div><div class="l">撞到 20 轮上限</div></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin:12px 0 2px">轮数分布（横轴 = 用了几轮，纵轴 = 病例数）：</div>
+    <div class="hist" id="hist"></div>
+    <div class="xhist" id="xhist"></div>
+    <div class="legend" style="margin-top:8px"><span><span class="sw" style="background:var(--s1)"></span>答对（53 例）</span><span><span class="sw" style="background:var(--s2)"></span>答错（23 例）</span></div>
+    <div class="cmp2">
+      <div class="cbar"><span class="cl">答对平均</span><div class="ctrack"><div class="cfill" style="width:57%;background:var(--s1)"><span>11.4 轮</span></div></div></div>
+      <div class="cbar"><span class="cl">答错平均</span><div class="ctrack"><div class="cfill" style="width:68.5%;background:var(--s2)"><span>13.7 轮</span></div></div></div>
+    </div>
+    <div class="vnote"><b>有意思的发现</b>：<b>答对的更快、答错的反而磨蹭更多轮</b>（11.4 vs 13.7）——模型拿不准时会越问越多，但没问到点子上，多问的那几轮是"心虚打转"不是"深思熟虑"。而且 76 例里<b>只有 1 例真的问满 20 轮</b>，说明医生位基本都能在预算内自己收敛，不是被上限硬掐停。<span class="src">turns 字段 · deepseek_80_106 + glm_A2 系列</span></div>
   </div>
   <div class="two">
     <div class="viz">
@@ -328,6 +364,21 @@ document.getElementById('hbars').innerHTML = HB.map(([l,v]) =>
   '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack" style="position:relative;padding-right:40px">'+
   '<div class="hbar" style="width:'+(v*100)+'%"><span class="hv">'+v.toFixed(2)+'</span></div></div></div>').join('');
 
+// AgentClinic 轮数直方图 (真实 turns 字段: deepseek+GLM A2, 76例, [轮数,答对数,答错数])
+const TURNS = [[4,2,0],[5,0,0],[6,1,0],[7,4,2],[8,5,0],[9,4,0],[10,5,1],[11,8,2],[12,5,1],[13,4,4],[14,4,4],[15,5,2],[16,3,2],[17,1,3],[18,0,2],[19,1,0],[20,1,0]];
+const UNIT = 9; // 每例 9px
+const hist = document.getElementById('hist'), xhist = document.getElementById('xhist');
+TURNS.forEach(([t,c,w]) => {
+  const total = c + w;
+  let segs = '';
+  if (w > 0) segs += '<div class="seg w'+(w>0?' top':'')+'" style="height:'+(w*UNIT)+'px"></div>';
+  if (c > 0) segs += '<div class="seg c'+(w===0?' top':'')+'" style="height:'+(c*UNIT)+'px"></div>';
+  const lab = total > 0 ? '<span class="tot">'+total+'</span>' : '';
+  hist.insertAdjacentHTML('beforeend',
+    '<div class="hcol" title="'+t+' 轮：答对 '+c+' · 答错 '+w+'">'+lab+segs+'</div>');
+  xhist.insertAdjacentHTML('beforeend', '<span>'+t+'</span>');
+});
+
 window.__selftest = () => ({
   bars: document.querySelectorAll('.bar1').length,
   glmZeroLabel: [...document.querySelectorAll('#plot .vl')].some(e=>e.textContent==='0%'),
@@ -338,6 +389,10 @@ window.__selftest = () => ({
   legend: document.querySelectorAll('.legend .sw').length,
   calRows: document.querySelectorAll('table.cal tr').length,
   paperCited: document.body.innerText.includes('npj Digital Medicine'),
+  histCols: document.querySelectorAll('#hist .hcol').length,
+  histCorrectSegs: document.querySelectorAll('#hist .seg.c').length,
+  histWrongSegs: document.querySelectorAll('#hist .seg.w').length,
+  noMinimax: !document.body.innerText.toLowerCase().includes('minimax'),
 });
 </script>
 </body>
