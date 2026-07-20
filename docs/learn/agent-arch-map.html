@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 架构全景 ① 地图 — 点开每一层</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.6; padding: 26px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 23px; margin-bottom: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .nav a { font-size: 12.5px; text-decoration: none; color: var(--blue-deep); background: var(--card); border: 1.5px solid var(--border2); border-radius: 20px; padding: 5px 14px; }
+  .nav a.here { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .nav a:hover:not(.here) { border-color: var(--blue); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .tile .v { font-size: 19px; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 10.5px; color: var(--muted); }
+
+  .board { display: grid; grid-template-columns: 1fr 330px; gap: 14px; margin-top: 14px; align-items: start; }
+  @media (max-width: 880px) { .board { grid-template-columns: 1fr; } }
+
+  /* 分层地图 */
+  .map { display: flex; flex-direction: column; gap: 7px; }
+  .layer { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 9px 12px; }
+  .layer .lt { font-size: 10.5px; letter-spacing: .06em; color: var(--soft); font-family: var(--mono); margin-bottom: 6px; }
+  .row { display: flex; gap: 7px; flex-wrap: wrap; }
+  .blk { font-size: 12.5px; border: 1.5px solid var(--border2); border-radius: 9px; padding: 6px 12px; cursor: pointer; background: var(--card); transition: all .15s; user-select: none; }
+  .blk small { display: block; font-size: 9.5px; color: var(--soft); font-family: var(--mono); }
+  .blk:hover { border-color: var(--blue); transform: translateY(-1px); }
+  .blk.on { border-color: var(--blue); background: var(--blue-bg); box-shadow: 0 0 0 3px var(--blue-bg); font-weight: 700; }
+  .blk.core { border-color: var(--blue); color: var(--blue-deep); }
+  .blk.plug { border-style: dashed; }
+  .blk.ext { border-color: var(--violet); color: var(--violet); }
+  .dn { text-align: center; color: var(--soft); font-size: 13px; margin: -2px 0; }
+
+  /* 详情卡 */
+  .detail { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 14px 16px; position: sticky; top: 12px; min-height: 200px; }
+  .detail h3 { font-size: 15px; }
+  .detail .path { font-family: var(--mono); font-size: 10.5px; color: var(--soft); margin: 2px 0 8px; word-break: break-all; }
+  .detail .duty { font-size: 13px; margin-bottom: 8px; }
+  .detail ul { list-style: none; }
+  .detail li { font-size: 12px; color: var(--muted); padding: 4px 0 4px 16px; position: relative; border-bottom: 1px dashed var(--border); }
+  .detail li:last-child { border-bottom: none; }
+  .detail li::before { content: "▸"; position: absolute; left: 2px; color: var(--blue); }
+  .detail .go { display: inline-block; font-size: 11.5px; color: var(--blue-deep); background: var(--blue-bg); border-radius: 7px; padding: 3px 10px; margin-top: 8px; text-decoration: none; }
+  .hintbox { font-size: 12px; color: var(--soft); text-align: center; padding: 30px 10px; }
+
+  /* 打包条 */
+  .pack { border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 10px; background: var(--green-bg); padding: 10px 14px; margin-top: 12px; font-size: 12.5px; }
+  .pack b { color: var(--green); }
+  .pack .m { font-family: var(--mono); font-size: 11px; }
+  .foot { margin-top: 24px; color: var(--soft); font-size: 11px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🗺️ agent 架构全景 · ① 地图</h1>
+<p class="sub">music-agent 0.2.0 · 六层结构，<b>点任意方块</b>看它是谁、干什么。虚线框 = 可选插件，给了才生效。</p>
+<div class="nav">
+  <a class="here" href="#">① 全景地图</a>
+  <a href="./agent-arch-loop.html">② 一次 send 的旅程 ▶</a>
+  <a href="./agent-arch-plugins.html">③ 能力开关板 🎛</a>
+  <a href="./agent-workflow-internals.html">↗ 编排引擎详解</a>
+  <a href="./agent-eval-overview.html">↗ 能力评测</a>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="v">0.2.0</div><div class="l">music-agent 版本</div></div>
+  <div class="tile"><div class="v">7 包 / 27 模块</div><div class="l">wheel 发行物</div></div>
+  <div class="tile"><div class="v">9 家</div><div class="l">模型服务商</div></div>
+  <div class="tile"><div class="v">6 种</div><div class="l">工作流步骤组件</div></div>
+  <div class="tile"><div class="v">17 个</div><div class="l">顶层对外 API</div></div>
+</div>
+
+<div class="board">
+  <div class="map" id="map">
+    <div class="layer"><div class="lt">应用层 · 用框架搭出来的东西</div>
+      <div class="row">
+        <span class="blk" data-k="dash">🏥 医疗 dashboard<small>三视角 患者/医生/开发者</small></span>
+        <span class="blk" data-k="voice">🎙 语音通道<small>/voice · think 流式</small></span>
+        <span class="blk ext" data-k="eval">🧪 评测 harness<small>BFCL · AgentClinic（不进 wheel）</small></span>
+      </div>
+    </div>
+    <div class="dn">▲ 调用 ▼</div>
+    <div class="layer"><div class="lt">编排层 · orchestration/</div>
+      <div class="row">
+        <span class="blk" data-k="wf">🧩 Workflow 引擎<small>agent·loop·break_if·parallel·route·human</small></span>
+        <span class="blk" data-k="labels">🎭 labels 三镜头<small>事件流透传</small></span>
+      </div>
+    </div>
+    <div class="dn">▼</div>
+    <div class="layer" style="border-color:var(--blue)"><div class="lt">核心 · core/agent.py</div>
+      <div class="row">
+        <span class="blk core" data-k="agent">🤖 Agent 主循环<small>send / stream · 工具回合 ≤8</small></span>
+        <span class="blk core" data-k="ctx">💉 ContextManager<small>动态注入·尾置</small></span>
+      </div>
+      <div class="lt" style="margin-top:8px">可选插件槽（虚线 = 给了才生效）</div>
+      <div class="row">
+        <span class="blk plug" data-k="mem">🧠 memory<small>跨会话记忆</small></span>
+        <span class="blk plug" data-k="cmp">🗜 compactor<small>历史压缩</small></span>
+        <span class="blk plug" data-k="aud">📼 audit<small>落盘+续聊</small></span>
+        <span class="blk plug" data-k="skl">📚 skills<small>/命令</small></span>
+        <span class="blk plug" data-k="apv">🛂 审批回调<small>高危工具</small></span>
+      </div>
+    </div>
+    <div class="dn">▼</div>
+    <div class="layer"><div class="lt">工具层 · tools/</div>
+      <div class="row">
+        <span class="blk" data-k="reg">🗂 Registry<small>注册表·schema 自动推导</small></span>
+        <span class="blk" data-k="exe">⚡ Executor<small>并行分组·审批·保序</small></span>
+        <span class="blk" data-k="mcp">🔌 MCP<small>stdio/HTTP/SSE</small></span>
+        <span class="blk" data-k="web">🌐 Web<small>search + fetch</small></span>
+      </div>
+    </div>
+    <div class="dn">▼</div>
+    <div class="layer"><div class="lt">检索层 · retrieval/（RAG）</div>
+      <div class="row">
+        <span class="blk" data-k="ing">📄 ingest<small>PDF/MD → 切块</small></span>
+        <span class="blk" data-k="emb">🔢 embed<small>BGE-M3 · 1024维</small></span>
+        <span class="blk" data-k="sto">🗄 ChromaStore<small>本地向量库</small></span>
+        <span class="blk" data-k="ret">🔍 retrieve 工具<small>top_k 1-20 · 可并行</small></span>
+      </div>
+    </div>
+    <div class="dn">▼</div>
+    <div class="layer"><div class="lt">接入层 · core/llm.py</div>
+      <div class="row">
+        <span class="blk" data-k="llm">🔀 AgentDeploy<small>9 家服务商 · 表驱动 · 唯一出网口</small></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail" id="detail"><div class="hintbox">👈 点左边任意方块<br>这里显示它的身份卡</div></div>
+</div>
+
+<div class="pack">📦 <b>打包边界</b>：<span class="m">pip install music-agent</span> 只装 <span class="m">core / orchestration / retrieval / tools</span>（7 包 27 模块）；评测 harness、demos、应用层都<b>不进发行物</b>。重依赖可选装：<span class="m">[rag]</span> = chromadb+sentence-transformers，<span class="m">[mcp]</span> = fastmcp。</div>
+
+<div class="foot">事实来源：agent/ 各模块源码（本页身份卡逐一核实自代码）。已知两处文档滞后：compaction docstring 仍提及已删除的 TimeWindowCompactor；skills docstring 写 3 个工具实际注册 4 个。</div>
+
+</div>
+<script>
+const D = {
+  dash: { t:'🏥 医疗 dashboard', p:'esp32_sensor_dashboard/', duty:'用框架搭的完整应用：患者/医生/开发者三视角分级 + 照护丝带 + 病人档案。', pts:['agent_service(:8100) 内嵌本框架','同一事实三种讲法（labels 投影）','HMAC 签名门禁 + 归属隔离'], go:['./role-tiering-explainer.html','↗ 三视角详解'] },
+  voice: { t:'🎙 语音通道', p:'backend/agent_service /api/agent/voice', duty:'think() 流式、无工具、跟随模型路由；推理模型 think 文本剥离。', pts:['网关纯透传','iter_strip_think 流式吞思考块'] },
+  eval: { t:'🧪 评测 harness', p:'agent/evaluation/（不进 wheel）', duty:'BFCL 工具调用 + AgentClinic 模拟问诊，量框架"行不行"。', pts:['自建判卷与官方对拍 400/400 一致','框架价值 = 完成率 0%→100%','依赖 matplotlib，故排除出发行物'], go:['./agent-eval-overview.html','↗ 评测总览'] },
+  wf: { t:'🧩 Workflow 引擎', p:'agent/orchestration/workflow.py', duty:'一份 JSON 描述多 agent 协作拓扑，引擎执行 + 事件流汇报。', pts:['6 组件：agent/loop/break_if/parallel/route/human','变量池 {name} 模板传成品','同名节点单实例跨轮保历史','只依赖 Agent.send()（duck-typed）'], go:['./agent-workflow-internals.html','↗ 从 JSON 到 invoke 详解'] },
+  labels: { t:'🎭 labels 三镜头', p:'workflow.py · _step_labels', duty:'每步可附 patient/doctor 两套文案，引擎不消费只透传事件流。', pts:['step_start/step_end/human_ask 三处带出','21 行改动，撑起整个三视角 UI'] },
+  agent: { t:'🤖 Agent 主循环', p:'agent/core/agent.py', duty:'send 一轮对话：追加消息 →（压缩）→ 循环 invoke，有 tool_calls 就派发工具再回来，没有就是答案。', pts:['max_rounds 默认 8 防失控','self.messages 永远干净（注入不落历史）','每条消息 _ts 时间戳（给压缩器看年龄）','reset(messages/state/all) 三档清理'], go:['./agent-arch-loop.html','▶ 看动画'] },
+  ctx: { t:'💉 ContextManager', p:'agent/core/context/', duty:'管理动态注入：providers + 只读安全条款 + state 字典，compose() 组装成 <system-reminder>。', pts:['注入尾置：插最后一条 user 前（保 KV 缓存）','share_state 自动生成 set_xx 工具','provider 抛错不中断（记 error 继续）','timestamped 超期自动加"verify"提醒'], go:['./kv-cache-explainer.html','↗ 为什么尾置省钱'] },
+  mem: { t:'🧠 memory 插件', p:'agent/core/memory/', duty:'跨会话记忆：一条记忆 = 一个 .md 文件（frontmatter 记类型）。', pts:['给 store 自动注册 4 工具：remember/list/recall/forget','注入 Tier-1 类目摘要（大小与条数无关）','原子写 mkstemp+fsync+replace','软限 10KB 警告 / 硬限 30KB 拒收'] },
+  cmp: { t:'🗜 compactor 插件', p:'agent/core/compaction.py', duty:'TokenBudgetCompactor：历史超 token 阈值自动压缩，5 阶段流水线。', pts:['①修剪工具结果 ②切头/中/尾 ③LLM 摘要中段 ④摘要包成 [CONTEXT SUMMARY] ⑤清孤儿 tool 消息','token 估算 CJK-aware（中文 1 字 1 token）','摘要失败 → 600s 冷却 + 兜底丢中段'] },
+  aud: { t:'📼 audit 插件', p:'agent/core/audit.py', duty:'AuditLog：JSONL 追加落盘，三模式 transcript-first / audit-only / both。', pts:['record_invoke = 含注入完整快照（审计）','record_turn = 干净历史（resume 数据源）','Agent.resume() 从文件恢复对话+state 接着聊'] },
+  skl: { t:'📚 skills 插件', p:'agent/tools/skills.py', duty:'FileSkillStore：用户消息以 /名字 开头自动展开成完整技能流程。', pts:['注册 4 工具：skills_list/view/read_file/run_script','run_script 4 护栏：路径穿越/仅.py/60s 超时/输出上限','布局 skills/<name>/SKILL.md + references + scripts'] },
+  apv: { t:'🛂 审批回调', p:'executor.py · approval_callback', duty:'注册时标 requires_approval=True 的高危工具，执行前先问人。', pts:['callback(name,args,id) → {approved,reason?}','不批准 → 返回 error 让 LLM 换路','不传 callback = 全放行（单机默认）'] },
+  reg: { t:'🗂 Registry', p:'agent/tools/registry.py', duty:'工具注册表：create_registry() 工厂，无全局单例 → 多 agent 天然隔离。', pts:['三种注册：register / register_tool / @tool 装饰器','schema 从签名+类型注解+docstring 自动推导','parallel / requires_approval / output_limit 三元数据'] },
+  exe: { t:'⚡ Executor', p:'agent/tools/executor.py', duty:'dispatch_all：一批 tool_calls 的执行调度。', pts:['串行工具按序先跑（副作用安全）','parallel=True 的进线程池并发','结果按原索引回填保序','错误包成 {error} 不抛（LLM 自纠）'] },
+  mcp: { t:'🔌 MCP 接入', p:'agent/tools/mcp.py', duty:'外部工具服务器一键挂载：register_mcp_server(registry, source)。', pts:['3 种连法：stdio / HTTP / SSE','持久连接池复用整个进程','refresh/unregister 热更新','name_prefix 防同名撞车'] },
+  web: { t:'🌐 Web 工具', p:'agent/tools/web.py', duty:'web_search（Tavily）+ web_fetch（httpx+trafilatura 提取正文）。', pts:['search 返 top-N {title,url,snippet}','失败返回兜底文本不抛异常'] },
+  ing: { t:'📄 ingest', p:'agent/retrieval/ingest.py', duty:'PDF/MD → markdown → 按标题切块（1000 字 / 重叠 200）。', pts:['markdown chunker 记 heading_path','超长段降级滑窗切（CJK 断点友好）','PDF 走 pymupdf4llm'] },
+  emb: { t:'🔢 embed', p:'agent/retrieval/embed.py', duty:'文字 → 1024 维向量。默认 BAAI/bge-m3（多语言，中英跨语言检索 0.92 相似度实证）。', pts:['normalize=True（余弦友好）','DummyEmbedder 假向量供测试（决定性）'] },
+  sto: { t:'🗄 ChromaStore', p:'agent/retrieval/store.py', duty:'本地向量库（chromadb 持久化 SQLite），余弦相似度。', pts:['score = 1 − distance','VectorStore ABC：add/search/count 可换实现'] },
+  ret: { t:'🔍 retrieve 工具', p:'agent/retrieval/tools.py', duty:'给 Agent(retrieval=, embedder=) 就自动注册，LLM 可主动查库。', pts:['top_k 钳到 1-20','parallel=True（只读幂等可并发）','返回 {rank, score, source, heading_path, text}'] },
+  llm: { t:'🔀 AgentDeploy', p:'agent/core/llm.py', duty:'统一 LLM 客户端：全部走 OpenAI 兼容协议，唯一真正出网的地方。', pts:['PROVIDERS 表驱动：加服务商 = 加一行（现 9 家）','invoke 响应清洗成固定形状（含 tool_calls）','stream_invoke_with_tools 增量拼装工具调用','具名 provider 用自己端点（防串台事故）'] },
+};
+const detail = document.getElementById('detail');
+let cur = null;
+document.querySelectorAll('.blk').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.blk').forEach(b => b.classList.remove('on'));
+    el.classList.add('on');
+    const d = D[el.dataset.k]; cur = el.dataset.k;
+    detail.innerHTML = '<h3>'+d.t+'</h3><div class="path">'+d.p+'</div><div class="duty">'+d.duty+'</div>'+
+      '<ul>'+d.pts.map(p=>'<li>'+p+'</li>').join('')+'</ul>'+
+      (d.go ? '<a class="go" href="'+d.go[0]+'">'+d.go[1]+'</a>' : '');
+  });
+});
+window.__selftest = () => {
+  const blks = document.querySelectorAll('.blk').length;
+  document.querySelector('[data-k="agent"]').click();
+  const agentCard = detail.innerText.includes('max_rounds');
+  document.querySelector('[data-k="llm"]').click();
+  const llmCard = detail.innerText.includes('PROVIDERS');
+  return { blks, keys: Object.keys(D).length, allMapped: [...document.querySelectorAll('.blk')].every(b => D[b.dataset.k]), agentCard, llmCard };
+};
+</script>
+</body>
+</html>

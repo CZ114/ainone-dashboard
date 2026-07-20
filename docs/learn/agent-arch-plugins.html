@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 架构全景 ③ 能力开关板 — 给什么，得什么</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.6; padding: 26px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 23px; margin-bottom: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .nav a { font-size: 12.5px; text-decoration: none; color: var(--blue-deep); background: var(--card); border: 1.5px solid var(--border2); border-radius: 20px; padding: 5px 14px; }
+  .nav a.here { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .nav a:hover:not(.here) { border-color: var(--blue); }
+
+  .board { display: grid; grid-template-columns: 300px 1fr 1fr; gap: 13px; margin-top: 14px; align-items: start; }
+  @media (max-width: 980px) { .board { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; }
+  .panel h3 { font-size: 14px; margin-bottom: 8px; }
+
+  /* 开关 */
+  .sw { display: flex; align-items: center; gap: 9px; padding: 7px 4px; border-bottom: 1px dashed var(--border); cursor: pointer; user-select: none; }
+  .sw:last-child { border-bottom: none; }
+  .sw .tg { width: 36px; height: 20px; border-radius: 20px; background: var(--border2); position: relative; transition: all .2s; flex-shrink: 0; }
+  .sw .tg::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: all .2s; }
+  .sw.on .tg { background: var(--green); }
+  .sw.on .tg::after { left: 18px; }
+  .sw .nm { font-size: 12.5px; }
+  .sw .nm small { display: block; font-size: 10px; color: var(--soft); font-family: var(--mono); }
+  .sw.on .nm { font-weight: 700; color: var(--blue-deep); }
+
+  /* 构造代码 */
+  .codebox { font-family: var(--mono); font-size: 11.5px; background: #2e3a48; color: #cdd8e4; border-radius: 10px; padding: 12px 14px; line-height: 1.9; white-space: pre; overflow-x: auto; }
+  .codebox .req { color: #7fb0e6; }
+  .codebox .opt { color: #5a6b7d; transition: all .2s; }
+  .codebox .opt.on { color: #e6c07f; font-weight: 700; }
+  .codebox .cm { color: #5a8a5e; }
+
+  /* 获得面板 */
+  .gain { min-height: 60px; }
+  .gitem { border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 8px; padding: 7px 11px; margin: 6px 0; font-size: 12px; animation: pop .3s; }
+  .gitem b { color: var(--blue-deep); font-size: 12.5px; }
+  .gitem .tools { margin-top: 3px; }
+  .gitem .tl { display: inline-block; font-family: var(--mono); font-size: 10px; background: var(--violet-bg); color: var(--violet); border-radius: 5px; padding: 1px 7px; margin: 2px 3px 0 0; }
+  .gitem .desc { color: var(--muted); font-size: 11.5px; }
+  @keyframes pop { from { transform: scale(.95); opacity: 0; } }
+  .empty { color: var(--soft); font-size: 12px; text-align: center; padding: 22px 8px; font-style: italic; }
+  .err { border: 1.5px solid var(--red); background: var(--red-bg); color: var(--red); border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 6px 0; animation: pop .3s; }
+  .err code { background: #fff; color: var(--red); }
+  .count { font-size: 11.5px; color: var(--muted); margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 7px; }
+  .count b { color: var(--green); font-size: 15px; }
+
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 9px 13px; margin-top: 12px; font-size: 12.5px; }
+  .analogy b { color: var(--amber); }
+  .regnote { border-left: 4px solid var(--violet); background: var(--violet-bg); border-radius: 0 10px 10px 0; padding: 9px 13px; margin-top: 12px; font-size: 12.5px; }
+  .regnote b { color: var(--violet); }
+  .foot { margin-top: 24px; color: var(--soft); font-size: 11px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🎛 agent 架构全景 · ③ 能力开关板</h1>
+<p class="sub">框架的设计哲学：<b>给什么，自动得什么</b>——构造 Agent 时传一个对象，配套的注入 + 工具就自动装上；不传就完全不参与。拨开关试试。</p>
+<div class="nav">
+  <a href="./agent-arch-map.html">① 全景地图</a>
+  <a href="./agent-arch-loop.html">② 一次 send 的旅程 ▶</a>
+  <a class="here" href="#">③ 能力开关板</a>
+</div>
+
+<div class="board">
+  <div class="panel">
+    <h3>🎚 可选插件（拨我）</h3>
+    <div class="sw" data-k="memory"><div class="tg"></div><div class="nm">跨会话记忆<small>memory=FileMemoryStore(…)</small></div></div>
+    <div class="sw" data-k="retrieval"><div class="tg"></div><div class="nm">知识库（向量库）<small>retrieval=ChromaStore(…)</small></div></div>
+    <div class="sw" data-k="embedder"><div class="tg"></div><div class="nm">向量模型<small>embedder=BGE-M3</small></div></div>
+    <div class="sw" data-k="compactor"><div class="tg"></div><div class="nm">历史自动压缩<small>compactor=TokenBudgetCompactor()</small></div></div>
+    <div class="sw" data-k="audit"><div class="tg"></div><div class="nm">审计 + 续聊<small>audit_log=AuditLog(…)</small></div></div>
+    <div class="sw" data-k="skills"><div class="tg"></div><div class="nm">技能 / 命令<small>skill_store=FileSkillStore(…)</small></div></div>
+    <div class="sw" data-k="approval"><div class="tg"></div><div class="nm">高危工具审批<small>approval_callback=ask_human</small></div></div>
+    <div class="analogy"><b>🍱 比方：</b>点外卖加配菜——主餐（对话循环）永远有；勾一个配菜，餐具佐料自动配齐，不勾就完全不出现在袋子里。</div>
+  </div>
+
+  <div class="panel">
+    <h3>🧾 你的构造代码</h3>
+    <div class="codebox" id="codebox"></div>
+    <div class="regnote"><b>🔌 另一条路（registry 侧）：</b>MCP 服务器和 Web 工具不走构造参数，而是直接挂到工具注册表——<code>register_mcp_server(reg, source)</code>（stdio/HTTP/SSE）、<code>register_web_tools(reg)</code>。挂上以后与本地工具完全同等。</div>
+  </div>
+
+  <div class="panel">
+    <h3>🎁 框架自动送你</h3>
+    <div class="gain" id="gain"><div class="empty">还没开任何插件——此时就是一个纯对话 Agent（send/stream + 工具循环 + 动态注入骨架）。</div></div>
+    <div class="count" id="count"></div>
+  </div>
+</div>
+
+<div class="foot">开关与真实构造参数一一对应（agent/core/agent.py __init__）。"只给 retrieval 不给 embedder 会报错"也是真实行为（_maybe_register_retrieve 的 XOR 校验）。</div>
+
+</div>
+<script>
+const GAINS = {
+  memory: { t:'🧠 跨会话记忆', tools:['remember','list_memories','recall_memory','forget_memory'], desc:'自动注册 4 个记忆工具 + 注入 Tier-1 类目摘要（关掉重开还记得；.md 文件原子写）' },
+  compactor: { t:'🗜 历史自动压缩', tools:[], desc:'每次 send 前检查 token 阈值，超了走 5 阶段流水线（修剪工具结果→切段→LLM 摘要→[CONTEXT SUMMARY]→清孤儿）' },
+  audit: { t:'📼 审计 + 续聊', tools:[], desc:'每次 invoke 前完整快照落盘（JSONL）；turn 结束写干净历史 → Agent.resume() 可跨进程接着聊' },
+  skills: { t:'📚 技能 / 命令', tools:[], desc:'用户消息以 /名字 开头自动展开成完整技能流程（另可 register_skills 加 4 个技能工具让 LLM 自主发现）' },
+  approval: { t:'🛂 高危工具审批', tools:[], desc:'注册时标 requires_approval=True 的工具，执行前先调回调问人；不批准返回 error 让 LLM 换路' },
+  rag: { t:'🔍 知识库检索（RAG）', tools:['retrieve'], desc:'retrieval + embedder 两个都给 → 自动注册 retrieve(query, top_k) 工具，LLM 可主动查已导入的文档库（parallel=True 可并发）' },
+};
+const LINES = [
+  ['req', 'agent = Agent('],
+  ['req', '    client,              '], // AgentDeploy
+  ['req', '    system_prompt,       '],
+  ['req', '    registry,            '],
+  ['opt-memory',    '    memory=FileMemoryStore("./memory"),'],
+  ['opt-retrieval', '    retrieval=ChromaStore("./data/kb"),'],
+  ['opt-embedder',  '    embedder=SentenceTransformerEmbedder(),'],
+  ['opt-compactor', '    compactor=TokenBudgetCompactor(),'],
+  ['opt-audit',     '    audit_log=AuditLog("./sessions/x.jsonl"),'],
+  ['opt-skills',    '    skill_store=FileSkillStore("./skills"),'],
+  ['opt-approval',  '    approval_callback=ask_human,'],
+  ['req', ')'],
+];
+const state = { memory:false, retrieval:false, embedder:false, compactor:false, audit:false, skills:false, approval:false };
+function drawCode(){
+  document.getElementById('codebox').innerHTML = LINES.map(([cls, txt]) => {
+    if (cls === 'req') {
+      let cm = '';
+      if (txt.includes('client')) cm = '<span class="cm"># 必给: LLM 客户端 (AgentDeploy)</span>';
+      if (txt.includes('system_prompt')) cm = '<span class="cm"># 必给: 身份/规则</span>';
+      if (txt.includes('registry')) cm = '<span class="cm"># 必给: 工具注册表</span>';
+      return '<span class="req">'+txt+'</span>'+cm;
+    }
+    const k = cls.split('-')[1];
+    return '<span class="opt'+(state[k]?' on':'')+'">'+(state[k]?txt:'    <span style="opacity:.55"># '+txt.trim()+'</span>')+'</span>';
+  }).join('\n');
+}
+function drawGain(){
+  const g = document.getElementById('gain');
+  const items = [];
+  let toolCount = 0;
+  ['memory','compactor','audit','skills','approval'].forEach(k => {
+    if (state[k]) { items.push(GAINS[k]); toolCount += GAINS[k].tools.length; }
+  });
+  const r = state.retrieval, e = state.embedder;
+  let err = '';
+  if (r && e) { items.push(GAINS.rag); toolCount += 1; }
+  else if (r !== e) {
+    err = '<div class="err">💥 <b>ValueError</b>：retrieval 和 embedder 必须<b>一起给或一起不给</b>——检索要把问题变成向量才能搜，缺一个 <code>retrieve</code> 工具就废。这是框架的真实报错。</div>';
+  }
+  g.innerHTML = err + (items.length ? items.map(it =>
+    '<div class="gitem"><b>'+it.t+'</b><div class="desc">'+it.desc+'</div>'+
+    (it.tools.length?'<div class="tools">'+it.tools.map(t=>'<span class="tl">'+t+'()</span>').join('')+'</div>':'')+'</div>').join('')
+    : (err ? '' : '<div class="empty">还没开任何插件——此时就是一个纯对话 Agent（send/stream + 工具循环 + 动态注入骨架）。</div>'));
+  document.getElementById('count').innerHTML = '已启用插件 <b>'+items.length+'</b> 项 · 自动注册工具 <b>'+toolCount+'</b> 个' + (err?' · <span style="color:var(--red)">⚠ 配置不完整</span>':'');
+}
+document.querySelectorAll('.sw').forEach(el => {
+  el.addEventListener('click', () => {
+    const k = el.dataset.k;
+    state[k] = !state[k];
+    el.classList.toggle('on', state[k]);
+    drawCode(); drawGain();
+  });
+});
+drawCode(); drawGain();
+window.__selftest = () => {
+  // 全关 → 开 memory → 只开 retrieval (应报错) → 补 embedder (应得 retrieve)
+  const sw = k => document.querySelector('.sw[data-k="'+k+'"]');
+  Object.keys(state).forEach(k => { if(state[k]) sw(k).click(); });
+  sw('memory').click();
+  const memOk = document.getElementById('gain').innerText.includes('recall_memory');
+  sw('retrieval').click();
+  const xorErr = document.getElementById('gain').innerText.includes('ValueError');
+  sw('embedder').click();
+  const ragOk = document.getElementById('gain').innerText.includes('retrieve()') && !document.getElementById('gain').innerText.includes('ValueError');
+  sw('compactor').click(); sw('audit').click(); sw('skills').click(); sw('approval').click();
+  const all = document.querySelectorAll('.gitem').length;
+  return { memOk, xorErr, ragOk, allItems: all, toolCountText: document.getElementById('count').innerText };
+};
+</script>
+</body>
+</html>

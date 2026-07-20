@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent 架构全景 ② 一次 send 的旅程 — 你来驱动</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.6; padding: 26px 16px 80px; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 23px; margin-bottom: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .nav a { font-size: 12.5px; text-decoration: none; color: var(--blue-deep); background: var(--card); border: 1.5px solid var(--border2); border-radius: 20px; padding: 5px 14px; }
+  .nav a.here { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .nav a:hover:not(.here) { border-color: var(--blue); }
+
+  .board { display: grid; grid-template-columns: 1fr 350px; gap: 14px; margin-top: 14px; align-items: start; }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+
+  /* 流程站点 */
+  .stops { display: flex; flex-direction: column; }
+  .stop { display: flex; gap: 11px; align-items: flex-start; }
+  .stop .col { display: flex; flex-direction: column; align-items: center; }
+  .stop .bul { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border2); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--soft); transition: all .25s; flex-shrink: 0; }
+  .stop.lit .bul { border-color: var(--blue); background: var(--blue); color: #fff; box-shadow: 0 0 0 4px var(--blue-bg); }
+  .stop.done .bul { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+  .stop.skip .bul { border-style: dashed; opacity: .5; }
+  .stop .conn { width: 2px; flex: 1; min-height: 10px; background: var(--border); }
+  .stop .bd { flex: 1; padding-bottom: 11px; }
+  .stop .bd h4 { font-size: 13px; } .stop .bd h4 .f { font-family: var(--mono); font-size: 10px; color: var(--soft); font-weight: 400; }
+  .stop .bd p { font-size: 11.5px; color: var(--muted); }
+  .stop .note { display: none; font-family: var(--mono); font-size: 10.5px; color: var(--blue-deep); background: var(--blue-bg); border-radius: 6px; padding: 3px 8px; margin-top: 4px; }
+  .stop.lit .note, .stop.done .note { display: inline-block; }
+  .stop.skip .note { display: inline-block; background: #eef1f5; color: var(--soft); }
+
+  /* 控制台 */
+  .ctl { position: sticky; top: 12px; }
+  .ctl h3 { font-size: 14px; margin-bottom: 4px; }
+  .ctl .stat { font-size: 12px; color: var(--muted); margin-bottom: 8px; min-height: 34px; }
+  .btn { font: inherit; font-size: 13px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 8px 14px; transition: all .15s; width: 100%; margin: 3px 0; text-align: left; }
+  .btn:hover:not(:disabled) { border-color: var(--blue); }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .btn.tool { border-color: var(--violet); color: var(--violet); }
+  .btn.ans { border-color: var(--green); color: var(--green); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .rounds { font-family: var(--mono); font-size: 11.5px; margin: 8px 0; }
+  .rounds .rd { display: inline-block; width: 22px; height: 22px; line-height: 20px; text-align: center; border: 1.5px solid var(--border2); border-radius: 6px; margin-right: 3px; color: var(--soft); }
+  .rounds .rd.used { background: var(--violet-bg); border-color: var(--violet); color: var(--violet); font-weight: 700; }
+  .rounds .rd.now { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+
+  /* 消息堆栈 */
+  .stack { margin-top: 12px; }
+  .stack h4 { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .msg { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--border); border-radius: 7px; padding: 4px 9px; margin: 3px 0; transition: all .3s; }
+  .msg.sys { background: #eef1f5; color: var(--soft); }
+  .msg.usr { background: var(--blue-bg); color: var(--blue-deep); }
+  .msg.asst { background: var(--green-bg); color: var(--green); }
+  .msg.tool { background: var(--violet-bg); color: var(--violet); }
+  .msg.inj { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); font-weight: 700; }
+  .msg.new { animation: pop .4s; }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } }
+  .stack .cap { font-size: 10px; color: var(--soft); margin-top: 4px; }
+
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 9px 13px; margin: 12px 0 0; font-size: 12.5px; }
+  .analogy b { color: var(--amber); }
+  .foot { margin-top: 24px; color: var(--soft); font-size: 11px; border-top: 1px dashed var(--border2); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🚂 agent 架构全景 · ② 一次 send 的旅程</h1>
+<p class="sub">左边是 <code>Agent.send()</code> 的真实站点。<b>右边由你扮演 LLM</b>：每到决策点，选"要工具"还是"直接回答"，看流程怎么走、消息堆栈怎么长。</p>
+<div class="nav">
+  <a href="./agent-arch-map.html">① 全景地图</a>
+  <a class="here" href="#">② 一次 send 的旅程</a>
+  <a href="./agent-arch-plugins.html">③ 能力开关板 🎛</a>
+</div>
+
+<div class="board">
+  <div class="panel stops" id="stops"></div>
+
+  <div class="ctl">
+    <div class="panel">
+      <h3>🎮 你来当 LLM</h3>
+      <div class="stat" id="stat">点「▶ 发起 send」开始。</div>
+      <button class="btn primary" id="bStart" onclick="start()">▶ 发起 send("/诊断 患者胸闷…")</button>
+      <button class="btn tool" id="bTool" onclick="choose('tool')" disabled>🔧 我要查工具（retrieve 知识库）</button>
+      <button class="btn ans" id="bAns" onclick="choose('ans')" disabled>💬 我直接给最终回答</button>
+      <div class="rounds" id="rounds"></div>
+      <div class="stack">
+        <h4>发给 LLM 的 messages（注意 🟡 注入的位置）</h4>
+        <div id="stack"></div>
+        <div class="cap">🟡 注入永远插在<b>最后一条 user 之前</b>（尾置保缓存）；self.messages 本体永远不含 🟡。</div>
+      </div>
+    </div>
+    <div class="analogy"><b>💡 一句话：</b>send 就是一趟循环列车——每圈问一次模型"还要工具吗"，要就派发再回来（最多 8 圈），不要就到站交卷。</div>
+  </div>
+</div>
+
+<div class="foot">站点与代码逐一对应：agent/core/agent.py 的 send()（skills 展开 → compact → get_schemas → _build_messages_for_invoke → audit → client.invoke → dispatch_all 循环 → _record_turn_end）。</div>
+
+</div>
+<script>
+const STOPS = [
+  { id:'skill', icon:'📚', t:'/技能 展开', f:'_maybe_expand_skill_command', p:'消息以 / 开头且配了 skill_store → 展开成完整技能流程', note:'"/诊断" → 展开成完整诊断 skill body' },
+  { id:'cmp', icon:'🗜', t:'压缩检查', f:'compactor.should_compact?', p:'历史超 token 阈值才压缩（5 阶段流水线）', note:'本次未超阈值 → 跳过', skip:true },
+  { id:'sch', icon:'🗂', t:'取工具清单', f:'registry.get_schemas()', p:'每回合都重取（工具可能被热更新）', note:'12 个工具 schema' },
+  { id:'build', icon:'💉', t:'组装消息', f:'_build_messages_for_invoke', p:'拷干净历史 + 剥 _ts + 动态注入尾置（最后一条 user 前）', note:'注入 = <system-reminder>…</system-reminder>' },
+  { id:'aud', icon:'📼', t:'审计落盘', f:'audit.record_invoke', p:'含注入的完整快照先写盘，再发请求（transcript-first）', note:'→ sessions/xxx.jsonl' },
+  { id:'inv', icon:'🔀', t:'invoke LLM', f:'client.invoke(messages, tools)', p:'唯一出网。响应清洗成固定形状 {content, tool_calls?}', note:'HTTP POST → 服务商' },
+  { id:'branch', icon:'❓', t:'决策点：有 tool_calls 吗', f:'if not msg.get("tool_calls")', p:'← 右边由你选', note:'' },
+  { id:'disp', icon:'⚡', t:'派发工具', f:'dispatch_all(registry, tool_calls)', p:'串行先跑，parallel=True 并发；高危工具走审批回调；结果 append 回历史 → 回到「取工具清单」', note:'retrieve → 3 条命中 → 下一圈' },
+  { id:'end', icon:'🏁', t:'到站交卷', f:'_record_turn_end → return content', p:'写 transcript 快照（resume 数据源），返回最终文本', note:'返回诊断分析 ✓' },
+];
+const stops = document.getElementById('stops');
+stops.innerHTML = STOPS.map((s,i) =>
+  '<div class="stop" id="st_'+s.id+'"><div class="col"><div class="bul">'+s.icon+'</div>'+
+  (i<STOPS.length-1?'<div class="conn"></div>':'')+'</div><div class="bd"><h4>'+s.t+' <span class="f">'+s.f+'</span></h4><p>'+s.p+'</p>'+
+  (s.note?'<span class="note">'+s.note+'</span>':'')+'</div></div>').join('');
+
+const stack = document.getElementById('stack');
+let round = 0, MAXR = 8, running = false;
+const st = id => document.getElementById('st_'+id);
+function setBtns(start, tool, ans){ bStart.disabled=!start; bTool.disabled=!tool; bAns.disabled=!ans; }
+function drawRounds(){
+  document.getElementById('rounds').innerHTML = '工具回合 ' +
+    Array.from({length:MAXR},(_,i)=>'<span class="rd'+(i<round?' used':(i===round&&running?' now':''))+'">'+(i+1)+'</span>').join('') + ' / max_rounds=8';
+}
+function addMsg(cls, label){ stack.insertAdjacentHTML('beforeend','<div class="msg '+cls+' new">'+label+'</div>'); }
+function rebuildStack(withInj, extra){
+  stack.innerHTML='';
+  addMsg('sys','system · 你是医疗助理…');
+  addMsg('usr','user · (历史) 之前的对话');
+  extra.forEach(e=>addMsg(e[0],e[1]));
+  if(withInj) addMsg('inj','🟡 <system-reminder> 注入 (state/memory索引)');
+  addMsg('usr','user · /诊断 患者胸闷…(已展开)');
+}
+let toolMsgs = [];
+async function seq(ids, ms){
+  for(const id of ids){
+    STOPS.forEach(s=>st(s.id).classList.remove('lit'));
+    const conf = STOPS.find(s=>s.id===id);
+    st(id).classList.add(conf.skip?'skip':'lit');
+    await new Promise(r=>setTimeout(r, ms));
+    if(!conf.skip) { st(id).classList.remove('lit'); st(id).classList.add('done'); }
+  }
+}
+async function start(){
+  running = true; round = 0; toolMsgs = [];
+  STOPS.forEach(s=>st(s.id).classList.remove('lit','done','skip'));
+  setBtns(false,false,false); drawRounds();
+  document.getElementById('stat').textContent = '列车发车：技能展开 → 压缩检查 → 进入第 1 圈…';
+  rebuildStack(false, []);
+  await seq(['skill','cmp'], 550);
+  await enterRound();
+}
+async function enterRound(){
+  drawRounds();
+  await seq(['sch','build'], 450);
+  rebuildStack(true, toolMsgs);
+  await seq(['aud','inv'], 450);
+  st('branch').classList.add('lit');
+  document.getElementById('stat').innerHTML = '第 <b>'+(round+1)+'</b> 圈：模型（你）现在决定——还要工具吗？';
+  setBtns(false, round < MAXR-1, true);
+}
+async function choose(kind){
+  setBtns(false,false,false);
+  st('branch').classList.remove('lit'); st('branch').classList.add('done');
+  if(kind==='tool'){
+    toolMsgs.push(['asst','assistant · tool_calls: retrieve("胸闷 心血管")']);
+    toolMsgs.push(['tool','tool · {hits: 3 条指南片段}']);
+    rebuildStack(true, toolMsgs);
+    await seq(['disp'], 600);
+    st('disp').classList.remove('done');
+    round++;
+    document.getElementById('stat').textContent = '工具跑完，结果已 append 回历史 → 回到「取工具清单」进入下一圈。';
+    await enterRound();
+  } else {
+    toolMsgs.push(['asst','assistant · "诊断分析：结合症状与指南…"']);
+    rebuildStack(true, toolMsgs);
+    await seq(['end'], 550);
+    running = false; drawRounds();
+    document.getElementById('stat').innerHTML = '🏁 到站！共用 <b>'+round+'</b> 个工具回合。send() 返回最终文本。再点「▶」重跑，试试不同圈数。';
+    setBtns(true,false,false);
+  }
+}
+drawRounds();
+window.__selftest = async () => {
+  await start();
+  await choose('tool');
+  const afterTool = round === 1 && stack.innerText.includes('retrieve');
+  await choose('ans');
+  const done = !running && document.getElementById('stat').innerText.includes('到站');
+  const injTail = (() => { const ms=[...stack.querySelectorAll('.msg')]; const inj=ms.findIndex(m=>m.classList.contains('inj')); return inj === ms.length-2; })();
+  return { stops: STOPS.length, afterTool, done, injTail };
+};
+</script>
+</body>
+</html>
