@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentClinic 速通 — 论文与考试流程 · 可互动讲解</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --border2: #c3d2e2;
+    --text: #23303f; --muted: #6b7c8f; --soft: #8fa1b3;
+    --blue: #3f6fb0; --blue-bg: #e7eef8; --blue-deep: #2c5285;
+    --green: #4f8a5b; --green-bg: #e6f2e9;
+    --amber: #b9822f; --amber-bg: #f6ecd8;
+    --red: #b8503d; --red-bg: #f7e5e1;
+    --violet: #7a5ba6; --violet-bg: #efe9f7;
+    --s1: #2a78d6;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, "Microsoft YaHei", sans-serif; line-height: 1.7; padding: 30px 16px 90px; font-size: 14px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 25px; margin-bottom: 4px; }
+  h2 { font-size: 19px; margin: 38px 0 6px; padding-left: 11px; border-left: 4px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .lead { color: var(--soft); font-size: 12.5px; font-family: var(--mono); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--blue-bg); color: var(--blue-deep); padding: 1px 5px; border-radius: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+  .analogy { border-left: 4px solid var(--amber); background: var(--amber-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13.5px; }
+  .analogy b { color: var(--amber); }
+  .tech { border-left: 4px solid var(--blue); background: var(--blue-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 13px; }
+  .tech b { color: var(--blue-deep); }
+  .btn { font: inherit; font-size: 13px; cursor: pointer; border: 1.5px solid var(--border2); background: var(--card); border-radius: 9px; padding: 7px 14px; transition: all .15s; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.on, .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .elevator { border-left: 4px solid var(--green); background: var(--green-bg); font-size: 14px; }
+  .elevator b { color: var(--green); }
+  .tag { display: inline-block; font-size: 10.5px; background: var(--blue); color: #fff; border-radius: 6px; padding: 1px 9px; letter-spacing: .04em; margin-bottom: 6px; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+
+  /* 论文名片 */
+  .paper { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+  @media (max-width: 780px) { .paper { grid-template-columns: 1fr; } }
+  .pcard { border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; background: #f9fbfd; }
+  .pcard h3 { font-size: 14px; line-height: 1.5; }
+  .pcard .en { font-style: italic; color: var(--blue-deep); }
+  .meta-line { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .tl { border-left: 2px solid var(--border2); margin: 10px 0 0 6px; padding-left: 14px; }
+  .tl .ev { position: relative; font-size: 12.5px; padding: 3px 0; }
+  .tl .ev::before { content: ""; position: absolute; left: -19px; top: 11px; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+  .fam { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .fam span { font-size: 11.5px; border: 1.5px solid var(--border2); border-radius: 20px; padding: 3px 11px; background: var(--card); }
+  .fam span b { color: var(--blue-deep); }
+  .fam span.hi { border-color: var(--blue); background: var(--blue-bg); }
+
+  /* 角色卡 */
+  .roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  @media (max-width: 820px) { .roles { grid-template-columns: repeat(2, 1fr); } }
+  .role { border: 2px solid var(--border2); border-radius: 11px; padding: 10px; text-align: center; cursor: pointer; transition: all .18s; background: var(--card); }
+  .role .icn { font-size: 26px; }
+  .role b { display: block; font-size: 13px; margin: 3px 0 1px; }
+  .role small { font-size: 10.5px; color: var(--soft); display: block; line-height: 1.45; }
+  .role.on { border-color: var(--blue); background: var(--blue-bg); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .role.doc { border-style: dashed; }
+  .role.doc.on { border-style: solid; }
+  .roledetail { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: #f9fbfd; min-height: 120px; font-size: 13px; }
+  .roledetail .q { font-family: var(--mono); font-size: 11.5px; background: #2e3a48; color: #cdd8e4; padding: 8px 11px; border-radius: 7px; margin: 8px 0; line-height: 1.7; word-break: break-word; }
+  .roledetail .q i { color: #e6c07f; font-style: normal; }
+
+  /* 规则三条 */
+  .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  @media (max-width: 780px) { .rules { grid-template-columns: 1fr; } }
+  .rule { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: #f9fbfd; font-size: 12.5px; }
+  .rule b { display: block; font-size: 13px; margin-bottom: 4px; color: var(--blue-deep); }
+  .rule .m { font-family: var(--mono); font-size: 11px; background: var(--blue-bg); color: var(--blue-deep); border-radius: 5px; padding: 1px 6px; }
+
+  /* 回放 */
+  .replay { display: grid; grid-template-columns: 1fr 300px; gap: 14px; margin-top: 10px; }
+  @media (max-width: 860px) { .replay { grid-template-columns: 1fr; } }
+  .chat { border: 1px solid var(--border); border-radius: 12px; background: #f9fbfd; padding: 12px; min-height: 340px; max-height: 480px; overflow-y: auto; }
+  .bub { display: flex; gap: 8px; margin-bottom: 10px; animation: pop .3s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+  .bub .av { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; background: var(--card); border: 1.5px solid var(--border2); }
+  .bub .bd { max-width: 82%; }
+  .bub .who { font-size: 10px; color: var(--soft); font-family: var(--mono); margin-bottom: 1px; }
+  .bub .txt { border-radius: 10px; padding: 7px 11px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border); background: var(--card); }
+  .bub.doctor .txt { background: var(--blue-bg); border-color: #cfe0f2; }
+  .bub.measurement .txt { background: var(--violet-bg); border-color: #ddd0ee; font-family: var(--mono); font-size: 11.5px; }
+  .bub.moderator .txt { background: var(--green-bg); border-color: #cfe6d3; font-weight: 700; }
+  .bub .zh { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .bub .note { display: inline-block; font-size: 10.5px; color: var(--amber); background: var(--amber-bg); border-radius: 5px; padding: 1px 7px; margin-top: 4px; }
+  .bub.testcall .txt { box-shadow: 0 0 0 2px var(--amber); }
+  .sidecol .panel2 { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: var(--card); margin-bottom: 10px; font-size: 12.5px; }
+  .panel2 b.t { display: block; font-size: 12px; color: var(--blue-deep); margin-bottom: 4px; }
+  .goldbox { filter: blur(5px); cursor: pointer; transition: filter .25s; user-select: none; }
+  .goldbox.show { filter: none; }
+  .stat2 { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .stat2:last-child { border-bottom: none; }
+  .stat2 .v { font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+  .verdictcard { border: 2px solid var(--green); border-radius: 10px; background: var(--green-bg); padding: 10px 13px; font-size: 13px; display: none; }
+  .verdictcard.show { display: block; animation: pop .35s; }
+
+  /* 论文成绩单横条 */
+  .hrow { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .hrow .hl { width: 130px; font-size: 11.5px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .hrow .htrack { flex: 1; position: relative; padding-right: 46px; }
+  .hrow .hbar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); position: relative; transition: width .5s; cursor: default; }
+  .hrow .hbar.human { background: #8a97a5; }
+  .hrow .hv { position: absolute; right: -44px; top: -1px; font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); margin: 6px 0 2px; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+
+  /* 复刻三条件 */
+  .conds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  @media (max-width: 780px) { .conds { grid-template-columns: 1fr; } }
+  .cond { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: #f9fbfd; font-size: 12.5px; }
+  .cond b.h { display: block; font-size: 13px; margin-bottom: 3px; }
+  .cond.a1 b.h { color: var(--red); } .cond.a2 b.h { color: var(--blue-deep); } .cond.a3 b.h { color: var(--green); }
+
+  .qa { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+  .qa summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 13.5px; list-style: none; }
+  .qa summary::before { content: "❓ "; }
+  .qa summary:hover { background: var(--blue-bg); }
+  .qa .a { padding: 0 14px 12px; font-size: 13px; }
+  .foot { margin-top: 30px; color: var(--soft); font-size: 12px; border-top: 1px dashed var(--border2); padding-top: 12px; }
+  .xref { display: inline-block; font-size: 12px; color: var(--blue-deep); background: var(--blue-bg); border: 1px solid #cfe0f2; border-radius: 8px; padding: 4px 10px; margin-top: 6px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🏥 AgentClinic 速通 — 这场"AI 问诊考试"到底怎么考</h1>
+<p class="sub">论文出处 · 考场角色 · 考试规则 · <b>真实病例逐轮回放</b>(用你自己评测跑出来的记录)。<span class="lead">全部事实来自论文原文与仓库代码,点开自己玩。</span></p>
+
+<div class="panel elevator">
+  <span class="tag">30 秒电梯版</span><br>
+  医学考试题库 MedQA(美国医师执照考试 USMLE)本来是<b>选择题</b>——病史全给你,选个答案就行。AgentClinic 把它改成了<b>真的要问诊</b>:病史藏在一个 AI 扮演的"病人"肚子里,AI 医生得自己一句句问出来、自己决定开什么检查,20 次机会内下诊断,裁判对答案。<b>同样的题,从"看题选答案"变成"问出答案",最差的模型准确率掉到不足原来的十分之一。</b>你的评测把这个考场原样搬了过来,只把"医生位"换成自己的 agent 框架。
+</div>
+
+<!-- ① 论文名片 -->
+<h2>① 论文名片:谁做的、发在哪</h2>
+<div class="panel">
+  <div class="paper">
+    <div class="pcard">
+      <h3><span class="en">AgentClinic: a multimodal agent benchmark to evaluate AI in simulated clinical environments</span></h3>
+      <div class="meta-line">Samuel Schmidgall 等 7 人 · Johns Hopkins + Stanford + ETH Zürich</div>
+      <div class="tl">
+        <div class="ev"><b>2024-05</b> arXiv 预印本首发(<span style="font-family:var(--mono);font-size:11px">2405.07960</span>,后迭代 5 版)</div>
+        <div class="ev"><b>2026-04</b> 正式见刊 <i>npj Digital Medicine</i>(Vol 9, #499),期刊版改题强调"工具使用"</div>
+      </div>
+      <div class="meta-line" style="margin-top:8px">⚠ 你 runner.py 里引的"npj Digital Medicine 2024"其实是 arXiv 年份——期刊正式见刊是 2026 年,引用时建议写 arXiv 2024 / npj 2026。</div>
+    </div>
+    <div class="pcard">
+      <b style="font-size:12.5px">Benchmark 家族(你测的是第一个)</b>
+      <div class="fam">
+        <span class="hi"><b>MedQA</b> 215 例纯文本(USMLE 改)</span>
+        <span><b>NEJM</b> 120 例多模态(要看医学影像)</span>
+        <span><b>MIMIC-IV</b> 真实电子病历(需授权)</span>
+        <span><b>多语言</b> 749 例 · 7 种语言(含中文)</span>
+        <span><b>专科</b> 260 例 · 9 个专科</span>
+      </div>
+      <div class="meta-line" style="margin-top:8px">病例怎么来的:从 MedQA 抽题 → GPT-4 按 OSCE(客观结构化临床考试)模板填成结构化 JSON → <b>逐例人工校验</b>。信息按角色拆分:病人只拿到症状病史,裁判才有标准答案。</div>
+    </div>
+  </div>
+  <div class="analogy"><b>🎓 比方:</b>原来的 MedQA 像<b>笔试</b>——卷子上病史写得明明白白,勾个选项就行。AgentClinic 把它改成<b>面试考官手里的标准化病人</b>:考生(AI 医生)面前坐着一位"演员病人",病史全在演员肚子里,你不问他不说;想看化验单得自己开;问够 20 句必须交卷。这正是医学院考真人医生的 OSCE 考法。</div>
+</div>
+
+<!-- ② 考场四角色 -->
+<h2>② 考场上的四个 AI:点开看每个角色的"剧本"</h2>
+<p class="sub">四个角色都是 LLM 在演。<b>只有医生位是被测对象</b>,另外三个是考场设施(你的评测里固定用 gpt-4o-mini 扮演,保证公平)。点角色卡看它的 system prompt 原话:</p>
+<div class="panel">
+  <div class="roles">
+    <div class="role doc on" id="r_doctor" onclick="pickRole('doctor')"><span class="icn">🩺</span><b>Doctor</b><small>被测位 · 问诊+开检查<br>限 20 次交互</small></div>
+    <div class="role" id="r_patient" onclick="pickRole('patient')"><span class="icn">🤒</span><b>Patient</b><small>演员病人 · 知症状<br>不知诊断</small></div>
+    <div class="role" id="r_measurement" onclick="pickRole('measurement')"><span class="icn">🧪</span><b>Measurement</b><small>检验台 · 按单出结果</small></div>
+    <div class="role" id="r_moderator" onclick="pickRole('moderator')"><span class="icn">⚖️</span><b>Moderator</b><small>裁判 · 持标准答案<br>只答 Yes/No</small></div>
+  </div>
+  <div class="roledetail" id="roleDetail"></div>
+  <div class="tech"><b>🔧 技术细节:</b>四角色全是"无状态单轮调用"——每次把 (system prompt + 序列化的对话历史) 打包发一次请求,<code>temperature=0.05</code>、<code>max_tokens=200</code>、回答压缩空白。你的复刻对病人/检验/裁判三角色<b>逐字镜像</b>官方提示词与调用形状(连裁判 prompt 里官方把 correct 拼错成 <code>corrent</code> 都原样保留)——只有医生位按 A1/A2/A3 替换。</div>
+</div>
+
+<!-- ③ 考试规则 -->
+<h2>③ 考试规则:三个硬约定</h2>
+<div class="panel">
+  <div class="rules">
+    <div class="rule"><b>⏳ 20 次交互预算</b>医生问病人一句、开一次检查,都花掉 1 次。官方裸协议里<b>开检查占一整回合</b>(那轮不能同时问病人)。最后一轮系统会硬塞一句 <span class="m">"This is the final question. Please provide a diagnosis."</span> 强制交卷。论文消融:预算从 20 砍到 10,GPT-4 准确率 52%→25%。</div>
+    <div class="rule"><b>🧾 开检查的暗号</b>医生想看化验/影像,必须在回复里打出固定格式 <span class="m">REQUEST TEST: Chest_X-Ray</span>。系统靠<b>子串匹配</b>认出来,把请求转给检验台;病例里备好了就逐字返回 <span class="m">RESULTS: [...]</span>,没备的一律回 <span class="m">NORMAL READINGS</span>。</div>
+    <div class="rule"><b>💬 交卷的暗号</b>医生想下诊断就打 <span class="m">DIAGNOSIS READY: [病名]</span>,系统一看到这串字就终止问诊、把诊断连同标准答案发给裁判。裁判只准回 Yes 或 No,程序判 <span class="m">answer.lower() == "yes"</span> 才算对——精确匹配,没有部分分。</div>
+  </div>
+  <div class="analogy"><b>📝 比方:</b>整场考试的"协议"就是三句黑话:<b>要化验喊 REQUEST TEST</b>、<b>交卷喊 DIAGNOSIS READY</b>、<b>裁判只许点头摇头</b>。强推理模型在裸协议下最容易犯的错,恰恰是聊得太投入、<b>忘了喊交卷暗号</b>——20 轮烧完一个诊断都没给,这就是"跑飞"(你的评测里 GLM 裸协议 27 例全军覆没的原因)。</div>
+</div>
+
+<!-- ④ 真实回放 -->
+<h2>④ 真实病例逐轮回放:看你的框架当一次医生</h2>
+<p class="sub">下面不是编的——是你评测记录里<b>真实跑出来的一例</b>(deepseek-v3.2 当医生 · A2 框架条件 · 判定正确)。点「▶ 下一句」或「自动播放」,右侧病例卡里的标准答案默认打码,想剧透就点它。</p>
+<div class="panel">
+  <div class="row" style="margin-bottom:8px">
+    <button class="btn primary" id="stepBtn" onclick="replayStep()">▶ 下一句</button>
+    <button class="btn" id="autoBtn" onclick="replayAuto()">⏩ 自动播放</button>
+    <button class="btn" onclick="replayReset()">↺ 重置</button>
+    <span class="hint" id="replayStat">对话共 16 条,医生 6 轮收官(上限 20)。</span>
+  </div>
+  <div class="replay">
+    <div class="chat" id="chat"><div class="hint" style="text-align:center;padding:30px 0">(病人走进诊室…点「▶ 下一句」开始)</div></div>
+    <div class="sidecol">
+      <div class="panel2">
+        <b class="t">📋 病例卡(考官视角)</b>
+        新生儿,32 孕周早产,剖宫产。出生后不久呼吸窘迫:气促、三凹征、鼻翼扇动、发绀(吸氧改善);血氧 88%(室内空气)。母亲有妊娠糖尿病。
+        <div style="margin-top:6px;font-size:11.5px;color:var(--muted)">备好的检查(医生不知道清单):血气分析 / 胸片 / 血糖</div>
+        <div style="margin-top:8px"><b class="t">🔒 标准答案(点击揭晓)</b>
+          <div class="goldbox" id="gold" onclick="this.classList.add('show')">Neonatal Respiratory Distress Syndrome(新生儿呼吸窘迫综合征)</div>
+        </div>
+      </div>
+      <div class="panel2">
+        <b class="t">📊 本例档案</b>
+        <div class="stat2"><span>医生模型</span><span class="v">deepseek-v3.2</span></div>
+        <div class="stat2"><span>条件</span><span class="v">A2 自研框架</span></div>
+        <div class="stat2"><span>医生轮数</span><span class="v">6 / 上限 20</span></div>
+        <div class="stat2"><span>开检查</span><span class="v">2 次(1 中 1 空)</span></div>
+        <div class="stat2"><span>整例耗时</span><span class="v">281 秒</span></div>
+        <div class="stat2"><span>出处</span><span class="v" style="font-size:10px">deepseek_80_106.jsonl · case 96</span></div>
+      </div>
+      <div class="verdictcard" id="verdict">⚖️ 裁判:<b>Yes</b> —— 医生诊断"早产儿表面活性物质缺乏所致 RDS"与标准答案 NRDS 判为同一疾病 → <b>✓ 记 1 分</b></div>
+    </div>
+  </div>
+  <div class="tech"><b>🔧 技术细节(A2 和官方的一个可见差异):</b>回放里医生第 3 句"顺便开一张胸片"用的是 <code>request_test</code> <b>原生工具</b>——结果同一回合就回来了;官方裸协议里这要占掉一整个回合(那轮不能问病人)。这是复刻文档里披露的差异 1,另外两处:A2 的 system prompt 不逐轮更新"已问 N 题"计数、回复无 200 token 硬截断。全部披露在 runner.py 头部,"是被测框架的真实行为,不为对齐官方而改"。</div>
+</div>
+
+<!-- ⑤ 论文成绩单 -->
+<h2>⑤ 论文成绩单:这考试有多难</h2>
+<div class="panel">
+  <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>AI 模型</span><span><span class="sw" style="background:#8a97a5"></span>人类医生(对照)</span></div>
+  <div id="paperBars"></div>
+  <div class="hint" style="margin-top:8px">AgentClinic-MedQA 准确率(论文 v5 数据)。注意两点:<b>人类医生也只有 54%</b>(±28.5,个体差异极大)——这考试对谁都难;GPT-4o(34.2%)反而低于 GPT-4(51.6%),论文原文如此。多模态 NEJM 子集更难,最好成绩仅 Claude-3.5 的 37.2%。</div>
+  <ul style="list-style:none;margin-top:10px;font-size:13px">
+    <li style="padding:5px 0;border-bottom:1px dashed var(--border)">✦ <b>预算敏感</b>:交互次数 20→10,GPT-4 掉 52%→25%——问不够就诊不准。</li>
+    <li style="padding:5px 0;border-bottom:1px dashed var(--border)">✦ <b>偏差实验</b>:给医生/病人注入 23-24 种认知与隐性偏差(锚定、种族、性别…),GPT-4 较抗(保留 92%),弱模型受伤更重;性别偏差还会让"病人"对医生的信心评分掉 4.7 分。</li>
+    <li style="padding:5px 0">✦ <b>工具有用</b>:期刊版重点——给 Llama-3 配上跨病例记笔记的 notebook 工具,相对提升最高 92%。这与你"框架/工具让模型可靠"的结论同向。</li>
+  </ul>
+</div>
+
+<!-- ⑥ 你的复刻 -->
+<h2>⑥ 你的复刻:同一考场,三种医生</h2>
+<div class="panel">
+  <div class="conds">
+    <div class="cond a1"><b class="h">A1 · 裸协议(对照组)</b>官方 DoctorAgent 的<b>忠实复刻</b>:无状态单轮、历史塞 prompt、纯文本暗号。代码里标明"不可改"——它是科学实验的外部锚点。</div>
+    <div class="cond a2"><b class="h">A2 · 自研框架</b>你的 Agent 当医生:<b>真实消息历史</b>(不是把历史串进 prompt)+ <code>request_test</code> 原生工具同回合返回;交卷仍用 DIAGNOSIS READY 暗号。</div>
+    <div class="cond a3"><b class="h">A3 · 框架 + RAG</b>A2 再挂 <code>retrieve</code> 工具接医疗指南知识库(BGE-M3 + Chroma)——"完全体"医疗 agent,可以边问诊边查指南。</div>
+  </div>
+  <div class="analogy"><b>🔬 比方:</b>这是标准的<b>控制变量实验</b>:考场、病人、检验台、裁判、病例、温度参数全部钉死,唯一换的是"医生这个人"。所以三条件的分差只能来自医生位本身——这就是为什么"GLM 裸协议 0% vs 套框架 100% 完成"能干净地归因给框架。</div>
+  <a class="xref" href="./progress-report-2026-07.html">↗ 跑分结果看进度页:完成率图(0→100)与准确率图(~70%)</a>
+</div>
+
+<!-- ⑦ 速答卡 -->
+<h2>⑦ 速答卡</h2>
+<details class="qa"><summary>裁判也是个 AI,它判卷可信吗?</summary><div class="a">裁判只做一件极窄的事:比对"医生诊断"和"标准答案"是不是同一种病,只准回 Yes/No。这比开放打分可靠得多。你的复刻还把裁判原话<b>全量落盘</b>(moderator_raw)备人工抽查。顺带一提:官方裁判 prompt 里把 correct 拼成了 <code>corrent</code>,你的复刻原样保留——忠实复刻连错别字也复刻。</div></details>
+<details class="qa"><summary>病人 agent 会不会直接把病名说漏嘴?</summary><div class="a">它的剧本里根本没有病名——病例 JSON 按角色拆分,Patient_Actor 字段只有人口学信息、症状、病史,<code>Correct_Diagnosis</code> 只发给裁判。提示词还叮嘱它"绝不能明说疾病,只能在被问到时用对话描述症状",且每次只答 1-3 句。</div></details>
+<details class="qa"><summary>医生开一个病例里没备的检查会怎样?</summary><div class="a">检验台按规则回 <code>NORMAL READINGS</code>(一切正常)。回放里就有活例:deepseek 开 Blood_Tests,清单里没有,拿到"正常"——这反而帮它排除了感染,是有效信息。</div></details>
+<details class="qa"><summary>为什么 A2 用上了真框架,交卷还走 DIAGNOSIS READY 文本暗号?</summary><div class="a">因为主循环要用<b>同一套终止判定</b>对三个条件计分(子串匹配 → 触发裁判 → break)。把交卷方式也换掉,就多了一个变量,分差没法干净归因。控制变量:能不动的都不动。</div></details>
+<details class="qa"><summary>这个考试跟"跑分榜"上的准确率是什么关系?</summary><div class="a">进度页跑分图的每根柱子 = 在这个考场上考 N 个病例的对分率。<b>完成率</b> = 20 轮内喊出 DIAGNOSIS READY 的比例(强话痨模型裸协议下最容易挂在这);<b>准确率</b> = 喊了且裁判判 Yes 的比例。框架救的是前者,后者由模型强弱+病例难度决定。</div></details>
+
+<div class="foot">事实来源:arXiv 2405.07960(v5)与 npj Digital Medicine Vol 9 #499 · 官方参考实现 <code>evaluation/agentclinic/reference/agentclinic_original.py</code> · 复刻 <code>runner.py</code> · 真实对话取自 <code>results/agentclinic_deepseek_80_106.jsonl</code>(case 96,未改一字,仅配中文旁白)。</div>
+
+</div>
+<script>
+// ② 角色卡
+const ROLES = {
+  doctor: { t: '🩺 Doctor — 被测位,整场考试唯一的变量',
+    d: '靠提问和开检查搞清病情,20 次交互内必须交卷。任务书来自病例的 Objective_for_Doctor 字段。',
+    q: 'You are a doctor named Dr. Agent who only responds in the form of dialogue. ... You are only allowed to ask <i>{MAX_INFS}</i> questions total before you must make a decision. You have asked <i>{infs}</i> questions so far.',
+    n: '注意 {infs}:官方每一轮都把"你已经问了几句"填进提示词,给医生紧迫感。你的 A2 没做这个逐轮计数(披露差异 2)——因为 Agent 的 system prompt 层是恒定的。' },
+  patient: { t: '🤒 Patient — 演员病人,知症状、不知诊断',
+    d: '拿到 Patient_Actor 剧本(人口学/症状/病史),模仿真实患者答话,每次 1-3 句。',
+    q: 'You are a patient in a clinic who only responds in the form of dialogue. ... Remember, <i>you must not reveal your disease explicitly</i> but may only convey the symptoms you have in the form of dialogue if you are asked.',
+    n: '论文还可给它注入偏差人格做压力测试,如 self_diagnosis:"你在网上查过,坚信自己得的是癌症"——考医生会不会被病人带偏。' },
+  measurement: { t: '🧪 Measurement — 检验台,按单出结果',
+    d: '收到 REQUEST TEST 后,从病例备好的 Physical_Examination_Findings + Test_Results 里查数返回。',
+    q: 'You are an measurement reader who responds with medical test results. Please respond in the format <i>"RESULTS: [results here]"</i> ... If the requested results are not in your data then you can respond with <i>NORMAL READINGS</i>.',
+    n: '"没备的检查一律回正常"是个聪明设计:医生乱开检查不会被惩罚也不会得提示,只有开对检查才有信息增益。' },
+  moderator: { t: '⚖️ Moderator — 裁判,只许点头摇头',
+    d: '拿标准答案 Correct_Diagnosis 对比医生的最终诊断,判定是否同一疾病。它是个函数调用,不是持久角色。',
+    q: 'You are responsible for determining if the <i>corrent</i> diagnosis and the doctor diagnosis are the same disease. Please respond only with <i>Yes or No</i>. Nothing else.',
+    n: '官方把 correct 拼成 "corrent",你的复刻原样保留(忠实复刻原则)。程序判 answer.lower()=="yes" 才记分——精确匹配。' },
+};
+function pickRole(k){
+  ['doctor','patient','measurement','moderator'].forEach(r =>
+    document.getElementById('r_'+r).classList.toggle('on', r===k));
+  const r = ROLES[k];
+  document.getElementById('roleDetail').innerHTML =
+    '<b>'+r.t+'</b><div style="margin:4px 0 0">'+r.d+'</div><div class="q">'+r.q+'</div>' +
+    '<div style="font-size:12px;color:var(--muted)">💡 '+r.n+'</div>';
+}
+pickRole('doctor');
+
+// ④ 回放 (真实记录: agentclinic_deepseek_80_106.jsonl case 96, 原文未改)
+const AV = { doctor:'🩺', patient:'🤒', measurement:'🧪', moderator:'⚖️' };
+const WHO = { doctor:'Dr. Agent (deepseek-v3.2 · A2)', patient:'Patient (gpt-4o-mini)', measurement:'Measurement (gpt-4o-mini)', moderator:'Moderator (gpt-4o-mini)' };
+const DLG = [
+  { s:'doctor', t:"Hello, I'm Dr. Agent. I understand your newborn is having breathing difficulties. Can you tell me when the respiratory distress started and if there were any complications during birth?", zh:'你好,我是 Agent 医生。宝宝的呼吸困难什么时候开始的?出生时有并发症吗?', note:'开场抓主诉:起病时间 + 出生史' },
+  { s:'patient', t:'The respiratory distress started shortly after birth. There were no complications during the cesarean delivery.', zh:'出生后不久就开始了;剖宫产过程没有并发症。' },
+  { s:'doctor', t:"How many weeks was the pregnancy, and what was the baby's birth weight? Also, are there any signs like bluish skin color or grunting sounds when breathing?", zh:'怀孕几周?出生体重多少?有没有皮肤发紫、呼吸呻吟?' },
+  { s:'patient', t:"The baby was born after the 32nd gestational week, but I don't know the exact birth weight. Yes, there are signs of bluish skin color and some grunting sounds when breathing.", zh:'32 周早产;体重不清楚;确实有发紫和呻吟。', note:'关键线索:32 周早产 + 发绀 + 呻吟' },
+  { s:'doctor', t:"I'd like to know about the mother's health during pregnancy - any infections, fever, or medical conditions like diabetes? Also, let me request a chest X-ray to assess the lungs.", zh:'母亲孕期有感染、发热或糖尿病吗?顺便,开一张胸片看看肺。', note:'开检查单:request_test("Chest_X-Ray") 原生工具,同回合返回', test:true },
+  { s:'measurement', t:'"RESULTS: Findings: Ground-glass appearance, air bronchograms, suggesting Respiratory Distress Syndrome (RDS)"', zh:'检查结果:毛玻璃影 + 支气管充气征,提示 RDS。命中病例备好的 Test_Results,逐字返回。' },
+  { s:'doctor', t:'I see the chest X-ray shows signs of RDS. What oxygen support is the baby currently receiving, and has surfactant therapy been given? Also, does the baby have any fever or difficulty feeding?', zh:'胸片提示 RDS。目前怎么吸氧?用过肺表面活性物质吗?有发热或喂养困难吗?', note:'拿到影像立刻追问治疗现状' },
+  { s:'patient', t:"The baby is currently receiving supplemental oxygen, and I'm not sure if surfactant therapy has been given. There hasn't been any fever, and there were no feeding difficulties noted before the symptoms started.", zh:'在吸氧;表面活性物质不清楚;没发热,喂养正常。' },
+  { s:'doctor', t:"Was the mother given steroid injections before delivery to help the baby's lungs mature? What is the baby's current respiratory rate, and are there any chest retractions or nasal flaring?", zh:'产前打过促肺成熟的激素吗?呼吸频率?有三凹征、鼻翼扇动吗?', note:'问产前激素——NRDS 的经典风险点' },
+  { s:'patient', t:"The mother did not receive steroid injections before delivery. The baby's current respiratory rate is elevated, and there are noticeable subcostal and intercostal retractions along with nasal flaring.", zh:'没打激素;呼吸急促;有肋下/肋间凹陷和鼻翼扇动。', note:'确认:未打激素 + 三凹征' },
+  { s:'doctor', t:'Let me request blood tests to check for infection and assess oxygenation. Also, are there any heart murmurs or abnormal heart sounds, and was there premature rupture of membranes before delivery?', zh:'开血液检查排除感染;有心脏杂音吗?有胎膜早破吗?', note:'第二次开检查:request_test("Blood_Tests")', test:true },
+  { s:'measurement', t:'"RESULTS: NORMAL READINGS"', zh:'Blood_Tests 不在病例预设清单 → 按规则回"一切正常"。这反而帮医生排除了感染。' },
+  { s:'doctor', t:"What were the baby's Apgar scores at 1 and 5 minutes? Also, is the baby on CPAP or mechanical ventilation, and are there any heart murmurs detected?", zh:'Apgar 评分多少?用的 CPAP 还是呼吸机?有杂音吗?' },
+  { s:'patient', t:"I'm not sure about the Apgar scores at 1 and 5 minutes. The baby is currently on supplemental oxygen, but I don't know if it's CPAP or mechanical ventilation. There haven't been any heart murmurs detected.", zh:'评分不清楚;在吸氧;没有杂音。' },
+  { s:'doctor', t:'DIAGNOSIS READY: Respiratory Distress Syndrome (RDS) due to surfactant deficiency in a preterm infant (32 weeks gestation).', zh:'【交卷暗号】诊断:早产儿(32 周)表面活性物质缺乏所致呼吸窘迫综合征。', note:'第 6 轮交卷,远低于 20 轮上限' },
+  { s:'moderator', t:'Yes', zh:'裁判对照标准答案 NRDS → 同一疾病 ✓' },
+];
+let ri = 0, autoTimer = null;
+function replayStep(){
+  if (ri >= DLG.length) return;
+  const chat = document.getElementById('chat');
+  if (ri === 0) chat.innerHTML = '';
+  const d = DLG[ri];
+  chat.insertAdjacentHTML('beforeend',
+    '<div class="bub '+d.s+(d.test?' testcall':'')+'"><div class="av">'+AV[d.s]+'</div><div class="bd">'+
+    '<div class="who">'+WHO[d.s]+'</div><div class="txt">'+d.t+'</div>'+
+    '<div class="zh">'+d.zh+'</div>'+(d.note?'<span class="note">💡 '+d.note+'</span>':'')+'</div></div>');
+  chat.scrollTop = chat.scrollHeight;
+  ri++;
+  document.getElementById('replayStat').textContent = '第 '+ri+'/16 条';
+  if (ri >= DLG.length){
+    document.getElementById('stepBtn').disabled = true;
+    document.getElementById('autoBtn').disabled = true;
+    document.getElementById('verdict').classList.add('show');
+    document.getElementById('gold').classList.add('show');
+    document.getElementById('replayStat').textContent = '✅ 回放完毕:6 轮问诊 + 2 次检查 → 诊断正确';
+    if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+  }
+}
+function replayAuto(){
+  if (autoTimer){ clearInterval(autoTimer); autoTimer = null; document.getElementById('autoBtn').textContent = '⏩ 自动播放'; return; }
+  document.getElementById('autoBtn').textContent = '⏸ 暂停';
+  autoTimer = setInterval(() => { replayStep(); if (ri >= DLG.length && autoTimer){ clearInterval(autoTimer); autoTimer = null; } }, 1600);
+}
+function replayReset(){
+  ri = 0;
+  if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+  document.getElementById('chat').innerHTML = '<div class="hint" style="text-align:center;padding:30px 0">(病人走进诊室…点「▶ 下一句」开始)</div>';
+  document.getElementById('stepBtn').disabled = false;
+  document.getElementById('autoBtn').disabled = false;
+  document.getElementById('autoBtn').textContent = '⏩ 自动播放';
+  document.getElementById('verdict').classList.remove('show');
+  document.getElementById('gold').classList.remove('show');
+  document.getElementById('replayStat').textContent = '对话共 16 条,医生 6 轮收官(上限 20)。';
+}
+
+// ⑤ 论文成绩单 (arXiv v5 数据)
+const SCORES = [
+  ['Claude-3.5', 62.1, false], ['OpenBioLLM-70B', 58.3, false], ['人类医生', 54, true],
+  ['GPT-4', 51.6, false], ['Mixtral-8x7B', 37.1, false], ['GPT-3.5', 36.6, false],
+  ['GPT-4o', 34.2, false], ['Llama-3 70B', 19, false], ['Llama-2 70B', 4.5, false],
+];
+document.getElementById('paperBars').innerHTML = SCORES.map(([l, v, human]) =>
+  '<div class="hrow"><span class="hl">'+l+'</span><div class="htrack">'+
+  '<div class="hbar'+(human?' human':'')+'" style="width:'+v+'%" title="'+l+': '+v+'%"><span class="hv">'+v+'%</span></div></div></div>').join('');
+
+// selftest
+window.__selftest = () => {
+  replayReset();
+  replayStep(); replayStep(); replayStep(); replayStep(); replayStep(); replayStep();
+  const sixBubbles = document.querySelectorAll('#chat .bub').length === 6;
+  const testHighlight = document.querySelectorAll('#chat .bub.testcall').length === 1;
+  while (ri < DLG.length) replayStep();
+  const done = document.getElementById('verdict').classList.contains('show')
+    && document.getElementById('gold').classList.contains('show')
+    && document.getElementById('stepBtn').disabled;
+  pickRole('moderator');
+  const corrent = document.getElementById('roleDetail').innerHTML.includes('corrent');
+  pickRole('patient');
+  const noReveal = document.getElementById('roleDetail').innerHTML.includes('not reveal');
+  const bars = document.querySelectorAll('#paperBars .hbar').length;
+  const human = document.querySelectorAll('#paperBars .hbar.human').length;
+  replayReset(); pickRole('doctor');
+  return { dlgTotal: DLG.length, sixBubbles, testHighlight, done, corrent, noReveal, bars, human };
+};
+</script>
+</body>
+</html>
