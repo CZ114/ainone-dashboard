@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ainone.local/schemas/doctor-evaluation-method-output.schema.json",
+  "title": "Doctor Evaluation Method Output",
+  "description": "Provider-neutral output contract shared by the plain model, standard agent and improved agent runners.",
+  "$ref": "doctor-evaluation-study.schema.json#/$defs/methodOutput"
+}

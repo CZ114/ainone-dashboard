@@ -14,6 +14,8 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { type SessionSummary } from '../../store/chatStore';
 import { claudeApi, type SearchHit } from '../../api/claudeApi';
 import { useCan } from '../../contexts/RoleContext';
+import { patientsApi, type Patient } from '../../api/patientsApi';
+import { useActivePatient, setActivePatient } from '../../lib/activePatient';
 
 interface ChatSidebarProps {
   sessions: SessionSummary[];
@@ -202,9 +204,31 @@ export function ChatSidebar({
   onOpenNewProjectDialog,
 }: ChatSidebarProps) {
   const can = useCan();
+  // Patient organisation (staff): pick the active patient, badge sessions,
+  // optionally show only the active patient's chats. Shares the app-wide
+  // active-patient context with the recording flow.
+  const showPatient = can('route.patients');
+  const activePatient = useActivePatient();
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [filterToActive, setFilterToActive] = useState(false);
+  useEffect(() => {
+    if (showPatient) patientsApi.list().then(setPatients).catch(() => setPatients([]));
+  }, [showPatient]);
+  const patientName = useMemo(() => {
+    const m: Record<string, string> = {};
+    patients.forEach((p) => (m[p.id] = p.name));
+    return m;
+  }, [patients]);
+  const visibleSessions = useMemo(
+    () =>
+      filterToActive && activePatient
+        ? sessions.filter((s) => s.patientId === activePatient.id)
+        : sessions,
+    [sessions, filterToActive, activePatient],
+  );
   const groups = useMemo(
-    () => groupByProject(sessions, extraProjects),
-    [sessions, extraProjects],
+    () => groupByProject(visibleSessions, extraProjects),
+    [visibleSessions, extraProjects],
   );
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
     loadExpandState(),
@@ -353,6 +377,39 @@ export function ChatSidebar({
             Chat History
           </h2>
         </div>
+        {/* Active-patient context (staff) — new chats tag to this patient. */}
+        {showPatient && (
+          <div className="mb-2 flex items-center gap-2">
+            <select
+              value={activePatient?.id ?? ''}
+              onChange={(e) => {
+                const p = patients.find((x) => x.id === e.target.value);
+                setActivePatient(p ? { id: p.id, name: p.name } : null);
+              }}
+              className="flex-1 min-w-0 bg-window-bg border border-card-border rounded px-2 py-1 text-[11px] text-text-primary"
+              title="当前患者 · 新会话自动归他 (录制也共用)"
+            >
+              <option value="">当前患者：未选</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id} · {p.name}
+                </option>
+              ))}
+            </select>
+            <label
+              className="flex items-center gap-1 text-[10px] text-text-muted shrink-0 cursor-pointer"
+              title="只看当前患者的会话"
+            >
+              <input
+                type="checkbox"
+                checked={filterToActive}
+                onChange={(e) => setFilterToActive(e.target.checked)}
+                className="accent-accent"
+              />
+              只看TA
+            </label>
+          </div>
+        )}
         {/* Project management is a staff concern — patients get a plain
             session list without the cwd/project mental model. */}
         {can('chat.sidebarProjects') && (
@@ -614,6 +671,14 @@ export function ChatSidebar({
                               )}
                               <div className="text-[10px] text-text-secondary mt-1 truncate flex items-center gap-2">
                                 <span>{session.messageCount} messages</span>
+                                {showPatient && session.patientId && (
+                                  <span
+                                    className="px-1 py-0 rounded bg-accent/15 text-accent-soft text-[9px]"
+                                    title={session.patientId}
+                                  >
+                                    🧑 {patientName[session.patientId] ?? session.patientId}
+                                  </span>
+                                )}
                                 {session.isGrouped && session.groupSize ? (
                                   <span
                                     className="px-1 py-0 rounded bg-accent/20 text-accent-soft text-[9px]"

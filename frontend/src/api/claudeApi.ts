@@ -13,6 +13,7 @@ export interface ChatRequest {
   message: string;
   requestId: string;
   sessionId?: string;
+  patientId?: string;   // for-whom patient — tags a new session (staff workflow)
   allowedTools?: string[];
   workingDirectory?: string;
   permissionMode?:
@@ -116,6 +117,7 @@ export interface ProjectInfo {
 export interface SessionSummary {
   sessionId: string;
   cwd: string;
+  patientId?: string | null;   // for-whom patient (from the session sidecar); null if untagged
   firstMessage: string;
   lastMessage: string;
   messageCount: number;

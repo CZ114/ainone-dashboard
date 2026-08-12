@@ -8,8 +8,9 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../layout/Header';
 import { MessageMarkdown } from '../chat/MessageMarkdown';
-import { useAuth } from '../../contexts/RoleContext';
+import { useAuth, useCan } from '../../contexts/RoleContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { RecordingControls } from '../recording/RecordingControls';
 import { usePatientInsights } from '../../hooks/usePatientInsights';
 import { useDiaryStore } from '../../store/diaryStore';
 import { BreathingRing } from './BreathingRing';
@@ -61,6 +62,7 @@ function relativeDay(iso: string, t: (typeof TEXT)['zh']): string {
 export default function TodayPage() {
   const navigate = useNavigate();
   const { auth } = useAuth();
+  const can = useCan();
   const { lang } = useLang();
   const t = TEXT[lang];
   const insights = usePatientInsights();
@@ -140,6 +142,10 @@ export default function TodayPage() {
 
             {/* Wearable status in plain words */}
             <DeviceStatusCard device={insights.device} />
+
+            {/* Patient may record their own session (device.record). Attribution
+                locks to self inside the control — no cross-patient picker here. */}
+            {can('device.record') && <RecordingControls />}
           </div>
         </div>
 

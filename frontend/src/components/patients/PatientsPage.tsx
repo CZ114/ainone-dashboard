@@ -11,12 +11,17 @@
 // mutating affordances here are additionally wrapped in
 // can('patients.manage') per rolePolicy.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Header } from '../layout/Header';
 import { Toast, type ToastMessage } from '../Toast';
 import { useAuth, useCan } from '../../contexts/RoleContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { setActivePatient } from '../../lib/activePatient';
 import { agentAdminApi, type WorkflowEvent } from '../../api/agentAdminApi';
+import { doctorEvaluationMockStudy } from '../../features/doctor-evaluation/mockStudy';
+import { evaluationPathForCase, studyCaseForPatientId } from '../../features/doctor-evaluation/patientCase';
+import { isResearchPatient, researchPatientsFromStudy, type ResearchPatient } from '../../features/doctor-evaluation/researchPatients';
 
 // ---------- Wire types (agent_service /api/agent/patients) ------------------
 
@@ -29,6 +34,8 @@ interface Patient {
   created_by: string;
   created_at: number;  // epoch seconds
 }
+
+type PatientRow = Patient | ResearchPatient;
 
 /** POST/reset-code response — pair_code plaintext appears ONLY here. */
 interface PairCodeResult {
@@ -103,6 +110,8 @@ interface PatientsText {
   heading: string;
   tagline: string;
   newPatient: string;
+  openDashboard: string;
+  openDoctorEvaluation: string;
   loading: string;
   listEmpty: string;
   selectHint: string;
@@ -144,6 +153,8 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     heading: '病人档案',
     tagline: '医生工作台 — 档案、配对码与归属统计',
     newPatient: '+ 新建病人',
+    openDashboard: '🩺 打开监测台',
+    openDoctorEvaluation: '📋 打开认知评测',
     loading: '加载中…',
     listEmpty: '暂无病人档案',
     selectHint: '从左侧选择一位病人查看档案',
@@ -184,6 +195,8 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     heading: 'Patients',
     tagline: 'Doctor workbench — profiles, pairing codes and ownership stats',
     newPatient: '+ New patient',
+    openDashboard: '🩺 Open dashboard',
+    openDoctorEvaluation: '📋 Open cognitive evaluation',
     loading: 'Loading…',
     listEmpty: 'No patient profiles yet',
     selectHint: 'Select a patient on the left to view the profile',
@@ -255,9 +268,27 @@ let toastSeq = 0;
 export default function PatientsPage() {
   const { auth } = useAuth();
   const can = useCan();
+  const navigate = useNavigate();
   const { lang } = useLang();
   const T = TEXT[lang];
   const canManage = can('patients.manage');
+
+  // Patient-centric entry into the monitoring dashboard: set the shared active
+  // patient (so recordings + chat attribute to them), then navigate. This is
+  // how the doctor reaches the dashboard — there's no flat nav tab for them.
+  const openDashboard = (p: { id: string; name: string }) => {
+    setActivePatient({ id: p.id, name: p.name });
+    navigate('/dashboard');
+  };
+
+  const openDoctorEvaluation = (p: PatientRow) => {
+    if (!isResearchPatient(p)) return;
+    const studyCase = studyCaseForPatientId(p.id, doctorEvaluationMockStudy);
+    if (!studyCase) return;
+    setActivePatient({ id: p.id, name: p.name });
+    navigate(evaluationPathForCase(studyCase.caseId));
+  };
+
 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +307,20 @@ export default function PatientsPage() {
   // One-time pairing code modal — the ONLY place plaintext appears.
   const [pairCode, setPairCode] = useState<{ id: string; name: string; code: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const researchPatients = useMemo(
+    () => researchPatientsFromStudy(doctorEvaluationMockStudy),
+    [],
+  );
+  const patientRows = useMemo<PatientRow[]>(
+    () => [
+      // Keep exactly one of the two legacy seed records in this frontend demo.
+      // P-002 remains untouched in the backend until a data-migration decision
+      // is made; every research case below is a separate readonly patient.
+      ...patients.filter((patient) => patient.id !== 'P-002'),
+      ...researchPatients,
+    ],
+    [patients, researchPatients],
+  );
 
   const showToast = useCallback((text: string, kind?: ToastMessage['kind']) => {
     setToast({ id: ++toastSeq, text, kind });
@@ -299,14 +344,18 @@ export default function PatientsPage() {
     void loadPatients();
   }, [loadPatients]);
 
-  // Auto-select the first patient once the list arrives.
+  // Auto-select the retained platform patient first, then research patients.
   useEffect(() => {
-    if (selectedId === null && patients.length > 0) {
-      setSelectedId(patients[0].id);
+    if (selectedId === null && patientRows.length > 0) {
+      setSelectedId(patientRows[0].id);
     }
-  }, [patients, selectedId]);
+  }, [patientRows, selectedId]);
 
-  const selected = patients.find((p) => p.id === selectedId) ?? null;
+  const selected = patientRows.find((patient) => patient.id === selectedId) ?? null;
+  const selectedIsResearch = selected !== null && isResearchPatient(selected);
+  const selectedStudyCase = selectedIsResearch
+    ? studyCaseForPatientId(selected.id, doctorEvaluationMockStudy)
+    : null;
 
   // Re-seed the edit draft whenever the selection (or its data) changes.
   useEffect(() => {
@@ -332,14 +381,14 @@ export default function PatientsPage() {
 
   // ---- profile save (PATCH: only changed fields) ----
   const dirty =
-    selected !== null &&
+    selected !== null && !selectedIsResearch &&
     (draft.name.trim() !== selected.name ||
       (parseAge(draft.age) ?? null) !== selected.age ||
       draft.complaint !== selected.complaint ||
       draft.device !== selected.device);
 
   const handleSave = async () => {
-    if (!selected) return;
+    if (!selected || selectedIsResearch) return;
     if (!draft.name.trim()) {
       showToast(T.nameRequired, 'error');
       return;
@@ -369,7 +418,7 @@ export default function PatientsPage() {
 
   // ---- pairing code reset ----
   const handleResetCode = async () => {
-    if (!selected) return;
+    if (!selected || selectedIsResearch) return;
     if (!window.confirm(T.confirmReset(selected.name))) return;
     setBusy(true);
     try {
@@ -386,7 +435,7 @@ export default function PatientsPage() {
   // 无 human 的 followup_review, 带 patientId → run 归属服务对象患者,
   // 患者今天页照护丝带据此显示真实进度。医生停在页面直到 Toast 反馈。
   const handleInitiateAnalysis = async () => {
-    if (!selected) return;
+    if (!selected || selectedIsResearch) return;
     setWorkflowRunning(true);
     showToast(T.analysisStarted, 'info');
     try {
@@ -546,13 +595,13 @@ export default function PatientsPage() {
               <div className="rounded-lg border border-dashed border-card-border p-6 text-center text-sm text-text-muted">
                 {T.loading}
               </div>
-            ) : patients.length === 0 ? (
+            ) : patientRows.length === 0 ? (
               <div className="rounded-lg border border-dashed border-card-border p-6 text-center text-sm text-text-muted">
                 {T.listEmpty}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {patients.map((p) => {
+                {patientRows.map((p) => {
                   const active = p.id === selectedId && !creating;
                   return (
                     <button
@@ -571,6 +620,11 @@ export default function PatientsPage() {
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="text-sm font-medium">{p.name}</span>
                         <span className="font-mono text-xs text-text-muted">{p.id}</span>
+                        {isResearchPatient(p) ? (
+                          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">研究病例</span>
+                        ) : (
+                          <span className="rounded bg-card-hover px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">格式演示</span>
+                        )}
                       </div>
                       <div className="mt-1 truncate text-xs text-text-secondary">
                         {p.age !== null && <span>{p.age} · </span>}
@@ -613,62 +667,114 @@ export default function PatientsPage() {
               </div>
             ) : selected ? (
               <>
+                <div className="flex flex-wrap gap-2 self-start">
+                  {!selectedIsResearch && (
+                    <button
+                      type="button"
+                      onClick={() => openDashboard(selected)}
+                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+                    >
+                      {T.openDashboard}
+                    </button>
+                  )}
+                  {selectedIsResearch && selectedStudyCase && (
+                    <button
+                      type="button"
+                      onClick={() => openDoctorEvaluation(selected)}
+                      className="rounded-lg border border-accent px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent/10"
+                    >
+                      进入 A / B / C 评测
+                    </button>
+                  )}
+                </div>
+
                 <div className="rounded-lg border border-card-border bg-card-bg p-4">
                   <div className="mb-3 flex items-baseline justify-between gap-2">
-                    <h2 className="text-sm font-semibold">{T.profileTitle}</h2>
+                    <h2 className="text-sm font-semibold">
+                      {selectedIsResearch ? '研究病例患者档案' : T.profileTitle}
+                    </h2>
                     <span className="font-mono text-xs text-text-muted">
                       {T.fieldId}: {selected.id}
                     </span>
                   </div>
 
-                  {renderFields(draft, setDraft, busy || !canManage)}
-
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-                    <span>
-                      {T.fieldCreatedBy}: {selected.created_by || '—'}
-                    </span>
-                    <span>
-                      {T.fieldCreatedAt}: {formatDate(selected.created_at)}
-                    </span>
-                  </div>
-
-                  {canManage && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleSave()}
-                        disabled={busy || !dirty}
-                        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
-                      >
-                        {busy ? T.working : T.save}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleResetCode()}
-                        disabled={busy}
-                        className="rounded-lg border border-status-danger/40 px-4 py-2 text-sm text-status-danger transition-colors hover:bg-status-danger/10 disabled:opacity-60"
-                      >
-                        {T.resetCode}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleInitiateAnalysis()}
-                        disabled={busy || workflowRunning}
-                        className="rounded-lg border border-accent px-4 py-2 text-sm text-accent transition-colors hover:bg-accent/10 disabled:opacity-60"
-                      >
-                        {workflowRunning ? T.analysisRunning : T.initiateAnalysis}
-                      </button>
+                  {selectedIsResearch && selectedStudyCase ? (
+                    <div className="space-y-3">
+                      <p className="text-sm leading-6 text-text-secondary">{selectedStudyCase.taskDescription}</p>
+                      <div className="flex flex-wrap gap-2 text-xs text-text-muted">
+                        <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.dataset}</span>
+                        <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.language}</span>
+                        <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.protocol}</span>
+                        <span className="rounded-full bg-card-hover px-2.5 py-1">{Math.round(selectedStudyCase.audio.durationSeconds)} 秒</span>
+                      </div>
+                      <div className="rounded-lg border border-accent/25 bg-accent/5 p-3 text-xs leading-5 text-text-secondary">
+                        这是冻结研究病例生成的只读患者对象。进入评测后会沿用同一病例的三种方法输出，并在 Diary 中生成对应的三份报告记录。
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      {renderFields(draft, setDraft, busy || !canManage)}
+
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+                        <span>
+                          {T.fieldCreatedBy}: {selected.created_by || '—'}
+                        </span>
+                        <span>
+                          {T.fieldCreatedAt}: {formatDate(selected.created_at)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 rounded-lg border border-dashed border-card-border bg-window-bg p-3 text-xs leading-5 text-text-muted">
+                        此记录仅用于演示平台 patient 信息格式，未关联冻结研究病例、A / B / C 方法输出或研究报告。
+                      </div>
+
+                      {canManage && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleSave()}
+                            disabled={busy || !dirty}
+                            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+                          >
+                            {busy ? T.working : T.save}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleResetCode()}
+                            disabled={busy}
+                            className="rounded-lg border border-status-danger/40 px-4 py-2 text-sm text-status-danger transition-colors hover:bg-status-danger/10 disabled:opacity-60"
+                          >
+                            {T.resetCode}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleInitiateAnalysis()}
+                            disabled={busy || workflowRunning}
+                            className="rounded-lg border border-accent px-4 py-2 text-sm text-accent transition-colors hover:bg-accent/10 disabled:opacity-60"
+                          >
+                            {workflowRunning ? T.analysisRunning : T.initiateAnalysis}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
-                {/* Ownership stats — honest placeholder until M3 lands. */}
-                <div className="rounded-lg border border-dashed border-card-border bg-card-bg p-4">
-                  <h2 className="mb-2 text-sm font-semibold text-text-secondary">
-                    {T.statsTitle}
-                  </h2>
-                  <p className="text-xs text-text-muted">{T.statsPlaceholder}</p>
-                </div>
+                {selectedIsResearch ? (
+                  <div className="rounded-lg border border-accent/30 bg-accent/5 p-4">
+                    <h2 className="mb-2 text-sm font-semibold text-text-primary">病例 → 报告链路</h2>
+                    <p className="text-xs leading-5 text-text-secondary">
+                      患者对象 → 冻结 MethodOutput（普通模型 / 普通 Agent / 改良 Agent）→ A / B / C 评测 → Diary 三份报告记录。
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-card-border bg-card-bg p-4">
+                    <h2 className="mb-2 text-sm font-semibold text-text-secondary">
+                      {T.statsTitle}
+                    </h2>
+                    <p className="text-xs text-text-muted">{T.statsPlaceholder}</p>
+                  </div>
+                )}
               </>
             ) : (
               !loading && (
@@ -679,6 +785,7 @@ export default function PatientsPage() {
             )}
           </section>
         </div>
+
       </main>
 
       {/* ---- One-time pairing code modal ---- */}

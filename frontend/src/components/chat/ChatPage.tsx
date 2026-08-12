@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
+import { getActivePatient } from '../../lib/activePatient';
 import { useStreamParser } from '../../hooks/useStreamParser';
 import { ChatMessages, LoadingIndicator } from './ChatMessages';
 import { ChatInput } from './ChatInput';
@@ -751,6 +752,9 @@ function ChatPage() {
         workingDirectory: workingDir,
         permissionMode,
         agentId,
+        // Tag a new session with the active patient (for-whom). Idempotent on
+        // the backend — only the session's first turn records it.
+        ...(getActivePatient() ? { patientId: getActivePatient()!.id } : {}),
         ...(thinkingWire ? { thinking: thinkingWire } : {}),
         ...(effortWire ? { effort: effortWire } : {}),
         ...(additionalDirectories.length > 0

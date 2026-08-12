@@ -1,0 +1,550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ainone.local/schemas/doctor-evaluation-study.schema.json",
+  "title": "Doctor Evaluation Study Bundle",
+  "description": "Provider-neutral frontend contract for the three-method clinician evaluation study.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "dataMode", "study", "conditions", "cases", "forms"],
+  "properties": {
+    "schemaVersion": { "const": "1.1.0" },
+    "dataMode": { "enum": ["hardcoded", "api"] },
+    "study": { "$ref": "#/$defs/studyManifest" },
+    "conditions": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/conditionDefinition" }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "forms": { "$ref": "#/$defs/forms" }
+  },
+  "$defs": {
+    "conditionId": {
+      "enum": ["b1", "b2", "ours"]
+    },
+    "methodKind": {
+      "enum": ["plain_model", "standard_agent", "improved_agent"]
+    },
+    "studyManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "description",
+        "defaultLocale",
+        "supportedLocales",
+        "disclaimer",
+        "blinding",
+        "interactionPolicy"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "defaultLocale": { "type": "string", "minLength": 2 },
+        "supportedLocales": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 2 }
+        },
+        "disclaimer": { "type": "string", "minLength": 1 },
+        "blinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["defaultMode", "revealPolicy", "truthField"],
+          "properties": {
+            "defaultMode": { "enum": ["blinded", "researcher"] },
+            "revealPolicy": { "const": "researcher_only" },
+            "truthField": { "const": "researchOnly" }
+          }
+        },
+        "interactionPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reportChat"],
+          "properties": {
+            "reportChat": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabledFor", "recordUsage", "treatAsIndependentVariable"],
+              "properties": {
+                "enabledFor": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/conditionId" }
+                },
+                "recordUsage": { "type": "boolean" },
+                "treatAsIndependentVariable": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "riskScore",
+        "narrativeReport",
+        "structuredReport",
+        "reportChat",
+        "stateCards",
+        "evidenceTrace"
+      ],
+      "properties": {
+        "riskScore": { "type": "boolean" },
+        "narrativeReport": { "type": "boolean" },
+        "structuredReport": { "type": "boolean" },
+        "reportChat": { "type": "boolean" },
+        "stateCards": { "type": "boolean" },
+        "evidenceTrace": { "type": "boolean" }
+      }
+    },
+    "conditionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "methodKind", "blindLabel", "name", "shortDescription", "capabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/conditionId" },
+        "methodKind": { "$ref": "#/$defs/methodKind" },
+        "blindLabel": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "shortDescription": { "type": "string", "minLength": 1 },
+        "capabilities": { "$ref": "#/$defs/capabilities" }
+      }
+    },
+    "riskScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "kind"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "kind": { "enum": ["screening_score", "unavailable"] },
+        "displayLabel": { "type": "string" }
+      }
+    },
+    "clinicalReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "impression", "summary", "recommendation"],
+      "properties": {
+        "kind": { "enum": ["narrative", "structured"] },
+        "impression": { "type": "string" },
+        "summary": { "type": "string" },
+        "counterEvidence": { "type": "string" },
+        "limitations": { "type": "string" },
+        "recommendation": { "type": "string" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["frozen_stimulus", "live", "demo", "unavailable"] },
+        "generatedAt": { "type": "string" },
+        "modelId": { "type": "string" },
+        "pipelineVersion": { "type": "string" },
+        "promptVersion": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "referenceDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "q1", "median", "q3", "n", "populationLabel"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "healthy_control_iqr",
+            "same_cohort_iqr",
+            "comparison_cohort_iqr",
+            "task_specific",
+            "none"
+          ]
+        },
+        "q1": { "type": "number" },
+        "median": { "type": "number" },
+        "q3": { "type": "number" },
+        "n": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "populationLabel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "supportingMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "value"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "value": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        },
+        "unit": { "type": "string" },
+        "displayValue": { "type": "string" },
+        "interpretation": { "type": "string" },
+        "referenceText": { "type": "string" }
+      }
+    },
+    "clinicalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "description",
+        "normalizedValue",
+        "severity",
+        "severityLabel",
+        "supportingMetrics"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "normalizedValue": {
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "valueLabel": { "type": "string" },
+        "severity": {
+          "enum": [
+            "reference_range",
+            "borderline_high",
+            "abnormal",
+            "cohort_low",
+            "cohort_mid",
+            "cohort_high",
+            "ungraded"
+          ]
+        },
+        "severityLabel": { "type": "string" },
+        "reference": { "$ref": "#/$defs/referenceDistribution" },
+        "supportingMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/supportingMetric" }
+        }
+      }
+    },
+    "traceDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "metricKey", "reference"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "metricKey": { "type": "string", "minLength": 1 },
+        "reference": { "$ref": "#/$defs/referenceDistribution" }
+      }
+    },
+    "evidenceSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segmentId",
+        "index",
+        "startSeconds",
+        "endSeconds",
+        "speakerRole",
+        "transcript",
+        "coreUnits",
+        "metrics"
+      ],
+      "properties": {
+        "segmentId": { "type": "string", "minLength": 1 },
+        "index": { "type": "integer", "minimum": 1 },
+        "startSeconds": { "type": "number", "minimum": 0 },
+        "endSeconds": { "type": "number", "minimum": 0 },
+        "speakerRole": { "enum": ["patient", "examiner", "unknown"] },
+        "transcript": { "type": "string" },
+        "wordCount": { "type": "integer", "minimum": 0 },
+        "coreUnits": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gapBeforeSeconds": { "type": "number", "minimum": 0 },
+        "disfluencyPer100Words": { "type": "number", "minimum": 0 },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{ "type": "number" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "traceableEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["states", "dimensions", "segments"],
+      "properties": {
+        "states": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/clinicalState" }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/traceDimension" }
+        },
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceSegment" }
+        }
+      }
+    },
+    "methodRunError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "methodOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "runId",
+        "caseId",
+        "conditionId",
+        "methodKind",
+        "status",
+        "score",
+        "classification",
+        "provenance",
+        "warnings"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "1.0.0" },
+        "runId": { "type": "string", "minLength": 1 },
+        "caseId": { "type": "string", "minLength": 1 },
+        "conditionId": { "$ref": "#/$defs/conditionId" },
+        "methodKind": { "$ref": "#/$defs/methodKind" },
+        "status": {
+          "enum": ["completed", "partial", "failed", "unavailable"]
+        },
+        "score": { "$ref": "#/$defs/riskScore" },
+        "classification": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        },
+        "report": { "$ref": "#/$defs/clinicalReport" },
+        "evidence": { "$ref": "#/$defs/traceableEvidence" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "error": { "$ref": "#/$defs/methodRunError" },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "failed" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["error"] }
+        }
+      ]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId",
+        "displayOrder",
+        "task",
+        "taskDescription",
+        "source",
+        "audio",
+        "roleHandling",
+        "conditionOrder",
+        "methodOutputs"
+      ],
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "displayOrder": { "type": "integer", "minimum": 1 },
+        "task": { "type": "string", "minLength": 1 },
+        "taskDescription": { "type": "string" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataset", "language", "protocol"],
+          "properties": {
+            "dataset": { "type": "string", "minLength": 1 },
+            "language": { "type": "string", "minLength": 2 },
+            "protocol": { "type": "string", "minLength": 1 }
+          }
+        },
+        "audio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["src", "mimeType", "durationSeconds"],
+          "properties": {
+            "src": { "type": "string", "minLength": 1 },
+            "mimeType": { "type": "string", "minLength": 1 },
+            "durationSeconds": { "type": "number", "minimum": 0 }
+          }
+        },
+        "roleHandling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "counts"],
+          "properties": {
+            "description": { "type": "string" },
+            "counts": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [{ "type": "number" }, { "type": "string" }]
+              }
+            }
+          }
+        },
+        "conditionOrder": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/conditionId" }
+        },
+        "methodOutputs": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/methodOutput" }
+        },
+        "researchOnly": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["truth", "sourceGroup"],
+          "properties": {
+            "truth": { "type": "string" },
+            "sourceGroup": { "type": "string" },
+            "originalTaskDescription": { "type": "string" }
+          }
+        }
+      }
+    },
+    "formOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label"],
+      "properties": {
+        "value": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "formField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "required"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": ["text", "number", "textarea", "single_select", "likert_5"]
+        },
+        "required": { "type": "boolean" },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/formOption" }
+        },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "leftAnchor": { "type": "string" },
+        "rightAnchor": { "type": "string" }
+      }
+    },
+    "questionnaire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "description", "scale", "items"],
+      "properties": {
+        "id": { "enum": ["sus", "clinical_evidence_safety"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max", "leftAnchor", "rightAnchor"],
+          "properties": {
+            "min": { "const": 1 },
+            "max": { "const": 5 },
+            "leftAnchor": { "type": "string" },
+            "rightAnchor": { "type": "string" }
+          }
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "text": { "type": "string" },
+              "reverseScored": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "forms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileFields", "caseRatingFields", "overallFields", "questionnaires"],
+      "properties": {
+        "profileFields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/formField" }
+        },
+        "caseRatingFields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/formField" }
+        },
+        "overallFields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/formField" }
+        },
+        "questionnaires": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/questionnaire" }
+        }
+      }
+    }
+  }
+}

@@ -316,11 +316,15 @@ class ConnectionManager:
         return self.audio_bridge.is_connected
 
     # Recording API
-    def recording_start(self, duration: int = 60, include_audio: bool = True) -> bool:
+    def recording_start(self, duration: int = 60, include_audio: bool = True,
+                        patient_id: str | None = None,
+                        patient_name: str | None = None) -> bool:
         self.recording_service.start_recording(
             duration=duration,
             include_audio=include_audio,
-            channel_names=self.data_processor.get_channel_names()
+            channel_names=self.data_processor.get_channel_names(),
+            patient_id=patient_id,
+            patient_name=patient_name,
         )
         # Immediately broadcast recording status
         self._broadcast_recording_status_sync()

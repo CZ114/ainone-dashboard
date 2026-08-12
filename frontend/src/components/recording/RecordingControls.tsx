@@ -9,10 +9,13 @@
 // off the backend, lets the store track the session, and renders
 // whatever the store says.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { recordingApi } from '../../api/client';
-import { useT } from '../../contexts/LanguageContext';
+import { useT, useLang } from '../../contexts/LanguageContext';
+import { useAuth, useCan } from '../../contexts/RoleContext';
+import { patientsApi, matchPatientByDevice, type Patient } from '../../api/patientsApi';
+import { useActivePatient, setActivePatient } from '../../lib/activePatient';
 
 const PRESETS_S = [30, 60, 120, 300, 600];
 const MIN_DURATION_S = 1;
@@ -49,6 +52,51 @@ export function RecordingControls() {
   const [includeAudio, setIncludeAudio] = useState(true);
   const [busy, setBusy] = useState<'starting' | 'stopping' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Patient attribution — auto-match the live device to a patient's bound
+  // device name, with a manual dropdown fallback. Resolved id is tagged onto
+  // the recording (sidecar) at Start.
+  const { lang } = useLang();
+  const { auth } = useAuth();
+  // Staff (route.patients) may attribute a recording to any patient; a patient
+  // records only for themselves, so the cross-patient picker is hidden and
+  // attribution locks to their own id.
+  const canPickPatients = useCan()('route.patients');
+  const activePatient = useActivePatient();   // shared with the chat sidebar
+  const bleName = useStore((s) => s.ble.deviceName);
+  const serialPort = useStore((s) => s.serial.port);
+  const deviceId = bleName || serialPort || '';
+  const [patients, setPatients] = useState<Patient[]>([]);
+  useEffect(() => {
+    if (!canPickPatients) return; // patient can't list others (would 403 anyway)
+    patientsApi.list().then(setPatients).catch(() => setPatients([]));
+  }, [canPickPatients]);
+  const autoMatch = matchPatientByDevice(patients, deviceId);
+  useEffect(() => {
+    if (canPickPatients) {
+      // Staff: adopt an unambiguous device→patient match only when nothing set.
+      if (!activePatient && autoMatch) setActivePatient({ id: autoMatch.id, name: autoMatch.name });
+    } else if (activePatient?.id !== auth.id) {
+      // Patient: attribution is always themselves.
+      setActivePatient({ id: auth.id, name: auth.name });
+    }
+  }, [canPickPatients, activePatient, autoMatch?.id, auth.id, auth.name]);
+  const pt =
+    lang === 'zh'
+      ? {
+          label: '归属患者',
+          none: '（不绑定 / 未知）',
+          auto: (n: string, d: string) => `✓ 已按设备 ${d} 自动识别为 ${n}`,
+          noMatch: (d: string) => `设备 ${d} 未匹配到患者，请手动选择`,
+          noDev: '未连接设备 —— 可手动选择患者',
+        }
+      : {
+          label: 'Patient',
+          none: '(none / unknown)',
+          auto: (n: string, d: string) => `✓ Auto-matched to ${n} by device ${d}`,
+          noMatch: (d: string) => `Device ${d} matched no patient — pick manually`,
+          noDev: 'No device connected — pick a patient manually',
+        };
 
   const clamp = (n: number) =>
     Math.max(MIN_DURATION_S, Math.min(MAX_DURATION_S, Math.round(n)));
@@ -87,7 +135,9 @@ export function RecordingControls() {
     setErrorMsg(null);
     setBusy('starting');
     try {
-      await recordingApi.start(d, includeAudio);
+      // Patient always attributes to self regardless of the shared context.
+      const attrib = canPickPatients ? activePatient : { id: auth.id, name: auth.name };
+      await recordingApi.start(d, includeAudio, attrib?.id ?? null, attrib?.name ?? null);
       // Only flip local state ONCE the backend confirms; keeps the UI
       // honest if the POST fails.
       recordingStart(d);
@@ -199,6 +249,38 @@ export function RecordingControls() {
             />
             <span className="text-sm text-text-secondary">{t.dashboard.recording.includeAudio}</span>
           </label>
+
+          {/* Patient attribution — staff only. A patient records for themselves
+              (attribution locked in handleStart), so no picker is shown. */}
+          {canPickPatients && (
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">{pt.label}</label>
+              <select
+                value={activePatient?.id ?? ''}
+                onChange={(e) => {
+                  const p = patients.find((x) => x.id === e.target.value);
+                  setActivePatient(p ? { id: p.id, name: p.name } : null);
+                }}
+                disabled={busy !== null}
+                className="w-full bg-window-bg border border-card-border rounded px-3 py-1.5 text-text-primary text-sm disabled:opacity-50"
+              >
+                <option value="">{pt.none}</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id} · {p.name}
+                    {p.device ? ` (${p.device})` : ''}
+                  </option>
+                ))}
+              </select>
+              {autoMatch && activePatient?.id === autoMatch.id && (
+                <p className="text-[11px] text-status-connected mt-1">{pt.auto(autoMatch.name, deviceId)}</p>
+              )}
+              {deviceId && !autoMatch && (
+                <p className="text-[11px] text-text-muted mt-1">{pt.noMatch(deviceId)}</p>
+              )}
+              {!deviceId && <p className="text-[11px] text-text-muted mt-1">{pt.noDev}</p>}
+            </div>
+          )}
 
           {/* Start button — disabled when the typed duration parses
               to nothing valid, so an empty field can't slip through. */}

@@ -20,6 +20,11 @@ export type FeatureKey =
   | 'route.settings'
   // Header
   | 'nav.statusLights'       // Serial/BLE/Audio 状态灯 + 通道数 + 录制指示
+  | 'nav.dashboardTab'       // 顶栏"监测台"平铺入口 (仅开发者; 医生经患者列表进入)
+  // 硬件控制 (8080) — 连接是高权限物理动作, 归患者端 (谁戴谁连); 医生只观察
+  // + 录制, 不碰连接。诚实边界同下: 这只是前端渲染门, 8080 本身无 authz。
+  | 'device.connect'         // 连接/断开手套硬件 (BLE 一键 / 串口 / 音频)
+  | 'device.record'          // 开始/停止录制
   // Chat 页内部机关
   | 'chat.terminal'          // 内嵌 PTY 终端
   | 'chat.pills'             // 权限 Mode / Thinking / Effort 循环药丸
@@ -59,6 +64,13 @@ export const FEATURES: Record<FeatureKey, Role[]> = {
   'route.settings':           ALL,
 
   'nav.statusLights':         STAFF,
+  // 医生的监测台经"患者列表→选患者"进入 (患者中心导航), 故顶栏不给平铺 tab;
+  // 开发者保留直达平铺入口做设备调试。route.dashboard 仍是 STAFF (医生可经患者达)。
+  'nav.dashboardTab':         DEV,
+
+  // 连接 = 患者 + 开发者 (医生刻意排除); 录制 = 三方都可。
+  'device.connect':           ['patient', 'developer'],
+  'device.record':            ALL,
 
   'chat.terminal':            DEV,
   'chat.pills':               DEV,
@@ -94,5 +106,8 @@ export function can(role: Role | null, feature: FeatureKey): boolean {
 
 /** 各角色的落地页 — `/` 重定向 & 越权访问的退路。 */
 export function homeOf(role: Role): string {
-  return role === 'patient' ? '/today' : '/dashboard';
+  if (role === 'patient') return '/today';
+  // 医生先看患者列表 (患者中心), 监测台从某个患者进入; 开发者直达设备监测台调试。
+  if (role === 'doctor') return '/patients';
+  return '/dashboard';
 }

@@ -136,6 +136,7 @@ class ChatBody(BaseModel):
     requestId: str | None = None
     sessionId: str | None = None
     agentId: str | None = None
+    patientId: str | None = None   # for-whom 患者 (医生切换"当前患者"后新会话带上, 记归属)
 
 
 class PermissionBody(BaseModel):
@@ -249,7 +250,7 @@ def _chat_response(body: ChatBody, fmt: str, owner: str | None = None) -> Stream
         # compat: 前端新会话带临时 id ("new-session-*"), 未知 id 视为新建
         session_id, entry = manager.get_or_create(
             body.sessionId, body.agentId, create_if_missing=(fmt == "compat"),
-            owner=owner)
+            owner=owner, patient_id=body.patientId)
     except KeyError as e:
         raise HTTPException(404, str(e))
     except NotImplementedError as e:
@@ -957,6 +958,7 @@ def compat_sessions(request: Request):
             "firstAssistantMessage": strip_think(_first_content(msgs, "assistant")),
             "messageCount": len(chat_msgs),
             "updatedAt": meta["updatedAt"],
+            "patientId": meta.get("patientId"),
         })
     return {"sessions": out}
 

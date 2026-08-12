@@ -36,6 +36,10 @@ class AudioStatus(BaseModel):
 class RecordingStartRequest(BaseModel):
     duration_seconds: int = 60
     include_audio: bool = True
+    # Patient attribution (optional — omit and the recording still works, untagged).
+    # Persisted to a sidecar recordings/meta/<ts>.json and surfaced by /api/recordings.
+    patient_id: str | None = None
+    patient_name: str | None = None
 
 
 class RecordingStatus(BaseModel):

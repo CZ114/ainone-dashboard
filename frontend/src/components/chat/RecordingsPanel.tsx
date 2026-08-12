@@ -13,6 +13,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { recordingsApi, type RecordingSession } from '../../api/recordingsApi';
+import { patientsApi, type Patient } from '../../api/patientsApi';
 import { RECORDING_DRAG_MIME, formatSize } from '../../lib/attachments';
 import { useStore } from '../../store';
 
@@ -119,6 +120,12 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
   const [transcripts, setTranscripts] = useState<Map<string, TranscriptEntry>>(
     new Map(),
   );
+  // Patient roster + active filter (staff-only panel, so no role lock needed).
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [filterPid, setFilterPid] = useState<string | null>(null);
+  useEffect(() => {
+    patientsApi.list().then(setPatients).catch(() => setPatients([]));
+  }, []);
 
   // Cross-page Play: stash a replayRequest in the store and route to
   // the dashboard. ReplayPanel watches the store and consumes the
@@ -137,7 +144,7 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const result = await recordingsApi.list();
+    const result = await recordingsApi.list(filterPid);
     if (result.error) {
       setError(result.error);
       setSessions([]);
@@ -145,7 +152,7 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
       setSessions(result.sessions);
     }
     setLoading(false);
-  }, []);
+  }, [filterPid]);
 
   const handleTranscribe = useCallback(
     async (sessionId: string, audioFilename: string) => {
@@ -241,6 +248,23 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
           </div>
         </div>
 
+        {/* Patient filter (staff) */}
+        <div className="shrink-0 px-3 py-1.5 border-b border-card-border">
+          <select
+            value={filterPid ?? ''}
+            onChange={(e) => setFilterPid(e.target.value || null)}
+            className="w-full bg-window-bg border border-card-border rounded px-2 py-1 text-[11px] text-text-primary"
+            title="按患者筛选录制 / Filter recordings by patient"
+          >
+            <option value="">全部患者 · All patients</option>
+            {patients.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.id} · {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-2">
           {error && (
@@ -289,7 +313,13 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
                       {hasBoth ? '🎙️' : s.csv ? '📊' : '🔊'}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-mono text-text-primary truncate">
+                      <div className="text-xs font-medium text-text-primary truncate">
+                        {s.patient_name ? `🧑 ${s.patient_name}` : '🧑 未标注患者'}
+                        {s.patient_id && (
+                          <span className="ml-1 font-mono text-text-muted">{s.patient_id}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono text-text-muted truncate">
                         {formatTimestamp(s.started_at_iso, s.id)}
                       </div>
                     </div>

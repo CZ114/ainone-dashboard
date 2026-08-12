@@ -30,6 +30,10 @@ export interface RecordingSession {
   started_at_iso: string | null;  // ISO 8601 for `new Date(...)`
   csv: RecordingCsvInfo | null;
   audio: RecordingAudioInfo | null;
+  // Patient attribution from the capture-time sidecar; null on untagged /
+  // pre-feature recordings.
+  patient_id?: string | null;
+  patient_name?: string | null;
 }
 
 export interface RecordingListResponse {
@@ -40,9 +44,12 @@ export interface RecordingListResponse {
 const BASE = '';
 
 export const recordingsApi = {
-  list: async (): Promise<{ sessions: RecordingSession[]; error?: string }> => {
+  list: async (
+    patientId?: string | null,
+  ): Promise<{ sessions: RecordingSession[]; error?: string }> => {
     try {
-      const r = await fetch(`${BASE}/api/recordings/list`);
+      const q = patientId ? `?patient_id=${encodeURIComponent(patientId)}` : '';
+      const r = await fetch(`${BASE}/api/recordings/list${q}`);
       const raw = await r.text();
       if (!r.ok) {
         return {

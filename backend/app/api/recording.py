@@ -22,13 +22,16 @@ async def start_recording(request: RecordingStartRequest):
 
     success = conn.recording_start(
         duration=request.duration_seconds,
-        include_audio=request.include_audio
+        include_audio=request.include_audio,
+        patient_id=request.patient_id,
+        patient_name=request.patient_name,
     )
 
     return {
         "started": True,
         "duration_seconds": request.duration_seconds,
-        "include_audio": request.include_audio
+        "include_audio": request.include_audio,
+        "patient_id": request.patient_id,
     }
 
 

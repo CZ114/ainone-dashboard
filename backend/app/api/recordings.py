@@ -23,6 +23,9 @@ from app.config import CSV_DIR, AUDIO_DIR
 
 router = APIRouter()
 
+# Patient-attribution sidecars written by RecordingService (recordings/meta/<ts>.json).
+META_DIR = CSV_DIR.parent / "meta"
+
 CSV_NAME_RE = re.compile(r'^sensor_(\d{8}_\d{6})\.csv$')
 AUDIO_NAME_RE = re.compile(r'^audio_(\d{8}_\d{6})\.wav$')
 TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}$')
@@ -68,6 +71,19 @@ def _wav_duration_seconds(path: Path) -> Optional[float]:
     return None
 
 
+def _read_patient(ts: str) -> dict:
+    """Read the patient sidecar for a session; {patient_id,patient_name} or Nones."""
+    try:
+        p = META_DIR / f"{ts}.json"
+        if p.is_file():
+            import json
+            m = json.loads(p.read_text(encoding="utf-8"))
+            return {"patient_id": m.get("patient_id"), "patient_name": m.get("patient_name")}
+    except Exception:
+        pass
+    return {"patient_id": None, "patient_name": None}
+
+
 def _session_entry(ts: str) -> dict:
     csv_path = CSV_DIR / f"sensor_{ts}.csv"
     audio_path = AUDIO_DIR / f"audio_{ts}.wav"
@@ -100,12 +116,21 @@ def _session_entry(ts: str) -> dict:
         "started_at_iso": _parse_iso(ts),
         "csv": csv_info,
         "audio": audio_info,
+        **_read_patient(ts),
     }
 
 
 @router.get("/list")
-async def list_recordings():
-    """Newest first. A session exists if either CSV or WAV is present."""
+async def list_recordings(
+    patient_id: Optional[str] = Query(
+        None, description="Only return recordings tagged to this patient (P-xxx)."
+    ),
+):
+    """Newest first. A session exists if either CSV or WAV is present.
+
+    Optional ?patient_id= filters to one patient's recordings (attribution comes
+    from the sidecar meta written at capture time; untagged sessions have null).
+    """
     timestamps = set()
 
     if CSV_DIR.exists():
@@ -121,6 +146,8 @@ async def list_recordings():
                 timestamps.add(m.group(1))
 
     sessions = [_session_entry(ts) for ts in sorted(timestamps, reverse=True)]
+    if patient_id:
+        sessions = [s for s in sessions if s.get("patient_id") == patient_id]
     return {"sessions": sessions, "count": len(sessions)}
 
 

@@ -129,7 +129,12 @@ export function usePatientInsights(): PatientInsights {
       : null;
 
   const device: DeviceStatus = {
-    glove: { connected: ble.connected, name: ble.deviceName },
+    // The glove can attach over BLE or a USB cable — "connected" means either,
+    // so the patient sees "手套已连接" regardless of which transport is used.
+    glove: {
+      connected: ble.connected || serial.connected,
+      name: ble.deviceName ?? (serial.connected ? serial.port : null),
+    },
     hub: { connected: serial.connected },
     mic: { connected: audio.connected },
     channelCount,

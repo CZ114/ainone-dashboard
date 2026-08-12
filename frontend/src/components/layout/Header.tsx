@@ -7,7 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../ThemeToggle';
 import { LanguageToggle } from '../LanguageToggle';
 import { useT } from '../../contexts/LanguageContext';
-import { useAuth, useCan } from '../../contexts/RoleContext';
+import { useAuth, useCan, isLensTab, openLensTab } from '../../contexts/RoleContext';
 import type { FeatureKey, Role } from '../../lib/rolePolicy';
 import { isDemoMode } from '../../lib/demoMode';
 
@@ -57,6 +57,14 @@ function RoleBadge() {
       >
         <span aria-hidden="true">{ROLE_ICONS[auth.role]}</span>
         <span>{auth.name}</span>
+        {isLensTab() && (
+          <span
+            className="ml-0.5 px-1 rounded bg-accent/20 text-accent text-[9px] font-bold"
+            title="独立身份调试标签（本标签登录只存在于此标签，不影响其它标签）"
+          >
+            镜
+          </span>
+        )}
       </button>
       {open && (
         <div
@@ -66,6 +74,23 @@ function RoleBadge() {
           // doesn't close the menu before the click lands.
           onMouseDown={(e) => e.preventDefault()}
         >
+          {/* Developer multi-view: open a new tab whose login is isolated to
+              that tab (sessionStorage), so dev / doctor / patient can run side
+              by side in one browser, each with a real token + real data scope. */}
+          {auth.role === 'developer' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                openLensTab();
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-card-border/50 transition-colors border-b border-card-border"
+              title="新开一个独立登录的标签，可在同一浏览器里并排查看不同角色（真实数据隔离）"
+            >
+              🔍 开调试镜标签
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -114,10 +139,10 @@ export function Header() {
   // don't render for roles the policy table excludes.
   const NAV_ITEMS: NavItem[] = [
     { path: '/today', feature: 'route.today', label: t.header.nav.today },
-    { path: '/dashboard', feature: 'route.dashboard', label: t.header.nav.dashboard },
+    // 监测台平铺 tab 仅开发者可见 (nav.dashboardTab); 医生经患者列表进入。
+    { path: '/dashboard', feature: 'nav.dashboardTab', label: t.header.nav.dashboard },
     { path: '/patients', feature: 'route.patients', label: t.header.nav.patients },
-    { path: '/chat', feature: 'route.chat', label: t.header.nav.chat },
-    { path: '/call', feature: 'route.call', label: t.header.nav.call },
+    { path: '/doctor-evaluation', feature: 'route.patients', label: t.header.nav.doctorEvaluation },
     { path: '/diary', feature: 'route.diary', label: t.header.nav.diary },
     {
       path: '/settings',

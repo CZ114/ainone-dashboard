@@ -72,6 +72,7 @@ export async function handleChatRequest(c: Context): Promise<Response> {
     requestId?: unknown;
     sessionId?: unknown;
     agentId?: unknown;
+    patientId?: unknown;
   };
   try {
     body = await c.req.json();
@@ -95,6 +96,10 @@ export async function handleChatRequest(c: Context): Promise<Response> {
   }
   if (typeof body.agentId === "string" && body.agentId) {
     forwarded.agentId = body.agentId;
+  }
+  // for-whom patient — tags the session so the sidebar can group chats by patient.
+  if (typeof body.patientId === "string" && body.patientId) {
+    forwarded.patientId = body.patientId;
   }
 
   console.log("[chat] proxy →", `${agentServiceUrl()}/api/compat/chat`, {

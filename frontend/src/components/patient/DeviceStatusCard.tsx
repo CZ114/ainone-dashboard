@@ -8,7 +8,10 @@
 // battery field, so we don't invent one.
 
 import { useLang } from '../../contexts/LanguageContext';
+import { useCan } from '../../contexts/RoleContext';
 import type { DeviceStatus } from '../../hooks/usePatientInsights';
+import { GloveCalibrator } from './GloveCalibrator';
+import { PatientConnectPanel } from './PatientConnectPanel';
 
 const TEXT = {
   zh: {
@@ -64,6 +67,7 @@ function fmt(sec: number): string {
 export function DeviceStatusCard({ device }: { device: DeviceStatus }) {
   const { lang } = useLang();
   const t = TEXT[lang];
+  const can = useCan();
 
   return (
     <div className="bg-card-bg border border-card-border rounded-xl p-4">
@@ -90,6 +94,12 @@ export function DeviceStatusCard({ device }: { device: DeviceStatus }) {
             {t.recording} {fmt(device.recording.elapsedSec)}
           </div>
         )}
+
+        {/* One-tap connect (glove + mic) — the wearer's action (device.connect).
+            Doctor is excluded by policy, so this never renders for them. */}
+        {can('device.connect') && <PatientConnectPanel />}
+
+        <GloveCalibrator />
       </div>
 
       <div className="mt-3 pt-3 border-t border-card-border text-[11.5px] text-text-muted">

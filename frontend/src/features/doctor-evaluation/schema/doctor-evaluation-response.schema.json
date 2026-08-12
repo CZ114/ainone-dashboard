@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ainone.local/schemas/doctor-evaluation-response.schema.json",
+  "title": "Doctor Evaluation Response",
+  "description": "Draft or submitted clinician response for one three-condition study session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "studyId",
+    "responseId",
+    "status",
+    "participant",
+    "session",
+    "reveal",
+    "caseResponses",
+    "overall"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "studyId": { "type": "string", "minLength": 1 },
+    "responseId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "submitted"] },
+    "participant": { "$ref": "#/$defs/participant" },
+    "session": { "$ref": "#/$defs/session" },
+    "reveal": { "$ref": "#/$defs/reveal" },
+    "caseResponses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/caseResponse" }
+    },
+    "overall": { "$ref": "#/$defs/overall" }
+  },
+  "$defs": {
+    "conditionId": { "enum": ["b1", "b2", "ours"] },
+    "isoDateTime": { "type": "string", "format": "date-time" },
+    "likert5": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participantCode", "languages"],
+      "properties": {
+        "participantCode": { "type": "string", "minLength": 1 },
+        "ageRange": { "type": "string" },
+        "gender": { "type": "string" },
+        "specialty": { "type": "string" },
+        "trainingLevel": { "type": "string" },
+        "yearsClinical": { "type": "number", "minimum": 0 },
+        "cognitiveExperience": { "type": "string" },
+        "weeklyCognitiveCases": { "type": "string" },
+        "aiFamiliarity": { "$ref": "#/$defs/likert5" },
+        "speechBiomarkerExperience": { "type": "string" },
+        "institutionType": { "type": "string" },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locale", "startedAt", "initialMode"],
+      "properties": {
+        "locale": { "type": "string", "minLength": 2 },
+        "startedAt": { "$ref": "#/$defs/isoDateTime" },
+        "exportedAt": { "$ref": "#/$defs/isoDateTime" },
+        "initialMode": { "enum": ["blinded", "researcher"] }
+      }
+    },
+    "reveal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "methodsRevealedAt": { "$ref": "#/$defs/isoDateTime" },
+        "groundTruthRevealedAt": { "$ref": "#/$defs/isoDateTime" }
+      }
+    },
+    "ratingDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "judgment": {
+          "enum": [
+            "no_cognitive_impairment",
+            "mci",
+            "ad_adrd",
+            "cognitive_impairment_untyped",
+            "insufficient_evidence"
+          ]
+        },
+        "confidence": { "$ref": "#/$defs/likert5" },
+        "usefulness": { "$ref": "#/$defs/likert5" },
+        "clarity": { "$ref": "#/$defs/likert5" },
+        "traceability": { "$ref": "#/$defs/likert5" },
+        "safety": { "$ref": "#/$defs/likert5" },
+        "effort": { "$ref": "#/$defs/likert5" },
+        "comment": { "type": "string" }
+      }
+    },
+    "submittedRating": {
+      "allOf": [
+        { "$ref": "#/$defs/ratingDraft" },
+        {
+          "required": [
+            "judgment",
+            "confidence",
+            "usefulness",
+            "clarity",
+            "traceability",
+            "safety",
+            "effort"
+          ]
+        }
+      ]
+    },
+    "reportChat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "questionCount", "promptIds"],
+      "properties": {
+        "used": { "type": "boolean" },
+        "questionCount": { "type": "integer", "minimum": 0 },
+        "promptIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "startedAt": { "$ref": "#/$defs/isoDateTime" },
+        "endedAt": { "$ref": "#/$defs/isoDateTime" }
+      }
+    },
+    "phaseResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phaseId", "presentationOrder", "status", "openedAt", "rating"],
+      "properties": {
+        "phaseId": { "enum": ["audio_only", "b1", "b2", "ours"] },
+        "conditionId": { "$ref": "#/$defs/conditionId" },
+        "presentationOrder": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["draft", "submitted"] },
+        "openedAt": { "$ref": "#/$defs/isoDateTime" },
+        "submittedAt": { "$ref": "#/$defs/isoDateTime" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "rating": { "$ref": "#/$defs/ratingDraft" },
+        "reportChat": { "$ref": "#/$defs/reportChat" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "submitted" } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["submittedAt"],
+            "properties": {
+              "rating": { "$ref": "#/$defs/submittedRating" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "phaseId": { "const": "audio_only" } },
+            "required": ["phaseId"]
+          },
+          "then": {
+            "not": { "required": ["conditionId"] }
+          },
+          "else": {
+            "required": ["conditionId"]
+          }
+        }
+      ]
+    },
+    "caseResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "phases"],
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/phaseResponse" }
+        }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["susAnswers", "clinicalEvidenceSafetyAnswers", "susScore"],
+      "properties": {
+        "preferredConditionId": { "$ref": "#/$defs/conditionId" },
+        "secondConditionId": { "$ref": "#/$defs/conditionId" },
+        "confidence": { "$ref": "#/$defs/likert5" },
+        "workflowFit": { "$ref": "#/$defs/likert5" },
+        "adoption": { "$ref": "#/$defs/likert5" },
+        "overrelianceConcern": { "$ref": "#/$defs/likert5" },
+        "mostValuableInformation": { "type": "string" },
+        "reason": { "type": "string" },
+        "missingInformation": { "type": "string" },
+        "susAnswers": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/likert5" }
+        },
+        "clinicalEvidenceSafetyAnswers": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/likert5" }
+        },
+        "clinicalComment": { "type": "string" },
+        "susScore": {
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 100 },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "submitted" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "session": { "required": ["exportedAt"] },
+          "overall": {
+            "required": [
+              "preferredConditionId",
+              "secondConditionId",
+              "confidence",
+              "workflowFit",
+              "adoption",
+              "overrelianceConcern",
+              "mostValuableInformation"
+            ],
+            "properties": {
+              "susAnswers": { "minItems": 10, "maxItems": 10 },
+              "clinicalEvidenceSafetyAnswers": { "minItems": 6, "maxItems": 6 }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

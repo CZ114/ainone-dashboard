@@ -9,7 +9,7 @@ import asyncio
 
 from app.services.websocket_manager import WebSocketManager
 from app.services.connection_manager import ConnectionManager
-from app.api import serial, ble, audio, recording, recordings, extensions, system, voice, tts
+from app.api import serial, ble, audio, recording, recordings, extensions, system, voice, tts, live
 from app.api.websocket import router as ws_router
 from app.extensions.manager import get_manager
 
@@ -84,6 +84,7 @@ app.include_router(ble.router, prefix="/api/ble", tags=["BLE"])
 app.include_router(audio.router, prefix="/api/audio", tags=["Audio"])
 app.include_router(recording.router, prefix="/api/recording", tags=["Recording"])
 app.include_router(recordings.router, prefix="/api/recordings", tags=["Recordings Library"])
+app.include_router(live.router, prefix="/api/live", tags=["Live Ownership"])
 app.include_router(extensions.router, prefix="/api/extensions", tags=["Extensions"])
 app.include_router(system.router, prefix="/api/system", tags=["System"])
 app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])

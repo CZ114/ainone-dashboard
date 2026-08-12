@@ -9,6 +9,7 @@ import DiaryPage from './components/diary/DiaryPage';
 import CallPage from './components/call/CallPage';
 import PatientsPage from './components/patients/PatientsPage';
 import TodayPage from './components/patient/TodayPage';
+import DoctorEvaluationPage from './features/doctor-evaluation/DoctorEvaluationPage';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { RoleProvider, useAuth, useCan } from './contexts/RoleContext';
@@ -26,7 +27,8 @@ function RoleRoute({ feature, children }: { feature: FeatureKey; children: React
   return <>{children}</>;
 }
 
-/** `/` 按角色分流: 患者 → /call (语音球是患者的家), 医护/开发者 → /dashboard。 */
+/** `/` 按角色分流 (homeOf): 患者 → /today, 医生 → /patients (先看病人列表),
+    开发者 → /dashboard (设备调试)。 */
 function HomeRedirect() {
   const { auth } = useAuth();
   return <Navigate to={homeOf(auth.role)} replace />;
@@ -64,6 +66,12 @@ function App() {
               } />
               <Route path="/patients" element={
                 <RoleRoute feature="route.patients"><PatientsPage /></RoleRoute>
+              } />
+              <Route path="/doctor-evaluation" element={
+                <RoleRoute feature="route.patients"><DoctorEvaluationPage /></RoleRoute>
+              } />
+              <Route path="/doctor-evaluation-demo" element={
+                <Navigate to="/doctor-evaluation" replace />
               } />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/diary" element={<DiaryPage />} />

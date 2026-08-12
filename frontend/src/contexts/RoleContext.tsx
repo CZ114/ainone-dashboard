@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { can, type FeatureKey, type Role } from '../lib/rolePolicy';
+import { can, homeOf, type FeatureKey, type Role } from '../lib/rolePolicy';
 import { LoginGate } from '../components/auth/LoginGate';
 import { useTheme } from './ThemeContext';
 
@@ -39,10 +39,53 @@ interface RoleContextValue {
 const RoleContext = createContext<RoleContextValue | null>(null);
 
 const STORAGE_KEY = 'app.auth';
+const LENS_KEY = 'app.lens';
+
+// Per-tab identity for developer multi-view debugging. A tab opened with
+// ?lens=1 keeps its login in sessionStorage (isolated per tab) instead of the
+// shared localStorage, so a developer can run dev / doctor / patient side by
+// side in ONE browser — each tab with its own REAL token, so the backend's
+// owner-filtering genuinely applies (true data isolation, not a UI-only skin).
+(function initLensTab() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('lens') === '1') {
+      sessionStorage.setItem(LENS_KEY, '1');
+      sessionStorage.removeItem(STORAGE_KEY); // ignore any inherited auth — log in fresh
+      params.delete('lens');
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash,
+      );
+    }
+  } catch {
+    /* sessionStorage unavailable (private mode) — lens simply won't engage */
+  }
+})();
+
+export function isLensTab(): boolean {
+  try {
+    return sessionStorage.getItem(LENS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** localStorage for normal tabs; sessionStorage for a per-tab debug lens. */
+function authStore(): Storage {
+  return isLensTab() ? window.sessionStorage : window.localStorage;
+}
+
+/** Open a fresh, independently-authenticated tab (developer debug multi-view). */
+export function openLensTab(): void {
+  window.open(window.location.pathname + '?lens=1', '_blank', 'noopener');
+}
 
 function readStoredAuth(): AuthInfo | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = authStore().getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (
@@ -66,7 +109,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   const handleLogin = useCallback((info: AuthInfo) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(info));
+      authStore().setItem(STORAGE_KEY, JSON.stringify(info));
     } catch {
       /* ignore quota / private mode — session-only login */
     }
@@ -76,12 +119,21 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       setThemeName('nord');
       setPreference('light');
     }
+    // Land a FRESH login on the role's home (doctor → /patients), regardless of
+    // which URL the tab was sitting at — the router mounts right after setAuth
+    // and reads window.location. Session RESTORE (readStoredAuth on mount)
+    // deliberately doesn't touch the URL, so a plain refresh keeps your place.
+    try {
+      window.history.replaceState(null, '', homeOf(info.role));
+    } catch {
+      /* history API unavailable — fall back to whatever URL is current */
+    }
     setAuth(info);
   }, [setThemeName, setPreference]);
 
   const logout = useCallback(() => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      authStore().removeItem(STORAGE_KEY);
     } catch {
       /* ignore */
     }

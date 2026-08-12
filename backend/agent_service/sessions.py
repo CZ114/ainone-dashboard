@@ -31,8 +31,12 @@ class SessionManager:
         # M3 归属: session_id → owner (患者编号 / staff 用户名)。side-car
         # JSON, 因为 session 本体是 audit .jsonl (消息历史), 不宜塞元数据。
         self._owners = self._load_owners()
+        # M3 for-whom: session_id → patient_id (服务对象)。跟 owner (发起人) 分开 —
+        # 医生为患者开的会话 owner=医生用户名, patient_id=患者编号。另一个 side-car。
+        self._patients = self._load_patients()
 
     _OWNERS_PATH = SESSIONS_DIR.parent / "session_owners.json"
+    _PATIENTS_PATH = SESSIONS_DIR.parent / "session_patients.json"
 
     @classmethod
     def _load_owners(cls):
@@ -51,6 +55,23 @@ class SessionManager:
     def owner_of(self, session_id):
         return self._owners.get(session_id)
 
+    @classmethod
+    def _load_patients(cls):
+        try:
+            return json.loads(cls._PATIENTS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _save_patients(self):
+        try:
+            self._PATIENTS_PATH.write_text(
+                json.dumps(self._patients, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+    def patient_of(self, session_id):
+        return self._patients.get(session_id)
+
     @staticmethod
     def _audit_path(session_id):
         return SESSIONS_DIR / f"{session_id}.jsonl"
@@ -59,7 +80,8 @@ class SessionManager:
     def _new_session_id():
         return datetime.now().strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:6]
 
-    def get_or_create(self, session_id=None, agent_id=None, create_if_missing=False, owner=None):
+    def get_or_create(self, session_id=None, agent_id=None, create_if_missing=False,
+                      owner=None, patient_id=None):
         """返回 (session_id, entry)。
 
         - session_id=None → 新会话
@@ -95,6 +117,10 @@ class SessionManager:
             if owner and session_id not in self._owners:
                 self._owners[session_id] = owner
                 self._save_owners()
+            # for-whom 患者 (幂等, 首次记)。医生切换"当前患者"后新开的会话才带新值。
+            if patient_id and session_id not in self._patients:
+                self._patients[session_id] = patient_id
+                self._save_patients()
             return session_id, entry
 
     def peek(self, session_id):
@@ -129,6 +155,7 @@ class SessionManager:
                 "sessionId": sid,
                 "updatedAt": datetime.fromtimestamp(p.stat().st_mtime).isoformat(),
                 "owner": sid_owner,
+                "patientId": self._patients.get(sid),
             })
         out.sort(key=lambda s: s["updatedAt"], reverse=True)
         return out

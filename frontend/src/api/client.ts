@@ -77,14 +77,41 @@ export const audioApi = {
   getStatus: () => fetchJson('/audio/status'),
 };
 
+// Live-stream ownership — which patient the single connected device streams for.
+// A patient claims the stream on connect; the dashboard reads it to avoid
+// showing one patient's live data under another patient's name.
+export interface LiveOwner {
+  patient_id: string;
+  patient_name: string;
+}
+
+export const liveApi = {
+  getOwner: (): Promise<{ owner: LiveOwner | null }> => fetchJson('/live/owner'),
+
+  setOwner: (patientId: string, patientName: string) =>
+    fetchJson('/live/owner', {
+      method: 'POST',
+      body: JSON.stringify({ patient_id: patientId, patient_name: patientName }),
+    }),
+
+  clearOwner: () => fetchJson('/live/owner', { method: 'DELETE' }),
+};
+
 // Recording API
 export const recordingApi = {
-  start: (durationSeconds: number = 60, includeAudio: boolean = true) =>
+  start: (
+    durationSeconds: number = 60,
+    includeAudio: boolean = true,
+    patientId: string | null = null,
+    patientName: string | null = null,
+  ) =>
     fetchJson('/recording/start', {
       method: 'POST',
       body: JSON.stringify({
         duration_seconds: durationSeconds,
         include_audio: includeAudio,
+        patient_id: patientId,
+        patient_name: patientName,
       }),
     }),
 

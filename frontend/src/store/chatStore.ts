@@ -177,6 +177,7 @@ export type MessageInput =
 export interface SessionSummary {
   sessionId: string;
   cwd: string;
+  patientId?: string | null;   // for-whom patient (session sidecar); null if untagged
   firstMessage: string;
   lastMessage: string;
   // Claude's first substantive reply in the conversation. Sidebar

@@ -31,8 +31,15 @@ class RecordingService:
             self.base_dir = Path(base_dir)
             self.csv_dir = self.base_dir / "csv"
             self.audio_dir = self.base_dir / "audio"
+        # Patient-attribution sidecars live alongside csv/ and audio/.
+        self.meta_dir = self.base_dir / "meta"
         self.csv_dir.mkdir(parents=True, exist_ok=True)
         self.audio_dir.mkdir(parents=True, exist_ok=True)
+        self.meta_dir.mkdir(parents=True, exist_ok=True)
+
+        # Current session's patient tag (None = untagged recording).
+        self.patient_id: Optional[str] = None
+        self.patient_name: Optional[str] = None
 
         self.is_recording = False
         self.csv_file: Optional[object] = None
@@ -52,7 +59,9 @@ class RecordingService:
         self.on_status_changed: Optional[Callable[[], None]] = None
 
     def start_recording(self, duration: int = 60, include_audio: bool = True,
-                       channel_names: List[str] = None):
+                       channel_names: List[str] = None,
+                       patient_id: Optional[str] = None,
+                       patient_name: Optional[str] = None):
         """Start a new recording session"""
         with self.lock:
             self.is_recording = True
@@ -60,8 +69,26 @@ class RecordingService:
             self.duration = duration
             self.audio_frames = []
             self._stop_recording_event.clear()
+            self.patient_id = patient_id
+            self.patient_name = patient_name
 
             timestamp = self.start_time.strftime("%Y%m%d_%H%M%S")
+
+            # Patient attribution sidecar — additive, keyed by the same timestamp
+            # as the csv/wav, so it needs no filename/regex change. Written even
+            # for untagged sessions (patient_id None) so listing is uniform.
+            try:
+                import json
+                meta = {
+                    "patient_id": patient_id,
+                    "patient_name": patient_name,
+                    "started_at_iso": self.start_time.isoformat(),
+                    "duration_seconds": duration,
+                }
+                (self.meta_dir / f"{timestamp}.json").write_text(
+                    json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+            except Exception as e:
+                print(f"[Recording] meta sidecar write failed: {e}")
 
             # Setup CSV writer
             if channel_names:

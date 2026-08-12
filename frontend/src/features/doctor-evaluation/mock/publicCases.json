@@ -1,0 +1,3135 @@
+[
+    {
+        "id":  "S061",
+        "task":  "Cookie Theft 标准图片描述",
+        "task_description":  "受试者观看同一张厨房场景图片，并尽可能描述正在发生的事情。音频包含检查者指令和受试者回答；分析仅使用 PAR 标记的受试者发言。",
+        "audio":  "assets/audio/S061.wav",
+        "duration":  92.8,
+        "role_counts":  {
+                            "PAR":  17,
+                            "INV":  2
+                        },
+        "role_note":  "检查者 INV 与受试者 PAR 已区分；指标只计算 PAR 发言。",
+        "scores":  {
+                       "b1":  0.183,
+                       "b2":  0.369,
+                       "ours":  0.309
+                   },
+        "diagnoses":  {
+                          "b1":  "未见明确认知障碍信号",
+                          "b2":  "未见明确认知障碍信号",
+                          "ours":  "未见明确认知障碍信号"
+                      },
+        "metrics":  {
+                        "words":  140,
+                        "speech_rate_wpm":  95.7,
+                        "type_token_ratio":  0.543,
+                        "core_coverage":  1.0,
+                        "disfluency_100w":  4.3,
+                        "silence_fraction":  0.513,
+                        "qc_reliability":  0.928
+                    },
+        "states":  [
+                       {
+                           "key":  "output",
+                           "label":  "输出效率下降",
+                           "description":  "综合语速、有效发声和单位时间内容产出，数值越高表示输出效率越低。",
+                           "value":  0.468,
+                           "severity":  "边界偏高",
+                           "reference":  {
+                                             "q1":  0.1,
+                                             "median":  0.24,
+                                             "q3":  0.382,
+                                             "n":  54
+                                         },
+                           "distance":  0.8057273729542106,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟词数",
+                                                      "value":  95.734,
+                                                      "interpretation":  "越低表示单位时间语言输出减少"
+                                                  },
+                                                  {
+                                                      "label":  "受试者总词数",
+                                                      "value":  140.0,
+                                                      "interpretation":  "结合任务时长和提示次数解释"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "information",
+                           "label":  "信息密度不足",
+                           "description":  "衡量单位表达中新增任务相关内容是否充分，数值越高表示有效信息相对不足。",
+                           "value":  0.262,
+                           "severity":  "参考范围内",
+                           "reference":  {
+                                             "q1":  0.133,
+                                             "median":  0.232,
+                                             "q3":  0.372,
+                                             "n":  54
+                                         },
+                           "distance":  0.12815588173895306,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "任务核心内容覆盖率",
+                                                      "value":  1.0,
+                                                      "interpretation":  "越低表示遗漏的任务关键信息越多"
+                                                  },
+                                                  {
+                                                      "label":  "受试者总词数",
+                                                      "value":  140.0,
+                                                      "interpretation":  "受任务时长影响，只作支持证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "停顿与连续性异常",
+                           "description":  "综合回答启动、发言间隔和连续表达情况，数值越高表示连续性越差。",
+                           "value":  0.282,
+                           "severity":  "参考范围内",
+                           "reference":  {
+                                             "q1":  0.216,
+                                             "median":  0.277,
+                                             "q3":  0.36,
+                                             "n":  54
+                                         },
+                           "distance":  0.031979833482565986,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "静音时间占比",
+                                                      "value":  0.513,
+                                                      "interpretation":  "越高表示发言连续性越弱；受切分质量影响"
+                                                  },
+                                                  {
+                                                      "label":  "不流畅事件/100词",
+                                                      "value":  4.286,
+                                                      "interpretation":  "辅助区分停顿与修正负担"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "lexical",
+                           "label":  "词汇提取负担",
+                           "description":  "综合填充、重复、自我修正和不确定表达，数值越高表示提词负担越明显。",
+                           "value":  0.0,
+                           "severity":  "参考范围内",
+                           "reference":  {
+                                             "q1":  0.0,
+                                             "median":  0.0,
+                                             "q3":  0.026,
+                                             "n":  54
+                                         },
+                           "distance":  0.0,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "不流畅事件/100词",
+                                                      "value":  4.286,
+                                                      "interpretation":  "越高表示填充、重复或修正更频繁"
+                                                  },
+                                                  {
+                                                      "label":  "词汇类型-词次比",
+                                                      "value":  0.543,
+                                                      "interpretation":  "结合文本长度解释；不单独用于诊断"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "semantic",
+                           "label":  "任务语义偏离",
+                           "description":  "衡量描述是否持续围绕图片中的关键人物、动作和事件。",
+                           "value":  0.0,
+                           "severity":  "参考范围内",
+                           "reference":  {
+                                             "q1":  0.019,
+                                             "median":  0.084,
+                                             "q3":  0.179,
+                                             "n":  54
+                                         },
+                           "distance":  -0.5254399522349384,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "任务核心内容覆盖率",
+                                                      "value":  1.0,
+                                                      "interpretation":  "衡量内容是否持续围绕任务目标"
+                                                  },
+                                                  {
+                                                      "label":  "词汇类型-词次比",
+                                                      "value":  0.543,
+                                                      "interpretation":  "作为语义组织的辅助证据"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  4.641,
+                             "end":  5.638,
+                             "text":  "alright .",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.074,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  5.638,
+                             "end":  7.95,
+                             "text":  "boy is getting into the cookie jar .",
+                             "words":  7,
+                             "core_units":  [
+                                                "boy",
+                                                "cookie",
+                                                "jar"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  7.95,
+                             "end":  9.0,
+                             "text":  "he\u0027s got one in his hand .",
+                             "words":  6,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  9.0,
+                             "end":  13.464,
+                             "text":  "the stool is falling over as he\u0027s reaching for the cookies .",
+                             "words":  11,
+                             "core_units":  [
+                                                "cookie",
+                                                "stool"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.091,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  13.464,
+                             "end":  17.402,
+                             "text":  "the girl is laughing at him .",
+                             "words":  6,
+                             "core_units":  [
+                                                "girl"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  6,
+                             "start":  17.402,
+                             "end":  25.12,
+                             "text":  "mother is s:tanding by the kitchen sink drying dishes .",
+                             "words":  10,
+                             "core_units":  [
+                                                "mother",
+                                                "sink"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  7,
+                             "start":  25.12,
+                             "end":  31.378,
+                             "text":  "the water is on and it is: the sink is spilling over .",
+                             "words":  10,
+                             "core_units":  [
+                                                "sink"
+                                            ],
+                             "disfluency_100w":  10.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.157,
+                                            "diversity":  0.2,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  8,
+                             "start":  31.378,
+                             "end":  39.581,
+                             "text":  "there is \u0026uh a window over the sink which shows a a yard .",
+                             "words":  12,
+                             "core_units":  [
+                                                "sink"
+                                            ],
+                             "disfluency_100w":  8.3,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.131,
+                                            "diversity":  0.167,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  9,
+                             "start":  39.581,
+                             "end":  41.55,
+                             "text":  "there are curtains .",
+                             "words":  3,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  10,
+                             "start":  41.55,
+                             "end":  49.103,
+                             "text":  "there are looks like two cups and a plate on the sink .",
+                             "words":  12,
+                             "core_units":  [
+                                                "sink"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  11,
+                             "start":  49.103,
+                             "end":  54.97,
+                             "text":  "\u0026uh there\u0027s a set of kitchen cabinets .",
+                             "words":  6,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.056,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  12,
+                             "start":  54.97,
+                             "end":  60.263,
+                             "text":  "and the mother has on an apron and a sleeveless dress .",
+                             "words":  11,
+                             "core_units":  [
+                                                "mother"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.091,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  13,
+                             "start":  60.263,
+                             "end":  72.854,
+                             "text":  "\u0026um (.) \u0026eh (..) the girl has on a \u0026s dress or a skirt and blouse .",
+                             "words":  11,
+                             "core_units":  [
+                                                "girl"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.091,
+                                            "information":  0.0,
+                                            "output":  0.194,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  14,
+                             "start":  72.854,
+                             "end":  80.556,
+                             "text":  "the boy looks like he\u0027s got on short trousers and a shirt with a sweater .",
+                             "words":  15,
+                             "core_units":  [
+                                                "boy"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.067,
+                                            "information":  0.167,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  15,
+                             "start":  80.556,
+                             "end":  85.307,
+                             "text":  "cookie jar is full o(f) cookies .",
+                             "words":  7,
+                             "core_units":  [
+                                                "cookie",
+                                                "jar"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  16,
+                             "start":  85.307,
+                             "end":  86.704,
+                             "text":  "the lid is off .",
+                             "words":  4,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  17,
+                             "start":  86.704,
+                             "end":  92.384,
+                             "text":  "that\u0027s it !",
+                             "words":  2,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.059,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.675,
+                                            "pause":  0.0
+                                        }
+                         }
+                     ],
+        "trajectory_reference":  {
+                                     "lexical":  {
+                                                     "q1":  0.0,
+                                                     "median":  0.0,
+                                                     "q3":  0.0,
+                                                     "n":  738
+                                                 },
+                                     "information":  {
+                                                         "q1":  0.0,
+                                                         "median":  1.0,
+                                                         "q3":  1.0,
+                                                         "n":  738
+                                                     },
+                                     "output":  {
+                                                    "q1":  0.0,
+                                                    "median":  0.0,
+                                                    "q3":  0.0,
+                                                    "n":  738
+                                                },
+                                     "pause":  {
+                                                   "q1":  0.0,
+                                                   "median":  0.0,
+                                                   "q3":  0.0,
+                                                   "n":  738
+                                               }
+                                 },
+        "agent_report":  {
+                             "impression":  "目前语音表现未见明确的阿尔茨海默病相关语言异常。",
+                             "body":  "受试者能够连续描述男孩取饼干、凳子倾倒、母亲洗碗及水槽溢水等主要情节，内容较完整，表达总体连贯，仅见少量填充和自我修正。结合当前语音和转录，认知语言风险较低。",
+                             "recommendation":  "如无主观认知下降或日常功能变化，可结合常规随访；若存在临床担忧，仍应完成标准认知量表。"
+                         },
+        "ours_report":  {
+                            "impression":  "本次图片描述未发现需要优先转诊的明显认知语言风险。",
+                            "summary":  "核心场景覆盖完整，词汇提取负担处于对照参考范围；局部输出速度稍有变化，但未形成持续异常轨迹。",
+                            "counter":  "能够准确识别关键人物、动作及因果关系，是支持低风险判断的主要反向证据。",
+                            "recommendation":  "结合主诉和日常功能决定是否常规复查；本次语音结果不能替代认知量表。"
+                        }
+    },
+    {
+        "id":  "S082",
+        "task":  "Cookie Theft 标准图片描述",
+        "task_description":  "受试者观看同一张厨房场景图片，并尽可能描述正在发生的事情。音频包含检查者指令和受试者回答；分析仅使用 PAR 标记的受试者发言。",
+        "audio":  "assets/audio/S082.wav",
+        "duration":  191.2,
+        "role_counts":  {
+                            "PAR":  22,
+                            "INV":  15
+                        },
+        "role_note":  "检查者 INV 与受试者 PAR 已区分；指标只计算 PAR 发言。",
+        "scores":  {
+                       "b1":  0.847,
+                       "b2":  0.779,
+                       "ours":  0.988
+                   },
+        "diagnoses":  {
+                          "b1":  "阿尔茨海默病相关认知障碍（AD/ADRD）",
+                          "b2":  "阿尔茨海默病相关认知障碍（AD/ADRD）",
+                          "ours":  "阿尔茨海默病相关认知障碍（AD/ADRD）"
+                      },
+        "metrics":  {
+                        "words":  277,
+                        "speech_rate_wpm":  94.1,
+                        "type_token_ratio":  0.44,
+                        "core_coverage":  0.571,
+                        "disfluency_100w":  22.7,
+                        "silence_fraction":  0.754,
+                        "qc_reliability":  0.856
+                    },
+        "states":  [
+                       {
+                           "key":  "lexical",
+                           "label":  "词汇提取负担",
+                           "description":  "综合填充、重复、自我修正和不确定表达，数值越高表示提词负担越明显。",
+                           "value":  0.307,
+                           "severity":  "明显异常",
+                           "reference":  {
+                                             "q1":  0.0,
+                                             "median":  0.0,
+                                             "q3":  0.026,
+                                             "n":  54
+                                         },
+                           "distance":  3.8363417569193743,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "不流畅事件/100词",
+                                                      "value":  22.744,
+                                                      "interpretation":  "越高表示填充、重复或修正更频繁"
+                                                  },
+                                                  {
+                                                      "label":  "词汇类型-词次比",
+                                                      "value":  0.44,
+                                                      "interpretation":  "结合文本长度解释；不单独用于诊断"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "output",
+                           "label":  "输出效率下降",
+                           "description":  "综合语速、有效发声和单位时间内容产出，数值越高表示输出效率越低。",
+                           "value":  0.849,
+                           "severity":  "明显异常",
+                           "reference":  {
+                                             "q1":  0.1,
+                                             "median":  0.24,
+                                             "q3":  0.382,
+                                             "n":  54
+                                         },
+                           "distance":  2.1536150155176386,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟词数",
+                                                      "value":  94.085,
+                                                      "interpretation":  "越低表示单位时间语言输出减少"
+                                                  },
+                                                  {
+                                                      "label":  "受试者总词数",
+                                                      "value":  277.0,
+                                                      "interpretation":  "结合任务时长和提示次数解释"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "information",
+                           "label":  "信息密度不足",
+                           "description":  "衡量单位表达中新增任务相关内容是否充分，数值越高表示有效信息相对不足。",
+                           "value":  0.702,
+                           "severity":  "明显异常",
+                           "reference":  {
+                                             "q1":  0.133,
+                                             "median":  0.232,
+                                             "q3":  0.372,
+                                             "n":  54
+                                         },
+                           "distance":  1.965418730976052,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "任务核心内容覆盖率",
+                                                      "value":  0.571,
+                                                      "interpretation":  "越低表示遗漏的任务关键信息越多"
+                                                  },
+                                                  {
+                                                      "label":  "受试者总词数",
+                                                      "value":  277.0,
+                                                      "interpretation":  "受任务时长影响，只作支持证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "semantic",
+                           "label":  "任务语义偏离",
+                           "description":  "衡量描述是否持续围绕图片中的关键人物、动作和事件。",
+                           "value":  0.248,
+                           "severity":  "边界偏高",
+                           "reference":  {
+                                             "q1":  0.019,
+                                             "median":  0.084,
+                                             "q3":  0.179,
+                                             "n":  54
+                                         },
+                           "distance":  1.022620328540786,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "任务核心内容覆盖率",
+                                                      "value":  0.571,
+                                                      "interpretation":  "衡量内容是否持续围绕任务目标"
+                                                  },
+                                                  {
+                                                      "label":  "词汇类型-词次比",
+                                                      "value":  0.44,
+                                                      "interpretation":  "作为语义组织的辅助证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "停顿与连续性异常",
+                           "description":  "综合回答启动、发言间隔和连续表达情况，数值越高表示连续性越差。",
+                           "value":  0.415,
+                           "severity":  "边界偏高",
+                           "reference":  {
+                                             "q1":  0.216,
+                                             "median":  0.277,
+                                             "q3":  0.36,
+                                             "n":  54
+                                         },
+                           "distance":  0.9546218950019739,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "静音时间占比",
+                                                      "value":  0.754,
+                                                      "interpretation":  "越高表示发言连续性越弱；受切分质量影响"
+                                                  },
+                                                  {
+                                                      "label":  "不流畅事件/100词",
+                                                      "value":  22.744,
+                                                      "interpretation":  "辅助区分停顿与修正负担"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  2.913,
+                             "end":  14.57,
+                             "text":  "well \u0026uh the kids are are xxx in the corner .",
+                             "words":  9,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  11.1,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.175,
+                                            "diversity":  0.222,
+                                            "information":  1.0,
+                                            "output":  0.287,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  14.57,
+                             "end":  29.556,
+                             "text":  "\u0026um they\u0027re grading \u0026uh they they are going to \u0026um get \u0026uh some cookies from the cookie jar .",
+                             "words":  12,
+                             "core_units":  [
+                                                "cookie",
+                                                "jar"
+                                            ],
+                             "disfluency_100w":  16.7,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.262,
+                                            "diversity":  0.083,
+                                            "information":  0.0,
+                                            "output":  0.261,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  29.556,
+                             "end":  42.535,
+                             "text":  "and \u0026uh the mother does not see it because she\u0027s inside \u0026uh \u0026um drying the clothes dishes .",
+                             "words":  13,
+                             "core_units":  [
+                                                "mother"
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.077,
+                                            "information":  0.038,
+                                            "output":  0.075,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  42.535,
+                             "end":  50.0,
+                             "text":  "and \u0026uh the kids then just \u0026uh +...",
+                             "words":  5,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.382,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  50.0,
+                             "end":  60.73,
+                             "text":  "and I guess in the the picture here that \u0026um the mother that\u0027s working hard and and the kids were were playing .",
+                             "words":  21,
+                             "core_units":  [
+                                                "mother"
+                                            ],
+                             "disfluency_100w":  14.3,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.304,
+                                            "diversity":  0.286,
+                                            "information":  0.405,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  6,
+                             "start":  60.73,
+                             "end":  69.834,
+                             "text":  "and \u0026uh all of a sudden \u0026uh somebody \u0026s stepped in \u0026uh \u0026s \u0026uh turned over a dish .",
+                             "words":  10,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  10.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.157,
+                                            "diversity":  0.1,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  7,
+                             "start":  69.834,
+                             "end":  73.991,
+                             "text":  "and \u0026uh all over the floor .",
+                             "words":  5,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  8,
+                             "start":  73.991,
+                             "end":  78.945,
+                             "text":  "except that it did did not dry it up .",
+                             "words":  9,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  11.1,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.175,
+                                            "diversity":  0.222,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  9,
+                             "start":  78.945,
+                             "end":  94.206,
+                             "text":  "\u0026k it didn\u0027t \u0026um splash from the \u0026i it splashed from the sink but not from (.) from \u0026uh +...",
+                             "words":  9,
+                             "core_units":  [
+                                                "sink"
+                                            ],
+                             "disfluency_100w":  22.2,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.349,
+                                            "diversity":  0.222,
+                                            "information":  0.0,
+                                            "output":  0.456,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  10,
+                             "start":  94.206,
+                             "end":  96.4,
+                             "text":  "no that\u0027s no that\u0027s no .",
+                             "words":  3,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  33.3,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.524,
+                                            "diversity":  0.333,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  11,
+                             "start":  96.4,
+                             "end":  99.623,
+                             "text":  "I\u0027m too too trying to get too much out_of it .",
+                             "words":  11,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  18.2,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.286,
+                                            "diversity":  0.182,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  12,
+                             "start":  100.8,
+                             "end":  109.039,
+                             "text":  "+\u003c and one \u0026uh one of the kids is gonna get a \u0026t crack on the head .",
+                             "words":  14,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  7.1,
+                             "gap_before":  1.18,
+                             "scores":  {
+                                            "lexical":  0.112,
+                                            "diversity":  0.143,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.336
+                                        }
+                         },
+                         {
+                             "idx":  13,
+                             "start":  109.614,
+                             "end":  118.0,
+                             "text":  "and maybe he has \u0026uh \u0026um +...",
+                             "words":  4,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.58,
+                             "scores":  {
+                                            "lexical":  0.444,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.56,
+                                            "pause":  0.164
+                                        }
+                         },
+                         {
+                             "idx":  14,
+                             "start":  118.0,
+                             "end":  119.723,
+                             "text":  "man !",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.001,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.464,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  15,
+                             "start":  119.723,
+                             "end":  123.3,
+                             "text":  "this is it\u0027s so +...",
+                             "words":  2,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  50.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.792,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.484,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  16,
+                             "start":  123.3,
+                             "end":  134.75,
+                             "text":  "some o(f) the sometimes I I see it very clear and and \u0026uh other times I I see \u0026uh \u0026r +/.",
+                             "words":  14,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  28.6,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.449,
+                                            "diversity":  0.357,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  17,
+                             "start":  135.247,
+                             "end":  137.923,
+                             "text":  "+, a weak image, so to speak .",
+                             "words":  6,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.5,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.142
+                                        }
+                         },
+                         {
+                             "idx":  18,
+                             "start":  138.611,
+                             "end":  140.552,
+                             "text":  "and sometimes I have I just have this p@o .",
+                             "words":  8,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  12.5,
+                             "gap_before":  0.69,
+                             "scores":  {
+                                            "lexical":  0.196,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.197
+                                        }
+                         },
+                         {
+                             "idx":  19,
+                             "start":  141.284,
+                             "end":  143.199,
+                             "text":  "you\u0027re what what is in here now ?",
+                             "words":  7,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  28.6,
+                             "gap_before":  0.73,
+                             "scores":  {
+                                            "lexical":  0.449,
+                                            "diversity":  0.143,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.209
+                                        }
+                         },
+                         {
+                             "idx":  20,
+                             "start":  144.8,
+                             "end":  178.568,
+                             "text":  "+ but mostly \u0026uh is I I have \u0026uh not not so much trouble \u0026uh in I \u0026d it \u0026uh \u0026uh looking at a thing at it \u0026uh as \u0026um \u0026s \u0026um \u0026am an imarriage image \u003cbut not (.) but not getting anything that you\u0027ll want \u0026s want xxx .",
+                             "words":  9,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  77.8,
+                             "gap_before":  1.6,
+                             "scores":  {
+                                            "lexical":  1.0,
+                                            "diversity":  0.111,
+                                            "information":  1.0,
+                                            "output":  0.754,
+                                            "pause":  0.457
+                                        }
+                         },
+                         {
+                             "idx":  21,
+                             "start":  178.568,
+                             "end":  182.755,
+                             "text":  "+\u003c \u0026uh but an etch you would say it in a little .",
+                             "words":  10,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  22,
+                             "start":  187.518,
+                             "end":  189.594,
+                             "text":  "+\u003c xxx !",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  4.76,
+                             "scores":  {
+                                            "lexical":  0.026,
+                                            "diversity":  0.0,
+                                            "information":  1.0,
+                                            "output":  0.555,
+                                            "pause":  1.0
+                                        }
+                         }
+                     ],
+        "trajectory_reference":  {
+                                     "lexical":  {
+                                                     "q1":  0.0,
+                                                     "median":  0.0,
+                                                     "q3":  0.0,
+                                                     "n":  738
+                                                 },
+                                     "information":  {
+                                                         "q1":  0.0,
+                                                         "median":  1.0,
+                                                         "q3":  1.0,
+                                                         "n":  738
+                                                     },
+                                     "output":  {
+                                                    "q1":  0.0,
+                                                    "median":  0.0,
+                                                    "q3":  0.0,
+                                                    "n":  738
+                                                },
+                                     "pause":  {
+                                                   "q1":  0.0,
+                                                   "median":  0.0,
+                                                   "q3":  0.0,
+                                                   "n":  738
+                                               }
+                                 },
+        "agent_report":  {
+                             "impression":  "语音和语言表现提示较高的阿尔茨海默病风险。",
+                             "body":  "受试者存在较多停顿、填充词、重复和自我修正，叙述过程中多次偏离图片关键内容，且对部分事件的表达不确定。综合语速、词汇使用和语义组织，表现与认知语言受损相符。",
+                             "recommendation":  "建议尽快进行正式认知评估，并结合神经心理检查和影像或生物标志物检查。"
+                         },
+        "ours_report":  {
+                            "impression":  "本次图片描述显示明确的认知语言异常，建议进入正式认知评估流程。",
+                            "summary":  "异常由三类相互独立的证据共同支持：词汇提取负担升高、单位表达中的有效信息减少，以及后半程反复出现的停顿和修正。异常集中于若干具体片段，并非由单一音量或录音时长驱动。",
+                            "counter":  "受试者仍能识别儿童取饼干、母亲在水槽旁和水溢出等部分核心事件，保留一定场景理解能力。",
+                            "recommendation":  "建议完成 MoCA 或 MMSE、日常功能评估及正式神经心理检查；同时核对听力、抑郁和教育背景等可能影响语言表现的因素。"
+                        }
+    },
+    {
+        "id":  "iaeav-inv02-011",
+        "task":  "西班牙语结构化临床访谈",
+        "task_description":  "受试者在检查者引导下完成结构化临床访谈。系统依据时间戳区分检查者与患者，仅将患者发言用于疾病证据计算，并把提示次数保留为互动背景。",
+        "audio":  "assets/audio/iaeav-inv02-011.wav",
+        "duration":  267.9,
+        "role_counts":  {
+                            "PAR":  22,
+                            "INV":  "已按时间戳排除"
+                        },
+        "role_note":  "检查者与患者已按标注时间戳分离；只分析患者片段。",
+        "scores":  {
+                       "b1":  0.996,
+                       "b2":  0.509,
+                       "ours":  0.717
+                   },
+        "diagnoses":  {
+                          "b1":  "认知障碍阳性；仅凭语音不能区分 MCI 与 AD",
+                          "b2":  "认知障碍阳性；仅凭语音不能区分 MCI 与 AD",
+                          "ours":  "认知障碍阳性；仅凭语音不能区分 MCI 与 AD"
+                      },
+        "metrics":  {
+                        "words":  75,
+                        "speech_rate_wpm":  25.08,
+                        "type_token_ratio":  0.68,
+                        "core_coverage":  null,
+                        "disfluency_100w":  1.3,
+                        "silence_fraction":  null,
+                        "qc_reliability":  0.737
+                    },
+        "states":  [
+                       {
+                           "key":  "output",
+                           "label":  "输出效率下降",
+                           "description":  "单位时间语言产出明显低于同任务健康对照。",
+                           "value":  0.79,
+                           "severity":  "明显异常",
+                           "distance":  2.4,
+                           "reference":  {
+                                             "q1":  0.18,
+                                             "median":  0.31,
+                                             "q3":  0.45,
+                                             "n":  184
+                                         },
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟词数",
+                                                      "value":  25.08,
+                                                      "reference":  "CN 中位数 71.87（IQR 57.77–84.90）",
+                                                      "interpretation":  "明显低于同任务对照"
+                                                  },
+                                                  {
+                                                      "label":  "受试者总词数",
+                                                      "value":  75,
+                                                      "reference":  "CN 中位数 173（IQR 128.5–234.2）",
+                                                      "interpretation":  "结合患者发言时长解释"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "lexical",
+                           "label":  "词汇提取负担",
+                           "description":  "泛化表达、代词使用和局部重复共同支持提词困难。",
+                           "value":  0.64,
+                           "severity":  "明显异常",
+                           "distance":  1.7,
+                           "reference":  {
+                                             "q1":  0.16,
+                                             "median":  0.27,
+                                             "q3":  0.39,
+                                             "n":  184
+                                         },
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "代词比例",
+                                                      "value":  0.107,
+                                                      "reference":  "CN 中位数 0.045（IQR 0.033–0.061）",
+                                                      "interpretation":  "高于对照范围"
+                                                  },
+                                                  {
+                                                      "label":  "泛化词比例",
+                                                      "value":  0.013,
+                                                      "reference":  "CN 中位数 0.006（IQR 0–0.011）",
+                                                      "interpretation":  "轻度升高"
+                                                  },
+                                                  {
+                                                      "label":  "填充词比例",
+                                                      "value":  0.013,
+                                                      "reference":  "CN 中位数 0",
+                                                      "interpretation":  "存在局部填充"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "information",
+                           "label":  "信息密度不足",
+                           "description":  "有效词汇密度处于对照下界，结合低输出量提示信息产出受限。",
+                           "value":  0.58,
+                           "severity":  "边界偏高",
+                           "distance":  1.1,
+                           "reference":  {
+                                             "q1":  0.21,
+                                             "median":  0.34,
+                                             "q3":  0.49,
+                                             "n":  184
+                                         },
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "词汇密度代理",
+                                                      "value":  0.6,
+                                                      "reference":  "CN 中位数 0.635（IQR 0.603–0.672）",
+                                                      "interpretation":  "接近对照下界"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "互动与发言连续性",
+                           "description":  "患者发言被切分为较多轮次，需结合访谈者提示解释。",
+                           "value":  0.61,
+                           "severity":  "明显异常",
+                           "distance":  1.4,
+                           "reference":  {
+                                             "q1":  0.17,
+                                             "median":  0.29,
+                                             "q3":  0.42,
+                                             "n":  184
+                                         },
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "患者发言轮次",
+                                                      "value":  22,
+                                                      "reference":  "CN 中位数 12（IQR 10–15）",
+                                                      "interpretation":  "高于同任务对照；可能含访谈提示影响"
+                                                  },
+                                                  {
+                                                      "label":  "患者发言时长（秒）",
+                                                      "value":  179.452,
+                                                      "reference":  "任务相关参考",
+                                                      "interpretation":  "用于计算输出率，不单独作为疾病证据"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  0.0,
+                             "end":  8.14,
+                             "text":  "No voy a ver día todas, porque en seguida se me olvida todo, en seguida se me olvida todo.",
+                             "words":  19,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.0,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.063,
+                                            "output":  0.0,
+                                            "pause":  0.0
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  8.7,
+                             "end":  12.34,
+                             "text":  "Así que no sé como qué voy a hacer con la memoria.",
+                             "words":  12,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.56,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.14
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  14.32,
+                             "end":  15.22,
+                             "text":  "Ah, pues me acuerdo.",
+                             "words":  4,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  25.0,
+                             "gap_before":  1.98,
+                             "scores":  {
+                                            "lexical":  0.75,
+                                            "information":  0.262,
+                                            "output":  0.0,
+                                            "pause":  0.495
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  16.46,
+                             "end":  17.3,
+                             "text":  "Estamos.",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  1.24,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.31
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  19.0,
+                             "end":  21.22,
+                             "text":  "Me acuerdo que me esperamos.",
+                             "words":  5,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  1.7,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.04,
+                                            "output":  0.0,
+                                            "pause":  0.425
+                                        }
+                         },
+                         {
+                             "idx":  6,
+                             "start":  21.46,
+                             "end":  21.78,
+                             "text":  "El era.",
+                             "words":  2,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.24,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.06
+                                        }
+                         },
+                         {
+                             "idx":  7,
+                             "start":  23.66,
+                             "end":  28.84,
+                             "text":  "En 1900, las cosas no volvieron.",
+                             "words":  5,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  1.88,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.078,
+                                            "output":  0.173,
+                                            "pause":  0.47
+                                        }
+                         },
+                         {
+                             "idx":  8,
+                             "start":  34.15,
+                             "end":  41.3,
+                             "text":  "Era una carta para tocar la fruta.",
+                             "words":  7,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  5.31,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.072,
+                                            "output":  0.161,
+                                            "pause":  1.0
+                                        }
+                         },
+                         {
+                             "idx":  9,
+                             "start":  41.7,
+                             "end":  44.66,
+                             "text":  "Eso se llama el pezón.",
+                             "words":  5,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.4,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.1
+                                        }
+                         },
+                         {
+                             "idx":  10,
+                             "start":  44.7,
+                             "end":  45.82,
+                             "text":  "Un zapatos.",
+                             "words":  2,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.04,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.01
+                                        }
+                         },
+                         {
+                             "idx":  11,
+                             "start":  46.62,
+                             "end":  50.48,
+                             "text":  "El coche, una para y un agua.",
+                             "words":  7,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.8,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.2
+                                        }
+                         },
+                         {
+                             "idx":  12,
+                             "start":  57.21,
+                             "end":  57.93,
+                             "text":  "Tomás.",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  6.73,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  1.0
+                                        }
+                         },
+                         {
+                             "idx":  13,
+                             "start":  58.31,
+                             "end":  58.91,
+                             "text":  "Papá.",
+                             "words":  1,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0.0,
+                             "gap_before":  0.38,
+                             "scores":  {
+                                            "lexical":  0.0,
+                                            "information":  0.0,
+                                            "output":  0.0,
+                                            "pause":  0.095
+                                        }
+                         }
+                     ],
+        "trajectory_reference":  {
+                                     "lexical":  {
+                                                     "q1":  0.12,
+                                                     "median":  0.25,
+                                                     "q3":  0.42
+                                                 },
+                                     "information":  {
+                                                         "q1":  0.18,
+                                                         "median":  0.34,
+                                                         "q3":  0.5
+                                                     },
+                                     "output":  {
+                                                    "q1":  0.16,
+                                                    "median":  0.31,
+                                                    "q3":  0.48
+                                                },
+                                     "pause":  {
+                                                   "q1":  0.1,
+                                                   "median":  0.24,
+                                                   "q3":  0.4
+                                               }
+                                 },
+        "agent_report":  {
+                             "impression":  "语音表现提示认知障碍风险，但仅凭本次访谈不能区分 MCI 与 AD。",
+                             "body":  "患者反复提到遗忘，整体语言输出较少，部分回答短且存在词语选择困难。当前表现可能与认知下降有关，但访谈提示、教育与语言背景也可能影响结果。",
+                             "recommendation":  "建议完成标准认知量表、日常功能评估和完整病史采集，再决定是否转诊神经认知专科。"
+                         },
+        "ours_report":  {
+                            "impression":  "认知障碍筛查阳性；现有语音证据不足以完成 MCI/AD 分型。",
+                            "summary":  "输出效率是主要异常：25.08词/分钟，低于健康对照中位数71.87。代词比例0.107高于对照范围，并伴有局部泛化表达和填充。互动轮次22次，高于对照中位数12次，但该指标可能受到访谈者提示影响。",
+                            "counter":  "词汇类型-词次比0.680仍在对照四分位范围内，说明并非所有语言维度均异常。",
+                            "limitations":  "结构化访谈会引入提示和轮次混杂；语言和教育背景尚未完成个体化校准。",
+                            "recommendation":  "先行 MoCA 或 MMSE、IADL/ADL、抑郁与听力筛查；量表或功能史异常时转神经认知专科，进一步考虑神经心理测验、影像及生物标志物检查。"
+                        }
+    },
+    {
+        "id":  "adtx",
+        "task":  "普通话认知评估语音（PREPARE）",
+        "task_description":  "真实普通话MCI病例；年龄55岁，female，受教育10年。当前材料有音频和诊断标签，但没有时间对齐转录。",
+        "audio":  "assets/audio/adtx.wav",
+        "duration":  20.1,
+        "role_counts":  {
+                            "PAR":  "音频可用",
+                            "INV":  "角色标注缺失"
+                        },
+        "role_note":  "说话人角色标注缺失；声学指标按整段音频计算，语言状态不生成。",
+        "scores":  {
+                       "b1":  null,
+                       "b2":  null,
+                       "ours":  null
+                   },
+        "diagnoses":  {
+                          "b1":  "轻度认知障碍（MCI）",
+                          "b2":  "轻度认知障碍（MCI）",
+                          "ours":  "轻度认知障碍（MCI）"
+                      },
+        "metrics":  {
+                        "duration_sec":  20.065,
+                        "active_ratio":  0.39002,
+                        "low_energy_ratio":  0.60998,
+                        "mean_pause_sec":  0.55842,
+                        "longest_pause_sec":  1.17,
+                        "pause_rate_min":  56.81535,
+                        "rms_dbfs":  -32.10113,
+                        "energy_cv":  0.53674,
+                        "zcr":  0.07888,
+                        "spectral_centroid_hz":  1124.12492,
+                        "snr_proxy_db":  19.95544,
+                        "clipping_ratio":  0.0,
+                        "qc_reliability":  0.7
+                    },
+        "states":  [
+                       {
+                           "key":  "continuity",
+                           "label":  "发声连续性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.441,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.05882352941176472,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.390",
+                           "reference_label":  "同源普通话MCI队列中位数 0.389",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声时间占比",
+                                                      "value":  "0.390",
+                                                      "reference":  "同源普通话MCI队列中位数 0.389；IQR 0.265–0.487"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "低能量停顿负担",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.471,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.02941176470588236,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.610",
+                           "reference_label":  "同源普通话MCI队列中位数 0.611",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "低能量时间占比",
+                                                      "value":  "0.610",
+                                                      "reference":  "同源普通话MCI队列中位数 0.611；IQR 0.513–0.735"
+                                                  },
+                                                  {
+                                                      "label":  "平均低能量段",
+                                                      "value":  "0.56秒",
+                                                      "reference":  "同源普通话MCI队列中位数 0.53秒；IQR 0.44–0.63秒"
+                                                  },
+                                                  {
+                                                      "label":  "最长低能量段",
+                                                      "value":  "1.17秒",
+                                                      "reference":  "同源普通话MCI队列中位数 1.22秒；IQR 1.02–1.92秒"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "output",
+                           "label":  "语音中断频率",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.471,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.02941176470588236,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 56.82",
+                           "reference_label":  "同源普通话MCI队列中位数 57.42",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟低能量段次数",
+                                                      "value":  "56.82",
+                                                      "reference":  "同源普通话MCI队列中位数 57.42；IQR 45.89–63.66"
+                                                  },
+                                                  {
+                                                      "label":  "音频总时长",
+                                                      "value":  "20.1秒",
+                                                      "reference":  "用于归一化，不作为疾病证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "energy",
+                           "label":  "发声能量稳定性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.824,
+                           "severity":  "同队列偏高",
+                           "distance":  0.32352941176470584,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.537",
+                           "reference_label":  "同源普通话MCI队列中位数 0.376",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声能量变异系数",
+                                                      "value":  "0.537",
+                                                      "reference":  "同源普通话MCI队列中位数 0.376；IQR 0.320–0.484"
+                                                  },
+                                                  {
+                                                      "label":  "全段均方根能量",
+                                                      "value":  "-32.10 dBFS",
+                                                      "reference":  "同源普通话MCI队列中位数 -31.60 dBFS；IQR -35.21–-28.23 dBFS"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "spectral",
+                           "label":  "频谱分布（辅助）",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.353,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.14705882352941174,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 1124 Hz",
+                           "reference_label":  "同源普通话MCI队列中位数 1250 Hz",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "频谱重心中位数",
+                                                      "value":  "1124 Hz",
+                                                      "reference":  "同源普通话MCI队列中位数 1250 Hz；IQR 1084–1485 Hz"
+                                                  },
+                                                  {
+                                                      "label":  "平均过零率",
+                                                      "value":  "0.079",
+                                                      "reference":  "同源普通话MCI队列中位数 0.093；IQR 0.070–0.121"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "qc",
+                           "label":  "录音质量控制",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.382,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.11764705882352944,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 19.96 dB",
+                           "reference_label":  "同源普通话MCI队列中位数 17.72 dB",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "动态范围/信噪代理",
+                                                      "value":  "19.96 dB",
+                                                      "reference":  "同源普通话MCI队列中位数 17.72 dB；IQR 13.17–22.91 dB"
+                                                  },
+                                                  {
+                                                      "label":  "削波样本比例",
+                                                      "value":  "0.00000",
+                                                      "reference":  "同源普通话MCI队列中位数 0.00000；IQR 0.00000–0.00000"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  0.0,
+                             "end":  5.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.211,
+                                            "output":  0.211,
+                                            "continuity":  0.211,
+                                            "energy":  0.653,
+                                            "lexical":  0.211,
+                                            "information":  0.653,
+                                            "qc":  0.156
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  5.0,
+                             "end":  10.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.239,
+                                            "output":  0.239,
+                                            "continuity":  0.239,
+                                            "energy":  0.783,
+                                            "lexical":  0.239,
+                                            "information":  0.783,
+                                            "qc":  0.176
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  10.0,
+                             "end":  15.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.336,
+                                            "output":  0.336,
+                                            "continuity":  0.336,
+                                            "energy":  0.672,
+                                            "lexical":  0.336,
+                                            "information":  0.672,
+                                            "qc":  0.242
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  15.0,
+                             "end":  20.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.376,
+                                            "output":  0.376,
+                                            "continuity":  0.376,
+                                            "energy":  0.751,
+                                            "lexical":  0.376,
+                                            "information":  0.751,
+                                            "qc":  0.27
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  20.0,
+                             "end":  20.07,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.955,
+                                            "output":  0.955,
+                                            "continuity":  0.955,
+                                            "energy":  0.472,
+                                            "lexical":  0.955,
+                                            "information":  0.472,
+                                            "qc":  0.667
+                                        }
+                         }
+                     ],
+        "trace_options":  [
+                              [
+                                  "pause",
+                                  "低能量停顿"
+                              ],
+                              [
+                                  "continuity",
+                                  "发声连续性"
+                              ],
+                              [
+                                  "energy",
+                                  "能量稳定性"
+                              ],
+                              [
+                                  "qc",
+                                  "录音质量"
+                              ]
+                          ],
+        "trajectory_reference":  {
+                                     "pause":  {
+                                                   "q1":  0.304,
+                                                   "median":  0.439,
+                                                   "q3":  0.586,
+                                                   "n":  161
+                                               },
+                                     "continuity":  {
+                                                        "q1":  0.304,
+                                                        "median":  0.439,
+                                                        "q3":  0.586,
+                                                        "n":  161
+                                                    },
+                                     "energy":  {
+                                                    "q1":  0.507,
+                                                    "median":  0.577,
+                                                    "q3":  0.668,
+                                                    "n":  161
+                                                },
+                                     "qc":  {
+                                                "q1":  0.091,
+                                                "median":  0.197,
+                                                "q3":  0.331,
+                                                "n":  161
+                                            }
+                                 },
+        "agent_report":  {
+                             "impression":  "本病例的实验材料类别为轻度认知障碍（MCI）。",
+                             "body":  "音频可见发声连续性和能量变化。有效发声占比39.0%，低能量时间占比61.0%；平均低能量段0.56秒，最长1.17秒；发声能量变异系数0.537。由于没有时间对齐转录，不能据此判断词汇提取、语义连贯或信息密度。",
+                             "recommendation":  "结合中文版MoCA/MMSE、IADL/ADL、听力与情绪筛查，并补充标准化普通话任务转录。"
+                         },
+        "ours_report":  {
+                            "impression":  "轻度认知障碍（MCI）实验病例；本页仅呈现可核查的声学行为证据。",
+                            "summary":  "有效发声占比39.0%，低能量时间占比61.0%；平均低能量段0.56秒，最长1.17秒；发声能量变异系数0.537。所有数值均来自当前音频；参照为34例同源普通话MCI音频分布，不作为健康正常界值。",
+                            "counter":  "未把音量、频谱或低能量段直接解释为AD机制；语言相关状态因缺少转录而不生成。",
+                            "limitations":  "缺少普通话健康对照、时间对齐转录、任务评分表和说话人角色标签，因此不能估计可校准的AD概率。",
+                            "recommendation":  "完成标准认知量表与日常功能评估；补齐转录和普通话健康对照后再运行完整语言-声学融合。"
+                        }
+    },
+    {
+        "id":  "azlk",
+        "task":  "普通话认知评估语音（PREPARE）",
+        "task_description":  "真实普通话MCI病例；年龄50岁，male，受教育8年。当前材料有音频和诊断标签，但没有时间对齐转录。",
+        "audio":  "assets/audio/azlk.wav",
+        "duration":  19.3,
+        "role_counts":  {
+                            "PAR":  "音频可用",
+                            "INV":  "角色标注缺失"
+                        },
+        "role_note":  "说话人角色标注缺失；声学指标按整段音频计算，语言状态不生成。",
+        "scores":  {
+                       "b1":  null,
+                       "b2":  null,
+                       "ours":  null
+                   },
+        "diagnoses":  {
+                          "b1":  "轻度认知障碍（MCI）",
+                          "b2":  "轻度认知障碍（MCI）",
+                          "ours":  "轻度认知障碍（MCI）"
+                      },
+        "metrics":  {
+                        "duration_sec":  19.273,
+                        "active_ratio":  0.10961,
+                        "low_energy_ratio":  0.89039,
+                        "mean_pause_sec":  1.20429,
+                        "longest_pause_sec":  4.06,
+                        "pause_rate_min":  43.58429,
+                        "rms_dbfs":  -45.51363,
+                        "energy_cv":  0.31847,
+                        "zcr":  0.13493,
+                        "spectral_centroid_hz":  1434.3765,
+                        "snr_proxy_db":  15.1222,
+                        "clipping_ratio":  0.0,
+                        "qc_reliability":  0.663
+                    },
+        "states":  [
+                       {
+                           "key":  "continuity",
+                           "label":  "发声连续性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.853,
+                           "severity":  "同队列偏高",
+                           "distance":  0.3529411764705882,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.110",
+                           "reference_label":  "同源普通话MCI队列中位数 0.389",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声时间占比",
+                                                      "value":  "0.110",
+                                                      "reference":  "同源普通话MCI队列中位数 0.389；IQR 0.265–0.487"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "低能量停顿负担",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.882,
+                           "severity":  "同队列偏高",
+                           "distance":  0.38235294117647056,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.890",
+                           "reference_label":  "同源普通话MCI队列中位数 0.611",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "低能量时间占比",
+                                                      "value":  "0.890",
+                                                      "reference":  "同源普通话MCI队列中位数 0.611；IQR 0.513–0.735"
+                                                  },
+                                                  {
+                                                      "label":  "平均低能量段",
+                                                      "value":  "1.20秒",
+                                                      "reference":  "同源普通话MCI队列中位数 0.53秒；IQR 0.44–0.63秒"
+                                                  },
+                                                  {
+                                                      "label":  "最长低能量段",
+                                                      "value":  "4.06秒",
+                                                      "reference":  "同源普通话MCI队列中位数 1.22秒；IQR 1.02–1.92秒"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "output",
+                           "label":  "语音中断频率",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.206,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.29411764705882354,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 43.58",
+                           "reference_label":  "同源普通话MCI队列中位数 57.42",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟低能量段次数",
+                                                      "value":  "43.58",
+                                                      "reference":  "同源普通话MCI队列中位数 57.42；IQR 45.89–63.66"
+                                                  },
+                                                  {
+                                                      "label":  "音频总时长",
+                                                      "value":  "19.3秒",
+                                                      "reference":  "用于归一化，不作为疾病证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "energy",
+                           "label":  "发声能量稳定性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.265,
+                           "severity":  "同队列中位范围",
+                           "distance":  -0.23529411764705882,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.318",
+                           "reference_label":  "同源普通话MCI队列中位数 0.376",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声能量变异系数",
+                                                      "value":  "0.318",
+                                                      "reference":  "同源普通话MCI队列中位数 0.376；IQR 0.320–0.484"
+                                                  },
+                                                  {
+                                                      "label":  "全段均方根能量",
+                                                      "value":  "-45.51 dBFS",
+                                                      "reference":  "同源普通话MCI队列中位数 -31.60 dBFS；IQR -35.21–-28.23 dBFS"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "spectral",
+                           "label":  "频谱分布（辅助）",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.706,
+                           "severity":  "同队列中位范围",
+                           "distance":  0.20588235294117652,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 1434 Hz",
+                           "reference_label":  "同源普通话MCI队列中位数 1250 Hz",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "频谱重心中位数",
+                                                      "value":  "1434 Hz",
+                                                      "reference":  "同源普通话MCI队列中位数 1250 Hz；IQR 1084–1485 Hz"
+                                                  },
+                                                  {
+                                                      "label":  "平均过零率",
+                                                      "value":  "0.135",
+                                                      "reference":  "同源普通话MCI队列中位数 0.093；IQR 0.070–0.121"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "qc",
+                           "label":  "录音质量控制",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.647,
+                           "severity":  "同队列中位范围",
+                           "distance":  0.1470588235294117,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 15.12 dB",
+                           "reference_label":  "同源普通话MCI队列中位数 17.72 dB",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "动态范围/信噪代理",
+                                                      "value":  "15.12 dB",
+                                                      "reference":  "同源普通话MCI队列中位数 17.72 dB；IQR 13.17–22.91 dB"
+                                                  },
+                                                  {
+                                                      "label":  "削波样本比例",
+                                                      "value":  "0.00000",
+                                                      "reference":  "同源普通话MCI队列中位数 0.00000；IQR 0.00000–0.00000"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  0.0,
+                             "end":  5.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.582,
+                                            "output":  0.582,
+                                            "continuity":  0.582,
+                                            "energy":  0.702,
+                                            "lexical":  0.582,
+                                            "information":  0.702,
+                                            "qc":  0.542
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  5.0,
+                             "end":  10.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.653,
+                                            "output":  0.653,
+                                            "continuity":  0.653,
+                                            "energy":  0.76,
+                                            "lexical":  0.653,
+                                            "information":  0.76,
+                                            "qc":  0.591
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  10.0,
+                             "end":  15.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.736,
+                                            "output":  0.736,
+                                            "continuity":  0.736,
+                                            "energy":  0.572,
+                                            "lexical":  0.736,
+                                            "information":  0.572,
+                                            "qc":  0.647
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  15.0,
+                             "end":  19.27,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.646,
+                                            "output":  0.646,
+                                            "continuity":  0.646,
+                                            "energy":  0.692,
+                                            "lexical":  0.646,
+                                            "information":  0.692,
+                                            "qc":  0.586
+                                        }
+                         }
+                     ],
+        "trace_options":  [
+                              [
+                                  "pause",
+                                  "低能量停顿"
+                              ],
+                              [
+                                  "continuity",
+                                  "发声连续性"
+                              ],
+                              [
+                                  "energy",
+                                  "能量稳定性"
+                              ],
+                              [
+                                  "qc",
+                                  "录音质量"
+                              ]
+                          ],
+        "trajectory_reference":  {
+                                     "pause":  {
+                                                   "q1":  0.304,
+                                                   "median":  0.439,
+                                                   "q3":  0.586,
+                                                   "n":  161
+                                               },
+                                     "continuity":  {
+                                                        "q1":  0.304,
+                                                        "median":  0.439,
+                                                        "q3":  0.586,
+                                                        "n":  161
+                                                    },
+                                     "energy":  {
+                                                    "q1":  0.507,
+                                                    "median":  0.577,
+                                                    "q3":  0.668,
+                                                    "n":  161
+                                                },
+                                     "qc":  {
+                                                "q1":  0.091,
+                                                "median":  0.197,
+                                                "q3":  0.331,
+                                                "n":  161
+                                            }
+                                 },
+        "agent_report":  {
+                             "impression":  "本病例的实验材料类别为轻度认知障碍（MCI）。",
+                             "body":  "音频可见发声连续性和能量变化。有效发声占比11.0%，低能量时间占比89.0%；平均低能量段1.20秒，最长4.06秒；发声能量变异系数0.318。由于没有时间对齐转录，不能据此判断词汇提取、语义连贯或信息密度。",
+                             "recommendation":  "结合中文版MoCA/MMSE、IADL/ADL、听力与情绪筛查，并补充标准化普通话任务转录。"
+                         },
+        "ours_report":  {
+                            "impression":  "轻度认知障碍（MCI）实验病例；本页仅呈现可核查的声学行为证据。",
+                            "summary":  "有效发声占比11.0%，低能量时间占比89.0%；平均低能量段1.20秒，最长4.06秒；发声能量变异系数0.318。所有数值均来自当前音频；参照为34例同源普通话MCI音频分布，不作为健康正常界值。",
+                            "counter":  "未把音量、频谱或低能量段直接解释为AD机制；语言相关状态因缺少转录而不生成。",
+                            "limitations":  "缺少普通话健康对照、时间对齐转录、任务评分表和说话人角色标签，因此不能估计可校准的AD概率。",
+                            "recommendation":  "完成标准认知量表与日常功能评估；补齐转录和普通话健康对照后再运行完整语言-声学融合。"
+                        }
+    },
+    {
+        "id":  "dtuu",
+        "task":  "普通话认知评估语音（PREPARE）",
+        "task_description":  "真实普通话MCI病例；年龄74岁，male，受教育18年。当前材料有音频和诊断标签，但没有时间对齐转录。",
+        "audio":  "assets/audio/dtuu.wav",
+        "duration":  30.0,
+        "role_counts":  {
+                            "PAR":  "音频可用",
+                            "INV":  "角色标注缺失"
+                        },
+        "role_note":  "说话人角色标注缺失；声学指标按整段音频计算，语言状态不生成。",
+        "scores":  {
+                       "b1":  null,
+                       "b2":  null,
+                       "ours":  null
+                   },
+        "diagnoses":  {
+                          "b1":  "轻度认知障碍（MCI）",
+                          "b2":  "轻度认知障碍（MCI）",
+                          "ours":  "轻度认知障碍（MCI）"
+                      },
+        "metrics":  {
+                        "duration_sec":  30.001,
+                        "active_ratio":  0.69213,
+                        "low_energy_ratio":  0.30787,
+                        "mean_pause_sec":  0.466,
+                        "longest_pause_sec":  0.93,
+                        "pause_rate_min":  29.999,
+                        "rms_dbfs":  -28.30993,
+                        "energy_cv":  0.6648,
+                        "zcr":  0.09287,
+                        "spectral_centroid_hz":  1053.68082,
+                        "snr_proxy_db":  28.11365,
+                        "clipping_ratio":  0.0,
+                        "qc_reliability":  0.761
+                    },
+        "states":  [
+                       {
+                           "key":  "continuity",
+                           "label":  "发声连续性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.0,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.5,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.692",
+                           "reference_label":  "同源普通话MCI队列中位数 0.389",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声时间占比",
+                                                      "value":  "0.692",
+                                                      "reference":  "同源普通话MCI队列中位数 0.389；IQR 0.265–0.487"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "低能量停顿负担",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.029,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.47058823529411764,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.308",
+                           "reference_label":  "同源普通话MCI队列中位数 0.611",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "低能量时间占比",
+                                                      "value":  "0.308",
+                                                      "reference":  "同源普通话MCI队列中位数 0.611；IQR 0.513–0.735"
+                                                  },
+                                                  {
+                                                      "label":  "平均低能量段",
+                                                      "value":  "0.47秒",
+                                                      "reference":  "同源普通话MCI队列中位数 0.53秒；IQR 0.44–0.63秒"
+                                                  },
+                                                  {
+                                                      "label":  "最长低能量段",
+                                                      "value":  "0.93秒",
+                                                      "reference":  "同源普通话MCI队列中位数 1.22秒；IQR 1.02–1.92秒"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "output",
+                           "label":  "语音中断频率",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.118,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.38235294117647056,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 30.00",
+                           "reference_label":  "同源普通话MCI队列中位数 57.42",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟低能量段次数",
+                                                      "value":  "30.00",
+                                                      "reference":  "同源普通话MCI队列中位数 57.42；IQR 45.89–63.66"
+                                                  },
+                                                  {
+                                                      "label":  "音频总时长",
+                                                      "value":  "30.0秒",
+                                                      "reference":  "用于归一化，不作为疾病证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "energy",
+                           "label":  "发声能量稳定性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.882,
+                           "severity":  "同队列偏高",
+                           "distance":  0.38235294117647056,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.665",
+                           "reference_label":  "同源普通话MCI队列中位数 0.376",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声能量变异系数",
+                                                      "value":  "0.665",
+                                                      "reference":  "同源普通话MCI队列中位数 0.376；IQR 0.320–0.484"
+                                                  },
+                                                  {
+                                                      "label":  "全段均方根能量",
+                                                      "value":  "-28.31 dBFS",
+                                                      "reference":  "同源普通话MCI队列中位数 -31.60 dBFS；IQR -35.21–-28.23 dBFS"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "spectral",
+                           "label":  "频谱分布（辅助）",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.235,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.2647058823529412,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 1054 Hz",
+                           "reference_label":  "同源普通话MCI队列中位数 1250 Hz",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "频谱重心中位数",
+                                                      "value":  "1054 Hz",
+                                                      "reference":  "同源普通话MCI队列中位数 1250 Hz；IQR 1084–1485 Hz"
+                                                  },
+                                                  {
+                                                      "label":  "平均过零率",
+                                                      "value":  "0.093",
+                                                      "reference":  "同源普通话MCI队列中位数 0.093；IQR 0.070–0.121"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "qc",
+                           "label":  "录音质量控制",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.118,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.38235294117647056,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 28.11 dB",
+                           "reference_label":  "同源普通话MCI队列中位数 17.72 dB",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "动态范围/信噪代理",
+                                                      "value":  "28.11 dB",
+                                                      "reference":  "同源普通话MCI队列中位数 17.72 dB；IQR 13.17–22.91 dB"
+                                                  },
+                                                  {
+                                                      "label":  "削波样本比例",
+                                                      "value":  "0.00000",
+                                                      "reference":  "同源普通话MCI队列中位数 0.00000；IQR 0.00000–0.00000"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  0.0,
+                             "end":  5.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.0,
+                                            "output":  0.0,
+                                            "continuity":  0.0,
+                                            "energy":  0.561,
+                                            "lexical":  0.0,
+                                            "information":  0.561,
+                                            "qc":  0.052
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  5.0,
+                             "end":  10.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.068,
+                                            "output":  0.068,
+                                            "continuity":  0.068,
+                                            "energy":  0.694,
+                                            "lexical":  0.068,
+                                            "information":  0.694,
+                                            "qc":  0.145
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  10.0,
+                             "end":  15.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.019,
+                                            "output":  0.019,
+                                            "continuity":  0.019,
+                                            "energy":  0.599,
+                                            "lexical":  0.019,
+                                            "information":  0.599,
+                                            "qc":  0.112
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  15.0,
+                             "end":  20.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.0,
+                                            "output":  0.0,
+                                            "continuity":  0.0,
+                                            "energy":  0.675,
+                                            "lexical":  0.0,
+                                            "information":  0.675,
+                                            "qc":  0.075
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  20.0,
+                             "end":  25.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.084,
+                                            "output":  0.084,
+                                            "continuity":  0.084,
+                                            "energy":  0.696,
+                                            "lexical":  0.084,
+                                            "information":  0.696,
+                                            "qc":  0.157
+                                        }
+                         },
+                         {
+                             "idx":  6,
+                             "start":  25.0,
+                             "end":  30.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.0,
+                                            "output":  0.0,
+                                            "continuity":  0.0,
+                                            "energy":  0.854,
+                                            "lexical":  0.0,
+                                            "information":  0.854,
+                                            "qc":  0.063
+                                        }
+                         },
+                         {
+                             "idx":  7,
+                             "start":  30.0,
+                             "end":  30.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  1.0,
+                                            "output":  1.0,
+                                            "continuity":  1.0,
+                                            "energy":  1.0,
+                                            "lexical":  1.0,
+                                            "information":  1.0,
+                                            "qc":  1.0
+                                        }
+                         }
+                     ],
+        "trace_options":  [
+                              [
+                                  "pause",
+                                  "低能量停顿"
+                              ],
+                              [
+                                  "continuity",
+                                  "发声连续性"
+                              ],
+                              [
+                                  "energy",
+                                  "能量稳定性"
+                              ],
+                              [
+                                  "qc",
+                                  "录音质量"
+                              ]
+                          ],
+        "trajectory_reference":  {
+                                     "pause":  {
+                                                   "q1":  0.304,
+                                                   "median":  0.439,
+                                                   "q3":  0.586,
+                                                   "n":  161
+                                               },
+                                     "continuity":  {
+                                                        "q1":  0.304,
+                                                        "median":  0.439,
+                                                        "q3":  0.586,
+                                                        "n":  161
+                                                    },
+                                     "energy":  {
+                                                    "q1":  0.507,
+                                                    "median":  0.577,
+                                                    "q3":  0.668,
+                                                    "n":  161
+                                                },
+                                     "qc":  {
+                                                "q1":  0.091,
+                                                "median":  0.197,
+                                                "q3":  0.331,
+                                                "n":  161
+                                            }
+                                 },
+        "agent_report":  {
+                             "impression":  "本病例的实验材料类别为轻度认知障碍（MCI）。",
+                             "body":  "音频可见发声连续性和能量变化。有效发声占比69.2%，低能量时间占比30.8%；平均低能量段0.47秒，最长0.93秒；发声能量变异系数0.665。由于没有时间对齐转录，不能据此判断词汇提取、语义连贯或信息密度。",
+                             "recommendation":  "结合中文版MoCA/MMSE、IADL/ADL、听力与情绪筛查，并补充标准化普通话任务转录。"
+                         },
+        "ours_report":  {
+                            "impression":  "轻度认知障碍（MCI）实验病例；本页仅呈现可核查的声学行为证据。",
+                            "summary":  "有效发声占比69.2%，低能量时间占比30.8%；平均低能量段0.47秒，最长0.93秒；发声能量变异系数0.665。所有数值均来自当前音频；参照为34例同源普通话MCI音频分布，不作为健康正常界值。",
+                            "counter":  "未把音量、频谱或低能量段直接解释为AD机制；语言相关状态因缺少转录而不生成。",
+                            "limitations":  "缺少普通话健康对照、时间对齐转录、任务评分表和说话人角色标签，因此不能估计可校准的AD概率。",
+                            "recommendation":  "完成标准认知量表与日常功能评估；补齐转录和普通话健康对照后再运行完整语言-声学融合。"
+                        }
+    },
+    {
+        "id":  "kyms",
+        "task":  "普通话认知评估语音（PREPARE）",
+        "task_description":  "真实普通话MCI病例；年龄80岁，male，受教育12年。当前材料有音频和诊断标签，但没有时间对齐转录。",
+        "audio":  "assets/audio/kyms.wav",
+        "duration":  30.0,
+        "role_counts":  {
+                            "PAR":  "音频可用",
+                            "INV":  "角色标注缺失"
+                        },
+        "role_note":  "说话人角色标注缺失；声学指标按整段音频计算，语言状态不生成。",
+        "scores":  {
+                       "b1":  null,
+                       "b2":  null,
+                       "ours":  null
+                   },
+        "diagnoses":  {
+                          "b1":  "轻度认知障碍（MCI）",
+                          "b2":  "轻度认知障碍（MCI）",
+                          "ours":  "轻度认知障碍（MCI）"
+                      },
+        "metrics":  {
+                        "duration_sec":  30.001,
+                        "active_ratio":  0.3022,
+                        "low_energy_ratio":  0.6978,
+                        "mean_pause_sec":  0.58367,
+                        "longest_pause_sec":  1.84,
+                        "pause_rate_min":  59.998,
+                        "rms_dbfs":  -37.07862,
+                        "energy_cv":  0.7657,
+                        "zcr":  0.16042,
+                        "spectral_centroid_hz":  1490.35574,
+                        "snr_proxy_db":  24.69021,
+                        "clipping_ratio":  0.0,
+                        "qc_reliability":  0.735
+                    },
+        "states":  [
+                       {
+                           "key":  "continuity",
+                           "label":  "发声连续性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.618,
+                           "severity":  "同队列中位范围",
+                           "distance":  0.11764705882352944,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.302",
+                           "reference_label":  "同源普通话MCI队列中位数 0.389",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声时间占比",
+                                                      "value":  "0.302",
+                                                      "reference":  "同源普通话MCI队列中位数 0.389；IQR 0.265–0.487"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "pause",
+                           "label":  "低能量停顿负担",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.647,
+                           "severity":  "同队列中位范围",
+                           "distance":  0.1470588235294118,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.698",
+                           "reference_label":  "同源普通话MCI队列中位数 0.611",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "低能量时间占比",
+                                                      "value":  "0.698",
+                                                      "reference":  "同源普通话MCI队列中位数 0.611；IQR 0.513–0.735"
+                                                  },
+                                                  {
+                                                      "label":  "平均低能量段",
+                                                      "value":  "0.58秒",
+                                                      "reference":  "同源普通话MCI队列中位数 0.53秒；IQR 0.44–0.63秒"
+                                                  },
+                                                  {
+                                                      "label":  "最长低能量段",
+                                                      "value":  "1.84秒",
+                                                      "reference":  "同源普通话MCI队列中位数 1.22秒；IQR 1.02–1.92秒"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "output",
+                           "label":  "语音中断频率",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.706,
+                           "severity":  "同队列中位范围",
+                           "distance":  0.20588235294117652,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 60.00",
+                           "reference_label":  "同源普通话MCI队列中位数 57.42",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "每分钟低能量段次数",
+                                                      "value":  "60.00",
+                                                      "reference":  "同源普通话MCI队列中位数 57.42；IQR 45.89–63.66"
+                                                  },
+                                                  {
+                                                      "label":  "音频总时长",
+                                                      "value":  "30.0秒",
+                                                      "reference":  "用于归一化，不作为疾病证据"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "energy",
+                           "label":  "发声能量稳定性",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  1.0,
+                           "severity":  "同队列偏高",
+                           "distance":  0.5,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 0.766",
+                           "reference_label":  "同源普通话MCI队列中位数 0.376",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "有效发声能量变异系数",
+                                                      "value":  "0.766",
+                                                      "reference":  "同源普通话MCI队列中位数 0.376；IQR 0.320–0.484"
+                                                  },
+                                                  {
+                                                      "label":  "全段均方根能量",
+                                                      "value":  "-37.08 dBFS",
+                                                      "reference":  "同源普通话MCI队列中位数 -31.60 dBFS；IQR -35.21–-28.23 dBFS"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "spectral",
+                           "label":  "频谱分布（辅助）",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.765,
+                           "severity":  "同队列偏高",
+                           "distance":  0.2647058823529411,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 1490 Hz",
+                           "reference_label":  "同源普通话MCI队列中位数 1250 Hz",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "频谱重心中位数",
+                                                      "value":  "1490 Hz",
+                                                      "reference":  "同源普通话MCI队列中位数 1250 Hz；IQR 1084–1485 Hz"
+                                                  },
+                                                  {
+                                                      "label":  "平均过零率",
+                                                      "value":  "0.160",
+                                                      "reference":  "同源普通话MCI队列中位数 0.093；IQR 0.070–0.121"
+                                                  }
+                                              ]
+                       },
+                       {
+                           "key":  "qc",
+                           "label":  "录音质量控制",
+                           "description":  "基于真实音频计算；参考为34例同源普通话MCI音频，不代表健康正常值。",
+                           "value":  0.176,
+                           "severity":  "同队列偏低",
+                           "distance":  -0.32352941176470584,
+                           "reference":  {
+                                             "q1":  0.25,
+                                             "median":  0.5,
+                                             "q3":  0.75,
+                                             "n":  34
+                                         },
+                           "value_label":  "病例 24.69 dB",
+                           "reference_label":  "同源普通话MCI队列中位数 17.72 dB",
+                           "expand_metrics":  true,
+                           "metric_details":  [
+                                                  {
+                                                      "label":  "动态范围/信噪代理",
+                                                      "value":  "24.69 dB",
+                                                      "reference":  "同源普通话MCI队列中位数 17.72 dB；IQR 13.17–22.91 dB"
+                                                  },
+                                                  {
+                                                      "label":  "削波样本比例",
+                                                      "value":  "0.00000",
+                                                      "reference":  "同源普通话MCI队列中位数 0.00000；IQR 0.00000–0.00000"
+                                                  }
+                                              ]
+                       }
+                   ],
+        "segments":  [
+                         {
+                             "idx":  1,
+                             "start":  0.0,
+                             "end":  5.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.099,
+                                            "output":  0.099,
+                                            "continuity":  0.099,
+                                            "energy":  0.887,
+                                            "lexical":  0.099,
+                                            "information":  0.887,
+                                            "qc":  0.211
+                                        }
+                         },
+                         {
+                             "idx":  2,
+                             "start":  5.0,
+                             "end":  10.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.368,
+                                            "output":  0.368,
+                                            "continuity":  0.368,
+                                            "energy":  0.736,
+                                            "lexical":  0.368,
+                                            "information":  0.736,
+                                            "qc":  0.395
+                                        }
+                         },
+                         {
+                             "idx":  3,
+                             "start":  10.0,
+                             "end":  15.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.257,
+                                            "output":  0.257,
+                                            "continuity":  0.257,
+                                            "energy":  1.0,
+                                            "lexical":  0.257,
+                                            "information":  1.0,
+                                            "qc":  0.319
+                                        }
+                         },
+                         {
+                             "idx":  4,
+                             "start":  15.0,
+                             "end":  20.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.55,
+                                            "output":  0.55,
+                                            "continuity":  0.55,
+                                            "energy":  0.758,
+                                            "lexical":  0.55,
+                                            "information":  0.758,
+                                            "qc":  0.52
+                                        }
+                         },
+                         {
+                             "idx":  5,
+                             "start":  20.0,
+                             "end":  25.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.551,
+                                            "output":  0.551,
+                                            "continuity":  0.551,
+                                            "energy":  0.594,
+                                            "lexical":  0.551,
+                                            "information":  0.594,
+                                            "qc":  0.521
+                                        }
+                         },
+                         {
+                             "idx":  6,
+                             "start":  25.0,
+                             "end":  30.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  0.367,
+                                            "output":  0.367,
+                                            "continuity":  0.367,
+                                            "energy":  0.823,
+                                            "lexical":  0.367,
+                                            "information":  0.823,
+                                            "qc":  0.395
+                                        }
+                         },
+                         {
+                             "idx":  7,
+                             "start":  30.0,
+                             "end":  30.0,
+                             "text":  "普通话原始音频窗口；当前无时间对齐转录。",
+                             "words":  0,
+                             "core_units":  [
+
+                                            ],
+                             "disfluency_100w":  0,
+                             "gap_before":  0,
+                             "scores":  {
+                                            "pause":  1.0,
+                                            "output":  1.0,
+                                            "continuity":  1.0,
+                                            "energy":  0.289,
+                                            "lexical":  1.0,
+                                            "information":  0.289,
+                                            "qc":  1.0
+                                        }
+                         }
+                     ],
+        "trace_options":  [
+                              [
+                                  "pause",
+                                  "低能量停顿"
+                              ],
+                              [
+                                  "continuity",
+                                  "发声连续性"
+                              ],
+                              [
+                                  "energy",
+                                  "能量稳定性"
+                              ],
+                              [
+                                  "qc",
+                                  "录音质量"
+                              ]
+                          ],
+        "trajectory_reference":  {
+                                     "pause":  {
+                                                   "q1":  0.304,
+                                                   "median":  0.439,
+                                                   "q3":  0.586,
+                                                   "n":  161
+                                               },
+                                     "continuity":  {
+                                                        "q1":  0.304,
+                                                        "median":  0.439,
+                                                        "q3":  0.586,
+                                                        "n":  161
+                                                    },
+                                     "energy":  {
+                                                    "q1":  0.507,
+                                                    "median":  0.577,
+                                                    "q3":  0.668,
+                                                    "n":  161
+                                                },
+                                     "qc":  {
+                                                "q1":  0.091,
+                                                "median":  0.197,
+                                                "q3":  0.331,
+                                                "n":  161
+                                            }
+                                 },
+        "agent_report":  {
+                             "impression":  "本病例的实验材料类别为轻度认知障碍（MCI）。",
+                             "body":  "音频可见发声连续性和能量变化。有效发声占比30.2%，低能量时间占比69.8%；平均低能量段0.58秒，最长1.84秒；发声能量变异系数0.766。由于没有时间对齐转录，不能据此判断词汇提取、语义连贯或信息密度。",
+                             "recommendation":  "结合中文版MoCA/MMSE、IADL/ADL、听力与情绪筛查，并补充标准化普通话任务转录。"
+                         },
+        "ours_report":  {
+                            "impression":  "轻度认知障碍（MCI）实验病例；本页仅呈现可核查的声学行为证据。",
+                            "summary":  "有效发声占比30.2%，低能量时间占比69.8%；平均低能量段0.58秒，最长1.84秒；发声能量变异系数0.766。所有数值均来自当前音频；参照为34例同源普通话MCI音频分布，不作为健康正常界值。",
+                            "counter":  "未把音量、频谱或低能量段直接解释为AD机制；语言相关状态因缺少转录而不生成。",
+                            "limitations":  "缺少普通话健康对照、时间对齐转录、任务评分表和说话人角色标签，因此不能估计可校准的AD概率。",
+                            "recommendation":  "完成标准认知量表与日常功能评估；补齐转录和普通话健康对照后再运行完整语言-声学融合。"
+                        }
+    }
+]

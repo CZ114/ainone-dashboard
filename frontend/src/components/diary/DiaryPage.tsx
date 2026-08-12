@@ -12,6 +12,11 @@ import { MessageMarkdown } from '../chat/MessageMarkdown';
 import type { DiaryEntry } from '../../api/diaryApi';
 import { useT } from '../../contexts/LanguageContext';
 import { useCan } from '../../contexts/RoleContext';
+import { useActivePatient } from '../../lib/activePatient';
+import { doctorEvaluationMockStudy } from '../../features/doctor-evaluation/mockStudy';
+import { studyCaseForPatientId } from '../../features/doctor-evaluation/patientCase';
+import { researchPatientsFromStudy } from '../../features/doctor-evaluation/researchPatients';
+import { PatientReportAccordion } from './PatientReportAccordion';
 
 // Per-entry sessionStorage key. Picked up by ChatPage on /chat mount to
 // build the pinned context card and inject the diary entry as the
@@ -36,6 +41,29 @@ export default function DiaryPage() {
   const navigate = useNavigate();
   const t = useT();
   const can = useCan();
+  const activePatient = useActivePatient();
+  const researchPatients = useMemo(
+    () => researchPatientsFromStudy(doctorEvaluationMockStudy),
+    [],
+  );
+  const activeResearchPatient = activePatient
+    ? researchPatients.find((patient) => patient.id === activePatient.id) ?? null
+    : null;
+  const reportPatientRows = useMemo(() => {
+    const orderedPatients = activeResearchPatient
+      ? [
+          activeResearchPatient,
+          ...researchPatients.filter((patient) => patient.id !== activeResearchPatient.id),
+        ]
+      : researchPatients;
+
+    return orderedPatients.flatMap((patient) => {
+      const studyCase = studyCaseForPatientId(patient.id, doctorEvaluationMockStudy);
+      return studyCase
+        ? [{ patient: { id: patient.id, name: patient.name }, studyCase }]
+        : [];
+    });
+  }, [activeResearchPatient, researchPatients]);
   const entries = useDiaryStore((s) => s.entries);
   const loading = useDiaryStore((s) => s.loading);
   const generating = useDiaryStore((s) => s.generating);
@@ -56,8 +84,7 @@ export default function DiaryPage() {
   const agents = useDiaryStore((s) => s.agents);
   const loadAgents = useDiaryStore((s) => s.loadAgents);
   const loadConfig = useDiaryStore((s) => s.loadConfig);
-  const mainProvider = useDiaryStore((s) => s.mainProvider);
-  const loadMainProvider = useDiaryStore((s) => s.loadMainProvider);
+
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   // Which agent should "Generate now" use? Defaults to the daily
@@ -76,8 +103,8 @@ export default function DiaryPage() {
     void loadEntries();
     void loadAgents();
     void loadConfig();
-    void loadMainProvider();
-  }, [loadEntries, loadAgents, loadConfig, loadMainProvider]);
+  }, [loadEntries, loadAgents, loadConfig]);
+
 
   // Initialise the agent picker once config + agents are loaded.
   // Priority: schedule.daily.agent_id > first user-defined agent > null
@@ -131,34 +158,11 @@ export default function DiaryPage() {
       <Header />
       <Toast message={toast} onDismiss={() => setToast(null)} />
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
+      <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               📓 {t.diary.page.heading}
-              {mainProvider && (
-                <span
-                  className={`rounded px-2 py-0.5 text-[10px] font-normal ${
-                    mainProvider.env_source === 'default'
-                      ? 'bg-amber-500/15 text-amber-400'
-                      : 'bg-card-border/40 text-text-secondary'
-                  }`}
-                  title={t.diary.page.providerBadgeTitle(mainProvider.env_source)}
-                >
-                  {/* env_source 'default' = the gateway couldn't reach the
-                      agent service — no provider to show, say so instead. */}
-                  {mainProvider.env_source === 'default' ? (
-                    t.diary.page.agentBackendOffline
-                  ) : (
-                    <>
-                      via{' '}
-                      {mainProvider.base_url
-                        ? new URL(mainProvider.base_url).host
-                        : t.diary.page.agentBackend}
-                    </>
-                  )}
-                </span>
-              )}
             </h1>
             <p className="text-xs text-text-muted">{t.diary.page.tagline}</p>
           </div>
@@ -189,7 +193,11 @@ export default function DiaryPage() {
             >
               {t.diary.page.settings}
             </button>
-            {generating ? (
+            {activeResearchPatient ? (
+              <span className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent">
+                A / B / C 报告已载入
+              </span>
+            ) : generating ? (
               <button
                 type="button"
                 onClick={() => void abortGenerating()}
@@ -210,6 +218,26 @@ export default function DiaryPage() {
           </div>
         </div>
 
+        <section className="space-y-3" aria-labelledby="patient-report-list-title">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="patient-report-list-title" className="text-sm font-semibold text-text-primary">患者评测报告</h2>
+              <p className="mt-0.5 text-xs text-text-muted">
+                全部冻结研究病例；当前研究患者会自动置顶，普通演示患者不会生成研究报告
+              </p>
+            </div>
+            <span className="text-[11px] text-text-muted">{reportPatientRows.length} 位患者</span>
+          </div>
+          {reportPatientRows.map(({ patient, studyCase }) => (
+            <PatientReportAccordion
+              key={`${patient.id}-${studyCase.caseId}`}
+              patient={patient}
+              studyCase={studyCase}
+              conditions={doctorEvaluationMockStudy.conditions}
+            />
+          ))}
+        </section>
+
         {error && (
           <div
             role="alert"
@@ -226,7 +254,7 @@ export default function DiaryPage() {
           </div>
         )}
 
-        {inFlight && inFlight.partial && (
+        {!activeResearchPatient && inFlight && inFlight.partial && (
           <article className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm text-text-primary">
             <header className="mb-2 text-xs text-text-muted">
               ✨ {inFlightAgent} {t.diary.page.writing}
@@ -235,37 +263,36 @@ export default function DiaryPage() {
           </article>
         )}
 
-        {loading && entries.length === 0 ? (
-          <div className="rounded border border-dashed border-card-border p-8 text-center text-sm text-text-muted">
-            {t.diary.page.loading}
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="rounded border border-dashed border-card-border p-8 text-center text-sm text-text-muted">
-            <p className="mb-2 text-base text-text-secondary">{t.diary.page.emptyTitle}</p>
-            <p>
-              {t.diary.page.emptyBefore}
-              <strong>{t.diary.page.emptyAction}</strong>
-              {t.diary.page.emptyAfter}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {entries.map((entry) => (
-              <EntryCard
-                key={entry.id}
-                entry={entry}
-                onReply={handleReply}
-                onMarkRead={(e) => void markRead(e.id)}
-                // Role-gated: no handler → EntryCard renders no delete
-                // button. Diary entries are care records — patients can
-                // reply but never destroy them.
-                onDelete={can('diary.delete') ? (e) => {
-                  if (!window.confirm(t.diary.page.confirmDelete(e.title))) return;
-                  void deleteEntry(e.id);
-                } : undefined}
-              />
-            ))}
-          </div>
+        {!activeResearchPatient && (
+          loading && entries.length === 0 ? (
+            <div className="rounded border border-dashed border-card-border p-8 text-center text-sm text-text-muted">
+              {t.diary.page.loading}
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="rounded border border-dashed border-card-border p-8 text-center text-sm text-text-muted">
+              <p className="mb-2 text-base text-text-secondary">{t.diary.page.emptyTitle}</p>
+              <p>
+                {t.diary.page.emptyBefore}
+                <strong>{t.diary.page.emptyAction}</strong>
+                {t.diary.page.emptyAfter}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {entries.map((entry) => (
+                <EntryCard
+                  key={entry.id}
+                  entry={entry}
+                  onReply={handleReply}
+                  onMarkRead={(item) => void markRead(item.id)}
+                  onDelete={can('diary.delete') ? (item) => {
+                    if (!window.confirm(t.diary.page.confirmDelete(item.title))) return;
+                    void deleteEntry(item.id);
+                  } : undefined}
+                />
+              ))}
+            </div>
+          )
         )}
       </main>
     </div>
