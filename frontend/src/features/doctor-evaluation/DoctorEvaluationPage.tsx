@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
+import { useAuth } from '../../contexts/RoleContext';
+import { useLang } from '../../contexts/LanguageContext';
 
 import { setActivePatient, useActivePatient } from '../../lib/activePatient';
 import { doctorEvaluationMockStudy } from './mockStudy';
@@ -35,10 +37,13 @@ interface EvaluationSession {
   chatPrompts: Record<string, string[]>;
   chatStartedAt: Record<string, string>;
   chatEndedAt: Record<string, string>;
+  caseOpenedAt: Record<string, string>;
+  phaseOpenedAt: Record<string, string>;
+  caseSubmittedAt: Record<string, string>;
   overall: OverallEvaluationDraft;
 }
 
-const STORAGE_KEY = 'advoice.doctor-evaluation.fused.v2';
+const STORAGE_KEY = 'advoice.doctor-evaluation.fused.v3';
 
 const initialSession = (): EvaluationSession => ({
   responseId: `doctor-eval-${Date.now().toString(36)}`,
@@ -48,6 +53,9 @@ const initialSession = (): EvaluationSession => ({
   chatPrompts: {},
   chatStartedAt: {},
   chatEndedAt: {},
+  caseOpenedAt: {},
+  phaseOpenedAt: {},
+  caseSubmittedAt: {},
   overall: emptyOverallDraft(),
 });
 
@@ -59,6 +67,9 @@ function loadSession(): EvaluationSession {
     return {
       ...initialSession(),
       ...parsed,
+      caseOpenedAt: { ...(parsed.caseOpenedAt ?? {}) },
+      phaseOpenedAt: { ...(parsed.phaseOpenedAt ?? {}) },
+      caseSubmittedAt: { ...(parsed.caseSubmittedAt ?? {}) },
       overall: { ...emptyOverallDraft(), ...(parsed.overall ?? {}) },
     };
   } catch {
@@ -78,7 +89,20 @@ function toCaseRating(answers: EvaluationAnswers): CaseRatingAnswers {
   return answers as CaseRatingAnswers;
 }
 
-function toResponse(session: EvaluationSession, mode: StudyMode, bundle: DoctorEvaluationStudyBundle): DoctorEvaluationResponse {
+function elapsedMs(openedAt?: string, submittedAt?: string): number | undefined {
+  if (!openedAt || !submittedAt) return undefined;
+  const elapsed = Date.parse(submittedAt) - Date.parse(openedAt);
+  return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : undefined;
+}
+
+function toResponse(
+  session: EvaluationSession,
+  mode: StudyMode,
+  bundle: DoctorEvaluationStudyBundle,
+  participantCode: string,
+  locale: string,
+  exportedAt: string,
+): DoctorEvaluationResponse {
   const requiredCaseFields = bundle.forms.caseRatingFields.filter((field) => field.required);
   const submittedCases = Object.fromEntries(
     bundle.cases.map((studyCase) => {
@@ -101,35 +125,44 @@ function toResponse(session: EvaluationSession, mode: StudyMode, bundle: DoctorE
   const sessionSubmitted = allCasesSubmitted && session.overall.submitted && overallComplete;
 
   return {
-    schemaVersion: '1.0.0',
+    schemaVersion: '1.1.0',
     studyId: bundle.study.id,
     responseId: session.responseId,
     status: sessionSubmitted ? 'submitted' : 'draft',
     participant: {
-      participantCode: 'platform-authenticated-doctor',
-      languages: ['zh-CN'],
+      participantCode,
+      languages: [locale],
     },
     session: {
-      locale: 'zh-CN',
+      locale,
       startedAt: session.startedAt,
-      exportedAt: new Date().toISOString(),
+      completedAt: sessionSubmitted ? session.overall.submittedAt : undefined,
+      exportedAt,
       initialMode: mode,
     },
     reveal: mode === 'researcher' ? { methodsRevealedAt: new Date().toISOString() } : {},
     caseResponses: bundle.cases.map((studyCase) => {
       const submitted = submittedCases[studyCase.caseId];
+      const openedAt = session.caseOpenedAt[studyCase.caseId];
+      const submittedAt = submitted ? session.caseSubmittedAt[studyCase.caseId] : undefined;
       return {
         caseId: studyCase.caseId,
+        status: submitted ? ('submitted' as const) : ('draft' as const),
+        openedAt,
+        submittedAt,
+        durationMs: elapsedMs(openedAt, submittedAt),
         phases: studyCase.conditionOrder.map((conditionId, index) => {
           const key = ratingKey(studyCase.caseId, conditionId);
           const prompts = session.chatPrompts[key] ?? [];
+          const phaseOpenedAt = session.phaseOpenedAt[key];
           return {
             phaseId: conditionId,
             conditionId,
             presentationOrder: index + 1,
             status: submitted ? ('submitted' as const) : ('draft' as const),
-            openedAt: session.startedAt,
-            submittedAt: submitted ? new Date().toISOString() : undefined,
+            openedAt: phaseOpenedAt,
+            submittedAt,
+            durationMs: elapsedMs(phaseOpenedAt, submittedAt),
             rating: toCaseRating(session.answers[key] ?? {}),
             reportChat:
               conditionId === 'ours'
@@ -145,7 +178,15 @@ function toResponse(session: EvaluationSession, mode: StudyMode, bundle: DoctorE
         }),
       };
     }),
-    overall,
+    overall: {
+      ...overall,
+      openedAt: session.overall.openedAt,
+      submittedAt: sessionSubmitted ? session.overall.submittedAt : undefined,
+      durationMs: elapsedMs(
+        session.overall.openedAt,
+        sessionSubmitted ? session.overall.submittedAt : undefined,
+      ),
+    },
   };
 }
 
@@ -167,6 +208,8 @@ export default function DoctorEvaluationPage({
   studyBundle = doctorEvaluationMockStudy,
 }: DoctorEvaluationPageProps) {
   const bundle = studyBundle;
+  const { auth } = useAuth();
+  const { lang } = useLang();
   const activePatient = useActivePatient();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -214,6 +257,23 @@ export default function DoctorEvaluationPage({
   useEffect(() => {
     setActivePatient({ id: currentResearchPatient.id, name: currentResearchPatient.name });
     const initialCondition = currentCase.conditionOrder[0];
+    const openedAt = new Date().toISOString();
+    setSession((current) => {
+      const caseOpenedAt = current.caseOpenedAt[currentCase.caseId] ?? openedAt;
+      const phaseOpenedAt = { ...current.phaseOpenedAt };
+      for (const conditionId of currentCase.conditionOrder) {
+        const key = ratingKey(currentCase.caseId, conditionId);
+        phaseOpenedAt[key] = phaseOpenedAt[key] ?? caseOpenedAt;
+      }
+      return {
+        ...current,
+        caseOpenedAt: {
+          ...current.caseOpenedAt,
+          [currentCase.caseId]: caseOpenedAt,
+        },
+        phaseOpenedAt,
+      };
+    });
     setActiveCondition(initialCondition);
     setEvidenceOpen(initialCondition === 'ours');
     setAudioUnavailable(false);
@@ -241,9 +301,14 @@ export default function DoctorEvaluationPage({
   };
 
   const submitComparison = () => {
+    const submittedAt = new Date().toISOString();
     setSession((current) => ({
       ...current,
       submitted: { ...current.submitted, [comparisonKey(currentCase.caseId)]: true },
+      caseSubmittedAt: {
+        ...current.caseSubmittedAt,
+        [currentCase.caseId]: submittedAt,
+      },
     }));
   };
 
@@ -252,6 +317,7 @@ export default function DoctorEvaluationPage({
       ...current,
       overall: {
         ...current.overall,
+        openedAt: current.overall.openedAt ?? new Date().toISOString(),
         answers: { ...current.overall.answers, [fieldId]: value },
         submitted: false,
       },
@@ -267,6 +333,7 @@ export default function DoctorEvaluationPage({
       ...current,
       overall: {
         ...current.overall,
+        openedAt: current.overall.openedAt ?? new Date().toISOString(),
         ...(questionnaireId === 'sus'
           ? { susAnswers: { ...current.overall.susAnswers, [itemId]: value } }
           : { clinicalAnswers: { ...current.overall.clinicalAnswers, [itemId]: value } }),
@@ -278,17 +345,38 @@ export default function DoctorEvaluationPage({
   const setClinicalComment = (value: string) => {
     setSession((current) => ({
       ...current,
-      overall: { ...current.overall, clinicalComment: value, submitted: false },
+      overall: {
+        ...current.overall,
+        openedAt: current.overall.openedAt ?? new Date().toISOString(),
+        clinicalComment: value,
+        submitted: false,
+      },
     }));
   };
 
   const submitOverallAndExport = () => {
+    const submittedAt =
+      session.overall.submitted && session.overall.submittedAt
+        ? session.overall.submittedAt
+        : new Date().toISOString();
     const nextSession: EvaluationSession = {
       ...session,
-      overall: { ...session.overall, submitted: true },
+      overall: {
+        ...session.overall,
+        openedAt: session.overall.openedAt ?? submittedAt,
+        submittedAt,
+        submitted: true,
+      },
     };
     setSession(nextSession);
-    const response = toResponse(nextSession, mode, bundle);
+    const response = toResponse(
+      nextSession,
+      mode,
+      bundle,
+      auth.id,
+      lang === 'zh' ? 'zh-CN' : 'en-GB',
+      new Date().toISOString(),
+    );
     downloadJson(response, `${response.responseId}.json`);
   };
 

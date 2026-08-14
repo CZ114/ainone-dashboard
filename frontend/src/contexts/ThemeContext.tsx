@@ -145,36 +145,26 @@ function readStoredConfig(): StoredConfig {
       const name =
         parsed.name && THEMES[parsed.name as ThemeName]
           ? (parsed.name as ThemeName)
-          : 'archival';
+          : 'nord';
       const mode =
         parsed.mode === 'light' ||
         parsed.mode === 'dark' ||
         parsed.mode === 'system'
           ? parsed.mode
-          : 'system';
+          : 'light';
       return { name, mode };
     }
     // Migrate legacy single-key preference if present.
     const legacy = localStorage.getItem(LEGACY_PREF_KEY);
     if (legacy === 'light' || legacy === 'dark' || legacy === 'system') {
-      return { name: 'archival', mode: legacy };
+      return { name: 'nord', mode: legacy };
     }
   } catch {
     /* localStorage unavailable */
   }
-  // Role default: patients get a calm light medical-blue theme
-  // (nord/light) to reinforce the clinical feel. Only applies when the
-  // user hasn't picked a theme yet — an explicit theme-config above
-  // always wins, so a patient who changes theme keeps their choice.
-  try {
-    const auth = localStorage.getItem('app.auth');
-    if (auth && JSON.parse(auth).role === 'patient') {
-      return { name: 'nord', mode: 'light' };
-    }
-  } catch {
-    /* ignore */
-  }
-  return { name: 'archival', mode: 'system' };
+  // Platform default: a calm light medical-blue theme for login and all
+  // roles. An explicit theme-config above still wins, so user choices persist.
+  return { name: 'nord', mode: 'light' };
 }
 
 function writeStoredConfig(cfg: StoredConfig) {

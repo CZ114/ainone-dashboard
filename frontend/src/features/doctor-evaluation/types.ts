@@ -280,7 +280,7 @@ export interface CasePhaseResponse {
   conditionId?: ConditionId;
   presentationOrder: number;
   status: 'draft' | 'submitted';
-  openedAt: string;
+  openedAt?: string;
   submittedAt?: string;
   durationMs?: number;
   rating: CaseRatingAnswers;
@@ -289,6 +289,10 @@ export interface CasePhaseResponse {
 
 export interface CaseEvaluationResponse {
   caseId: string;
+  status: 'draft' | 'submitted';
+  openedAt?: string;
+  submittedAt?: string;
+  durationMs?: number;
   phases: CasePhaseResponse[];
 }
 
@@ -308,6 +312,9 @@ export interface ClinicianProfile {
 }
 
 export interface OverallEvaluationResponse {
+  openedAt?: string;
+  submittedAt?: string;
+  durationMs?: number;
   preferredConditionId?: ConditionId;
   secondConditionId?: ConditionId;
   confidence?: number;
@@ -324,7 +331,7 @@ export interface OverallEvaluationResponse {
 }
 
 export interface DoctorEvaluationResponse {
-  schemaVersion: '1.0.0';
+  schemaVersion: '1.1.0';
   studyId: string;
   responseId: string;
   status: 'draft' | 'submitted';
@@ -332,6 +339,7 @@ export interface DoctorEvaluationResponse {
   session: {
     locale: string;
     startedAt: string;
+    completedAt?: string;
     exportedAt?: string;
     initialMode: StudyMode;
   };

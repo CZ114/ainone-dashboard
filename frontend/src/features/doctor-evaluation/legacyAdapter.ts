@@ -294,7 +294,10 @@ export function adaptLegacyCases(cases: LegacyDoctorCase[]): DoctorEvaluationCas
       protocol: protocolFor(source.id, source.task),
     },
     audio: {
-      src: source.audio.startsWith('/') ? source.audio : `/${source.audio}`,
+      src:
+        source.audio.startsWith('/') || source.audio.startsWith('data:')
+          ? source.audio
+          : `/${source.audio}`,
       mimeType: 'audio/wav',
       durationSeconds: source.duration,
     },

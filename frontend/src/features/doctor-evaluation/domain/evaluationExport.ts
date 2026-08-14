@@ -4,6 +4,8 @@ import type { EvaluationForms, OverallEvaluationResponse } from '../types';
 export type ScalarAnswer = string | number;
 
 export interface OverallEvaluationDraft {
+  openedAt?: string;
+  submittedAt?: string;
   answers: Record<string, ScalarAnswer>;
   susAnswers: Record<string, number>;
   clinicalAnswers: Record<string, number>;

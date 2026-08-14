@@ -1,44 +1,43 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "studyId": "advoice-doctor-three-condition-v1",
   "responseId": "demo-response-001",
   "status": "draft",
   "participant": {
-    "participantCode": "D-001",
-    "specialty": "神经内科",
-    "languages": ["zh-CN", "en"]
+    "participantCode": "doctor-001",
+    "languages": ["zh-CN"]
   },
   "session": {
     "locale": "zh-CN",
-    "startedAt": "2026-08-11T12:00:00Z",
+    "startedAt": "2026-08-14T09:00:00Z",
+    "exportedAt": "2026-08-14T09:16:30Z",
     "initialMode": "blinded"
   },
   "reveal": {},
   "caseResponses": [
     {
       "caseId": "S082",
+      "status": "submitted",
+      "openedAt": "2026-08-14T09:01:00Z",
+      "submittedAt": "2026-08-14T09:16:00Z",
+      "durationMs": 900000,
       "phases": [
         {
-          "phaseId": "audio_only",
-          "presentationOrder": 0,
-          "status": "draft",
-          "openedAt": "2026-08-11T12:01:00Z",
+          "phaseId": "b1",
+          "conditionId": "b1",
+          "presentationOrder": 1,
+          "status": "submitted",
+          "openedAt": "2026-08-14T09:01:00Z",
+          "submittedAt": "2026-08-14T09:16:00Z",
+          "durationMs": 900000,
           "rating": {
             "judgment": "cognitive_impairment_untyped",
-            "confidence": 4
-          }
-        },
-        {
-          "phaseId": "ours",
-          "conditionId": "ours",
-          "presentationOrder": 2,
-          "status": "draft",
-          "openedAt": "2026-08-11T12:05:00Z",
-          "rating": {},
-          "reportChat": {
-            "used": true,
-            "questionCount": 1,
-            "promptIds": ["main_evidence"]
+            "confidence": 4,
+            "usefulness": 3,
+            "clarity": 4,
+            "traceability": 2,
+            "safety": 3,
+            "effort": 2
           }
         }
       ]

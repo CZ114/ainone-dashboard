@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ainone.local/schemas/doctor-evaluation-response.schema.json",
   "title": "Doctor Evaluation Response",
-  "description": "Draft or submitted clinician response for one three-condition study session.",
+  "description": "Canonical AinOne clinician-rating export. Timestamps are persisted interaction events, not regenerated during serialization.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
     "overall"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
+    "schemaVersion": { "const": "1.1.0" },
     "studyId": { "type": "string", "minLength": 1 },
     "responseId": { "type": "string", "minLength": 1 },
     "status": { "enum": ["draft", "submitted"] },
@@ -63,6 +63,7 @@
       "properties": {
         "locale": { "type": "string", "minLength": 2 },
         "startedAt": { "$ref": "#/$defs/isoDateTime" },
+        "completedAt": { "$ref": "#/$defs/isoDateTime" },
         "exportedAt": { "$ref": "#/$defs/isoDateTime" },
         "initialMode": { "enum": ["blinded", "researcher"] }
       }
@@ -131,7 +132,7 @@
     "phaseResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["phaseId", "presentationOrder", "status", "openedAt", "rating"],
+      "required": ["phaseId", "presentationOrder", "status", "rating"],
       "properties": {
         "phaseId": { "enum": ["audio_only", "b1", "b2", "ours"] },
         "conditionId": { "$ref": "#/$defs/conditionId" },
@@ -150,7 +151,7 @@
             "required": ["status"]
           },
           "then": {
-            "required": ["submittedAt"],
+            "required": ["openedAt", "submittedAt"],
             "properties": {
               "rating": { "$ref": "#/$defs/submittedRating" }
             }
@@ -173,22 +174,38 @@
     "caseResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["caseId", "phases"],
+      "required": ["caseId", "status", "phases"],
       "properties": {
         "caseId": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["draft", "submitted"] },
+        "openedAt": { "$ref": "#/$defs/isoDateTime" },
+        "submittedAt": { "$ref": "#/$defs/isoDateTime" },
+        "durationMs": { "type": "integer", "minimum": 0 },
         "phases": {
           "type": "array",
           "minItems": 1,
           "maxItems": 4,
           "items": { "$ref": "#/$defs/phaseResponse" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "submitted" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["openedAt", "submittedAt"] }
+        }
+      ]
     },
     "overall": {
       "type": "object",
       "additionalProperties": false,
       "required": ["susAnswers", "clinicalEvidenceSafetyAnswers", "susScore"],
       "properties": {
+        "openedAt": { "$ref": "#/$defs/isoDateTime" },
+        "submittedAt": { "$ref": "#/$defs/isoDateTime" },
+        "durationMs": { "type": "integer", "minimum": 0 },
         "preferredConditionId": { "$ref": "#/$defs/conditionId" },
         "secondConditionId": { "$ref": "#/$defs/conditionId" },
         "confidence": { "$ref": "#/$defs/likert5" },
@@ -226,9 +243,11 @@
       },
       "then": {
         "properties": {
-          "session": { "required": ["exportedAt"] },
+          "session": { "required": ["completedAt", "exportedAt"] },
           "overall": {
             "required": [
+              "openedAt",
+              "submittedAt",
               "preferredConditionId",
               "secondConditionId",
               "confidence",

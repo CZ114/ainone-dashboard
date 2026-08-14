@@ -32,10 +32,13 @@ definition in schema/doctor-evaluation-study.schema.json.
 - Existing layout, theme tokens, response export and comparative metrics are
   retained.
 
-The doctor-evaluation feature no longer imports api/claudeApi.ts. Its compact
-question panel is explicitly labelled Schema 演示 and generates deterministic
-local answers only from the current MethodOutput fields. A future report-QA
-backend can replace that local function without changing the result renderer.
+The doctor-evaluation feature does not import api/claudeApi.ts. Its compact
+question panel uses api/doctorChatApi.ts and the provider-neutral report-chat
+contract from doctor_three_condition_demo. Configure
+VITE_DOCTOR_CHAT_API_BASE (see frontend/.env.example) to connect the separate
+report-chat service. Until that service is running, the UI explicitly reports
+offline mode and falls back to deterministic answers grounded only in the
+current condition-C MethodOutput.
 
 ## Current clinician workflow
 
@@ -61,3 +64,26 @@ The route currently uses the hardcoded DoctorEvaluationStudyBundle. When the
 three execution methods are ready, normalize their responses to MethodOutput and
 replace the fixture provider; no card, Diary, evidence or rating component needs
 a provider-specific branch.
+
+## Canonical rating export
+
+The platform export contract is
+schema/doctor-evaluation-response.schema.json, version 1.1.0. It replaces the
+legacy standalone template's evaluation-export shape; the platform does not
+emit two competing JSON formats.
+
+Timing fields are persisted interaction events:
+
+- session.startedAt: session creation.
+- caseResponses[].openedAt: first presentation of the case.
+- caseResponses[].phases[].openedAt: first presentation of the condition
+  summary. In the fused card deck, all three summaries appear together.
+- caseResponses[].submittedAt and phase submittedAt: the real click on
+  "提交本病例评分". The unified matrix submits all three conditions together.
+- overall.openedAt: first interaction with the overall evaluation.
+- overall.submittedAt and session.completedAt: final submission.
+- session.exportedAt: the individual download event; re-exporting changes this
+  value but does not rewrite earlier submission timestamps.
+
+Browser drafts use advoice.doctor-evaluation.fused.v3. The previous v2 key is
+left untouched rather than inventing event timestamps for old drafts.

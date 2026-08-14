@@ -1,6 +1,6 @@
 // Main App component with React Router
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import Dashboard from './components/Dashboard';
 import ChatPage from './components/chat/ChatPage';
@@ -35,6 +35,11 @@ function HomeRedirect() {
 }
 
 function App() {
+  // The installed platform keeps clean BrowserRouter URLs. The single-file
+  // showcase runs from file://, where HashRouter is required so navigation
+  // stays inside the generated HTML instead of opening file:///patients.
+  const RuntimeRouter = window.location.protocol === 'file:' ? HashRouter : BrowserRouter;
+
   return (
     <LanguageProvider>
     <ThemeProvider>
@@ -49,7 +54,7 @@ function App() {
             it renders the LoginGate INSTEAD of the app tree, so no
             route/WS/polling ever mounts for an unauthenticated user. */}
         <RoleProvider>
-          <BrowserRouter>
+          <RuntimeRouter>
             {/* AppBridge owns the global WS subscription and recording
                 timer. It must sit outside <Routes> so navigating between
                 /dashboard and /chat doesn't tear the WS down (which used
@@ -80,7 +85,7 @@ function App() {
               {/* 兜底: 未知路径回落地页 */}
               <Route path="*" element={<HomeRedirect />} />
             </Routes>
-          </BrowserRouter>
+          </RuntimeRouter>
         </RoleProvider>
       </BackendGate>
     </ThemeProvider>
