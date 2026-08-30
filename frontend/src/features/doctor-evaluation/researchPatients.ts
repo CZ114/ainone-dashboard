@@ -20,10 +20,10 @@ export function researchPatientId(caseId: string): string {
 export function researchPatientForCase(studyCase: DoctorEvaluationCase): ResearchPatient {
   return {
     id: researchPatientId(studyCase.caseId),
-    name: `研究受试者 ${studyCase.caseId}`,
+    name: `Research subject ${studyCase.caseId}`,
     age: null,
     complaint: studyCase.task,
-    device: `冻结评测数据 · ${studyCase.source.dataset}`,
+    device: `Frozen study data · ${studyCase.source.dataset}`,
     created_by: 'frozen-study',
     // Fixed fixture timestamp: this is display metadata, not a fabricated
     // clinical event time.

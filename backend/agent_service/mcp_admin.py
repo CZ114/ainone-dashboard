@@ -59,15 +59,19 @@ def _validate(cfg: dict) -> dict:
     if transport == "stdio":
         command = (cfg.get("command") or "").strip()
         if not command:
-            raise ValueError("stdio server 需要 command (如 'python path/to/server.py')")
+            raise ValueError("stdio server 需要 command (如 'python path/to/server.py')"
+                             "（stdio server requires a command, "
+                             "e.g. 'python path/to/server.py'）")
         out["command"] = command
     elif transport == "url":
         url = (cfg.get("url") or "").strip()
         if not url.startswith(("http://", "https://")):
-            raise ValueError("url server 需要 http(s):// 地址")
+            raise ValueError("url server 需要 http(s):// 地址"
+                             "（url server requires an http(s):// address）")
         out["url"] = url
     else:
-        raise ValueError(f"transport 需为 stdio 或 url, 收到: {transport!r}")
+        raise ValueError(f"transport 需为 stdio 或 url, 收到: {transport!r}"
+                         f"（transport must be stdio or url）")
     return out
 
 
@@ -91,7 +95,8 @@ def list_servers() -> list[dict]:
 
 def upsert_server(name: str, cfg: dict) -> dict:
     if not _ID_RE.match(name):
-        raise ValueError(f"非法 server 名: {name!r} (2-40 位小写字母/数字/_/-)")
+        raise ValueError(f"非法 server 名: {name!r} (2-40 位小写字母/数字/_/-)"
+                         f"（Invalid server name: 2-40 chars of lowercase letters/digits/_/-）")
     clean = _validate(cfg)
     with _lock:
         doc = _load_doc()
@@ -105,7 +110,7 @@ def delete_server(name: str) -> None:
     with _lock:
         doc = _load_doc()
         if name not in doc["servers"]:
-            raise KeyError(f"未知 MCP server: {name}")
+            raise KeyError(f"未知 MCP server: {name}（Unknown MCP server）")
         del doc["servers"][name]
         _save_doc(doc)
     _status.pop(name, None)
@@ -125,7 +130,7 @@ def _register_with_timeout(registry, source, prefix, timeout_s):
         try:
             return fut.result(timeout=timeout_s)
         except FutTimeout:
-            raise TimeoutError(f"连接超时 (>{timeout_s}s)")
+            raise TimeoutError(f"连接超时 (>{timeout_s}s)（Connection timed out）")
     finally:
         pool.shutdown(wait=False)
 
@@ -158,7 +163,7 @@ def test_server(name: str) -> dict:
     — 修好的 server 测一下就能在下个会话恢复挂载。"""
     cfg = _load_doc()["servers"].get(name)
     if cfg is None:
-        raise KeyError(f"未知 MCP server: {name}")
+        raise KeyError(f"未知 MCP server: {name}（Unknown MCP server）")
     from agent import create_registry
     started = time.time()
     try:

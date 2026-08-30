@@ -60,9 +60,9 @@ function RoleBadge() {
         {isLensTab() && (
           <span
             className="ml-0.5 px-1 rounded bg-accent/20 text-accent text-[9px] font-bold"
-            title="独立身份调试标签（本标签登录只存在于此标签，不影响其它标签）"
+            title="独立身份调试标签（本标签登录只存在于此标签，不影响其它标签）（Isolated identity debug tab — its login exists only in this tab and does not affect other tabs）"
           >
-            镜
+            镜 Lens
           </span>
         )}
       </button>
@@ -86,9 +86,9 @@ function RoleBadge() {
                 setOpen(false);
               }}
               className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-card-border/50 transition-colors border-b border-card-border"
-              title="新开一个独立登录的标签，可在同一浏览器里并排查看不同角色（真实数据隔离）"
+              title="新开一个独立登录的标签，可在同一浏览器里并排查看不同角色（真实数据隔离）（Open a new tab with an isolated login to view different roles side by side in one browser, with real data isolation）"
             >
-              🔍 开调试镜标签
+              🔍 开调试镜标签 Open lens tab
             </button>
           )}
           <button

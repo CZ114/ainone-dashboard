@@ -36,9 +36,14 @@ import {
   RECORDING_DRAG_MIME,
   RECORDING_CSV_PREVIEW_ROWS,
   RECORDING_CSV_INLINE_BYTES,
+  REPORT_DRAG_MIME,
+  CHAT_MSG_DRAG_MIME,
+  type ChatQuoteDragPayload,
   type PendingAttachment,
+  type ReportDragPayload,
 } from '../../lib/attachments';
 import type { RecordingDragPayload } from './RecordingsPanel';
+import { agentAdminApi, type SessionReport } from '../../api/agentAdminApi';
 import {
   isSpeechRecognitionSupported,
   startSpeechRecognition,
@@ -265,17 +270,23 @@ export function ChatInput({
     return out;
   };
 
+  // Phase 6: 三种自定义拖放载荷共用同一套 enter/leave/over 视觉状态 —
+  // 录音 (RecordingsPanel)、分析报告 (报告区)、聊天消息引用 (气泡)。
+  const OUR_DRAG_MIMES = [RECORDING_DRAG_MIME, REPORT_DRAG_MIME, CHAT_MSG_DRAG_MIME];
+  const hasOurMime = (e: React.DragEvent) =>
+    OUR_DRAG_MIMES.some((m) => e.dataTransfer.types.includes(m));
+
   const handleDragEnter = (e: React.DragEvent) => {
-    // Only claim the drop when a recording payload is actually present,
+    // Only claim the drop when one of our payloads is actually present,
     // so dragging generic OS files doesn't trigger our visual state.
-    if (!e.dataTransfer.types.includes(RECORDING_DRAG_MIME)) return;
+    if (!hasOurMime(e)) return;
     e.preventDefault();
     dragDepthRef.current += 1;
     setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(RECORDING_DRAG_MIME)) return;
+    if (!hasOurMime(e)) return;
     dragDepthRef.current -= 1;
     if (dragDepthRef.current <= 0) {
       dragDepthRef.current = 0;
@@ -284,23 +295,100 @@ export function ChatInput({
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(RECORDING_DRAG_MIME)) return;
+    if (!hasOurMime(e)) return;
     // preventDefault on dragover is what actually enables drop — without
     // it the browser falls back to its native "rejected" cursor.
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   };
 
+  // 报告 → 紧凑文本 (进 prompt 的正文; chip 显示的是 filename)。
+  const renderReportText = (r: SessionReport): string => {
+    const lines: string[] = [
+      `报告 ${r.id} (v${r.version}) · 录音 ${r.recording_id} · 患者 ${r.patient_id ?? '未关联'} · ${(r.generated_at || '').slice(0, 16)}`,
+    ];
+    if (r.narrative) lines.push(`总述: ${r.narrative}`);
+    r.observations.forEach((o) => lines.push(`- 观察: ${o}`));
+    r.risk_flags.forEach((f) =>
+      lines.push(`- 风险[${f.severity ?? '?'}]: ${f.flag ?? ''}${f.basis ? ` — ${f.basis}` : ''}`),
+    );
+    r.recommendations.forEach((x) => lines.push(`- 建议: ${x}`));
+    r.quality_caveats.forEach((c) => lines.push(`- ⚠ ${c}`));
+    if (r.llm_parse_ok === false) lines.push('- ⚠ 该报告 LLM 段落生成失败, 仅含确定性统计');
+    return lines.join('\n').slice(0, 6000);
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
-    const raw = e.dataTransfer.getData(RECORDING_DRAG_MIME);
-    if (!raw) return;
+    const rawRecording = e.dataTransfer.getData(RECORDING_DRAG_MIME);
+    const rawReport = e.dataTransfer.getData(REPORT_DRAG_MIME);
+    const rawQuote = e.dataTransfer.getData(CHAT_MSG_DRAG_MIME);
+    if (!rawRecording && !rawReport && !rawQuote) return;
     e.preventDefault();
     dragDepthRef.current = 0;
     setIsDragOver(false);
 
+    // ---- 聊天消息引用: payload 自带内容, 同步构建 chip ----
+    if (rawQuote) {
+      try {
+        const q: ChatQuoteDragPayload = JSON.parse(rawQuote);
+        if (q.content?.trim()) {
+          addPendingAttachments([{
+            id: crypto.randomUUID(),
+            path: '',
+            filename: `引用·${q.role === 'user' ? '用户' : 'AI'}消息 / Quoted ${q.role === 'user' ? 'user' : 'AI'} message`,
+            sizeBytes: q.content.length,
+            mimeType: 'text/plain',
+            kind: 'chat-quote',
+            content: q.content,
+            quoteRole: q.role,
+          }]);
+        }
+      } catch {
+        window.alert('消息引用: 载荷格式错误（Quote drop: malformed payload）');
+      }
+      return;
+    }
+
+    // ---- 分析报告: 拉全文 → 紧凑文本附件 ----
+    if (rawReport) {
+      let rp: ReportDragPayload;
+      try {
+        rp = JSON.parse(rawReport);
+      } catch {
+        window.alert('报告拖入: 载荷格式错误（Report drop: malformed payload）');
+        return;
+      }
+      if (!rp.id) return;
+      try {
+        const { report } = await agentAdminApi.getReport(rp.id);
+        const text = renderReportText(report);
+        addPendingAttachments([{
+          id: crypto.randomUUID(),
+          path: `report:${report.id}`,
+          filename: `报告 Report ${report.recording_id} v${report.version}`,
+          sizeBytes: text.length,
+          mimeType: 'application/json',
+          kind: 'report',
+          content: text,
+          report: {
+            reportId: report.id,
+            recordingId: report.recording_id,
+            version: report.version,
+            patientId: report.patient_id,
+          },
+        }]);
+      } catch (err) {
+        window.alert(
+          `报告 ${rp.id} 附加失败（Failed to attach report）: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return;
+    }
+
+    // ---- 录音 (原有路径) ----
     let payload: RecordingDragPayload;
     try {
-      payload = JSON.parse(raw);
+      payload = JSON.parse(rawRecording);
     } catch {
       window.alert('Recording drop: malformed payload');
       return;
@@ -722,7 +810,7 @@ export function ChatInput({
         {isDragOver && (
           <div className="absolute inset-2 pointer-events-none border-2 border-dashed border-accent/70 rounded-lg bg-accent/10 z-10 flex items-center justify-center">
             <span className="text-sm text-accent-soft font-medium">
-              🎙️ Drop recording to attach
+              📎 松手附加 (录音 / 报告 / 消息引用)（Drop to attach — recording / report / quote）
             </span>
           </div>
         )}

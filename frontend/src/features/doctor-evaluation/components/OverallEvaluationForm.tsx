@@ -14,7 +14,7 @@ interface OverallEvaluationFormProps {
 
 function LikertButtons({ value, onChange, disabled }: { value?: number; onChange: (value: number) => void; disabled: boolean }) {
   return (
-    <div className="flex gap-1.5" role="group" aria-label="1 到 5 分">
+    <div className="flex gap-1.5" role="group" aria-label="1 到 5 分（1 to 5）">
       {[1, 2, 3, 4, 5].map((item) => (
         <button
           key={item}
@@ -59,11 +59,11 @@ export function OverallEvaluationForm({
         <p className="text-xs font-semibold uppercase tracking-wider text-accent">Overall evaluation</p>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">总体比较、SUS 与临床安全量表</h2>
-            <p className="mt-1 text-xs text-text-muted">完成全部病例后提交；回答自动保存在当前浏览器。</p>
+            <h2 className="text-lg font-semibold text-text-primary">总体比较、SUS 与临床安全量表 / Overall comparison, SUS & clinical safety scale</h2>
+            <p className="mt-1 text-xs text-text-muted">完成全部病例后提交；回答自动保存在当前浏览器。（Submit after finishing all cases; answers auto-save in this browser.）</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${casesComplete ? 'bg-status-success/15 text-status-success' : 'bg-card-hover text-text-muted'}`}>
-            病例 {casesComplete ? '已全部完成' : '尚未全部完成'}
+            病例 Cases {casesComplete ? '已全部完成 All complete' : '尚未全部完成 Incomplete'}
           </span>
         </div>
       </header>
@@ -81,7 +81,7 @@ export function OverallEvaluationForm({
                   onChange={(event) => onAnswer(field.id, event.target.value)}
                   className="w-full rounded-lg border border-card-border bg-window-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
                 >
-                  <option value="">请选择</option>
+                  <option value="">请选择 Select…</option>
                   {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               ) : field.kind === 'likert_5' ? (
@@ -107,7 +107,7 @@ export function OverallEvaluationForm({
             <section key={questionnaire.id} className="rounded-xl border border-card-border bg-window-bg/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div><h3 className="font-semibold text-text-primary">{questionnaire.title}</h3><p className="mt-1 text-xs text-text-muted">{questionnaire.description}</p></div>
-                {questionnaire.id === 'sus' && <span className="text-xs font-semibold text-accent">SUS：{susScore ?? '待完成'}</span>}
+                {questionnaire.id === 'sus' && <span className="text-xs font-semibold text-accent">SUS：{susScore ?? '待完成 Pending'}</span>}
               </div>
               <div className="mt-4 space-y-4">
                 {questionnaire.items.map((item, index) => (
@@ -122,17 +122,17 @@ export function OverallEvaluationForm({
         })}
 
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-text-primary">临床安全补充意见</span>
+          <span className="mb-1.5 block text-sm font-medium text-text-primary">临床安全补充意见 / Additional clinical-safety comments</span>
           <textarea rows={3} value={draft.clinicalComment} onChange={(event) => onClinicalComment(event.target.value)} className="w-full resize-y rounded-lg border border-card-border bg-window-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent" />
         </label>
       </fieldset>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-card-border px-5 py-4">
         <p className={`text-xs ${complete ? 'text-status-success' : 'text-text-muted'}`}>
-          {draft.submitted ? '✓ 总体评价已提交并导出；继续修改后可重新导出。' : complete ? '全部必填项已完成，可以提交并导出平台评价。' : '需完成 7 个病例、总体必填项、10 道 SUS 和 6 道临床安全题。'}
+          {draft.submitted ? '✓ 总体评价已提交并导出；继续修改后可重新导出。（Overall evaluation submitted and exported; re-export after further edits.）' : complete ? '全部必填项已完成，可以提交并导出平台评价。（All required items complete; ready to submit and export.）' : '需完成 7 个病例、总体必填项、10 道 SUS 和 6 道临床安全题。（Requires 7 cases, the required overall items, 10 SUS items, and 6 clinical-safety items.）'}
         </p>
         <button type="button" disabled={!complete} onClick={onSubmit} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40">
-          {draft.submitted ? '更新并重新导出平台 JSON' : '提交并导出平台 JSON'}
+          {draft.submitted ? '更新并重新导出平台 JSON / Update & re-export JSON' : '提交并导出平台 JSON / Submit & export JSON'}
         </button>
       </footer>
     </section>

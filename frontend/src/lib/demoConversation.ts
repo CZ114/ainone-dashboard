@@ -113,7 +113,7 @@ const T2_CHART: DemoChartSpec = {
 
 export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
   {
-    user: '今天感觉脑子有点闷，能帮我看看是不是哪里不对？',
+    user: '今天感觉脑子有点闷，能帮我看看是不是哪里不对？（EN: My head feels a bit foggy today — can you check if something\'s off?）',
     files: T1_FILES,
     chart: T1_CHART,
     audioUrl: '/demo-audio/zh/t1.mp3',
@@ -121,7 +121,10 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
       '📎 `ppg_2026-05-08_15-17.csv` · `gsr_2026-05-08_15-17.csv` · `env_light_2026-05-08.csv`\n\n' +
       '晚上好。看了今天的数据 — 你下午 3 点到 5 点的心率波动比上周平均高了 12%，' +
       'GSR 也一直没回到基线。环境光那段时间偏暗，应该在室内。' +
-      '这种组合更像情绪/认知负荷，不是体力疲劳。那段时间你在做什么？',
+      '这种组合更像情绪/认知负荷，不是体力疲劳。那段时间你在做什么？\n\n' +
+      '（EN: Your 3–5 PM heart rate ran ~12% above last week\'s average and GSR never ' +
+      'settled back to baseline; ambient light was low, so likely indoors. That reads ' +
+      'more like emotional/cognitive load than physical fatigue — what were you doing then?）',
     // ~800 ms per file × 3 files. ReadingDataLoader steps once per
     // file with equal share, and the third file stays ◇ until the
     // bubble lands — reads as "Claude is still on the last source".
@@ -131,7 +134,7 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
     postReplyPauseMs: 1200,
   },
   {
-    user: '在跟我妈视频，她又把同一件事问了三遍。',
+    user: '在跟我妈视频，她又把同一件事问了三遍。（EN: On a video call with my mom — she asked me the same thing three times again.）',
     files: T2_FILES,
     chart: T2_CHART,
     audioUrl: '/demo-audio/zh/t2.mp3',
@@ -139,7 +142,10 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
       '📎 `hrv_trend_2026-04-24_to_05-08.csv` · `family_call_log.json`\n\n' +
       '嗯，记下来了。最近 14 天里，你跟家里视频前后 HRV 平均会低 6–8%，恢复也变慢。' +
       '这不是医学问题，但身体确实有反应。今晚的录音要不要稍微早点收？' +
-      '我先把你当下的状态写进观察。',
+      '我先把你当下的状态写进观察。\n\n' +
+      '（EN: Noted. Over the last 14 days your HRV averages 6–8% lower around family ' +
+      'video calls, with slower recovery. Not a medical issue, but your body is reacting — ' +
+      'want to end tonight\'s recording a little earlier? I\'ll log your current state as an observation.）',
     recordMs: 1000,
     transcribeMs: 400,
     // ~900 ms per file × 2.
@@ -151,19 +157,22 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
     // The thinking phase falls back to the generic ThinkingLoader so
     // the boundary message lands without a contradictory "Reading…"
     // panel above it.
-    user: '你这边能看到她那边的数据吗？',
+    user: '你这边能看到她那边的数据吗？（EN: Can you see anything from her side?）',
     audioUrl: '/demo-audio/zh/t3.mp3',
     ai:
       '看不到。我能看到的只有你这只智能手套、你这台机器上的录音、和你跟我说的内容。' +
       '如果你想追踪她的某些方面 — 比如重复某句话的频率 — 可以把跟她的通话录下来，' +
-      '我从你这一侧去观察。',
+      '我从你这一侧去观察。\n\n' +
+      '（EN: No — I can only see your smart glove, the recordings on this machine, and ' +
+      'what you tell me. To track something on her side — say, how often she repeats a ' +
+      'phrase — record your calls with her and I\'ll observe from your side of the line.）',
     recordMs: 900,
     transcribeMs: 380,
     thinkMs: 850,
     postReplyPauseMs: 800,
   },
   {
-    user: '她最近一周问我退休金的事问了多少次？',
+    user: '她最近一周问我退休金的事问了多少次？（EN: How many times has she asked me about her pension this past week?）',
     files: T4_FILES,
     audioUrl: '/demo-audio/zh/t4.mp3',
     ai:
@@ -173,7 +182,10 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
       '|---|---|---|---|---|---|---|---|\n' +
       '| 提及次数 | 0 | 4 | 3 | 1 | 1 | 0 | 0 |\n\n' +
       '集中在周二、周三。我标了一条观察放进日记，你后面想拉给医生看可以直接调。' +
-      '但记住 — 这是观察，不是诊断。',
+      '但记住 — 这是观察，不是诊断。\n\n' +
+      '（EN: Across your 7 saved call recordings, "pension" came up 9 times on her side — ' +
+      'clustered on Tue/Wed (table: mentions per weekday, Mon–Sun). Logged as a diary ' +
+      'observation you can pull up for a clinician. Remember — observation, not diagnosis.）',
     recordMs: 1000,
     transcribeMs: 450,
     // ~900 ms per file × 2.
@@ -182,7 +194,7 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
     postReplyPauseMs: 1500,
   },
   {
-    user: '嗯，那今天就这样吧。',
+    user: '嗯，那今天就这样吧。（EN: OK — that\'s it for today.）',
     files: T5_FILES,
     audioUrl: '/demo-audio/zh/t5.mp3',
     ai:
@@ -193,7 +205,10 @@ export const DEMO_CONVERSATION_ZH: DemoTurn[] = [
       '| 负荷峰值 | 16:00 心率 +28% |\n' +
       '| 家人那边的重复语 | 「退休金」× 9 |\n' +
       '| 休息建议 | 今晚录音提前 30 分钟收 |\n\n' +
-      '明早起床我会推一条简短摘要。晚安。',
+      '明早起床我会推一条简短摘要。晚安。\n\n' +
+      '（EN: Done — today\'s three highlights are in the diary: load peak (16:00, HR +28%), ' +
+      'repeated phrase from mom ("pension" × 9), and ending tonight\'s recording 30 min early. ' +
+      'I\'ll push a short summary tomorrow morning. Sleep well.）',
     recordMs: 800,
     transcribeMs: 350,
     // Single file — ~1.1 s of "writing to diary" feels like a real

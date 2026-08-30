@@ -122,7 +122,7 @@ export function EntryCard({
 
       {readOnly ? (
         <footer className="mt-3 border-t border-card-border pt-3 text-[11px] text-text-muted">
-          冻结研究输出 · 当前为前端硬编码演示，不会写入或修改后端 Diary。
+          冻结研究输出 · 当前为前端硬编码演示，不会写入或修改后端 Diary。（Frozen research output — a hard-coded front-end demo; nothing is written to or modified in the backend Diary.）
         </footer>
       ) : (
         <footer className="mt-3 flex items-center gap-2">

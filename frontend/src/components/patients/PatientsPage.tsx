@@ -18,7 +18,12 @@ import { Toast, type ToastMessage } from '../Toast';
 import { useAuth, useCan } from '../../contexts/RoleContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { setActivePatient } from '../../lib/activePatient';
-import { agentAdminApi, type WorkflowEvent } from '../../api/agentAdminApi';
+import {
+  agentAdminApi,
+  type ReportSummary,
+  type SessionReport,
+  type WorkflowEvent,
+} from '../../api/agentAdminApi';
 import { doctorEvaluationMockStudy } from '../../features/doctor-evaluation/mockStudy';
 import { evaluationPathForCase, studyCaseForPatientId } from '../../features/doctor-evaluation/patientCase';
 import { isResearchPatient, researchPatientsFromStudy, type ResearchPatient } from '../../features/doctor-evaluation/researchPatients';
@@ -146,6 +151,15 @@ interface PatientsText {
   analysisStarted: string;
   analysisDone: string;
   analysisFailed: string;
+  reportsTitle: string;
+  generateReport: string;
+  reportGenerating: string;
+  reportGenerated: string;
+  reportFailed: string;
+  reportsEmpty: string;
+  reportOpen: string;
+  reportClose: string;
+  reportLlmDegraded: string;
 }
 
 const TEXT: Record<'zh' | 'en', PatientsText> = {
@@ -190,6 +204,15 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     analysisStarted: '已为该患者发起随访分析',
     analysisDone: '随访分析完成',
     analysisFailed: '分析出错',
+    reportsTitle: '分析报告',
+    generateReport: '📄 生成报告 (最新录音)',
+    reportGenerating: '生成中… (需要调用模型, 可能 10-60s)',
+    reportGenerated: '报告已生成',
+    reportFailed: '报告生成失败',
+    reportsEmpty: '暂无报告 — 需要该患者至少一条录音',
+    reportOpen: '查看',
+    reportClose: '收起',
+    reportLlmDegraded: '⚠ 模型段落生成失败, 本报告仅含确定性统计',
   },
   en: {
     heading: 'Patients',
@@ -234,6 +257,15 @@ const TEXT: Record<'zh' | 'en', PatientsText> = {
     analysisStarted: 'Follow-up analysis started for this patient',
     analysisDone: 'Follow-up analysis done',
     analysisFailed: 'Analysis failed',
+    reportsTitle: 'Analysis reports',
+    generateReport: '📄 Generate report (latest recording)',
+    reportGenerating: 'Generating… (LLM call, may take 10-60s)',
+    reportGenerated: 'Report generated',
+    reportFailed: 'Report generation failed',
+    reportsEmpty: 'No reports yet — needs at least one recording for this patient',
+    reportOpen: 'View',
+    reportClose: 'Collapse',
+    reportLlmDegraded: '⚠ LLM sections failed; deterministic stats only',
   },
 };
 
@@ -304,6 +336,10 @@ export default function PatientsPage() {
 
   const [busy, setBusy] = useState(false);
   const [workflowRunning, setWorkflowRunning] = useState(false);
+  // Phase 4 (gap 5): session 报告 — 索引 + 展开的完整报告
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [openReport, setOpenReport] = useState<SessionReport | null>(null);
   // One-time pairing code modal — the ONLY place plaintext appears.
   const [pairCode, setPairCode] = useState<{ id: string; name: string; code: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -453,6 +489,56 @@ export default function PatientsPage() {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
       setWorkflowRunning(false);
+    }
+  };
+
+  // ---- session reports (Phase 4, gap 5) ----
+  const loadReports = useCallback(async (patientId: string) => {
+    try {
+      const res = await agentAdminApi.listReports(patientId);
+      setReports(res.reports);
+    } catch {
+      setReports([]); // 报告服务不可用不阻塞档案页
+    }
+  }, []);
+
+  useEffect(() => {
+    setOpenReport(null);
+    if (selectedId && !selectedIsResearch) {
+      void loadReports(selectedId);
+    } else {
+      setReports([]);
+    }
+  }, [selectedId, selectedIsResearch, loadReports]);
+
+  const handleGenerateReport = async () => {
+    if (!selected || selectedIsResearch) return;
+    setReportBusy(true);
+    showToast(T.reportGenerating, 'info');
+    try {
+      await agentAdminApi.generateReport(selected.id);
+      showToast(T.reportGenerated, 'success');
+      await loadReports(selected.id);
+    } catch (e) {
+      showToast(
+        `${T.reportFailed}: ${e instanceof Error ? e.message : String(e)}`,
+        'error',
+      );
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  const handleOpenReport = async (id: string) => {
+    if (openReport?.id === id) {
+      setOpenReport(null);
+      return;
+    }
+    try {
+      const res = await agentAdminApi.getReport(id);
+      setOpenReport(res.report);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
@@ -621,9 +707,9 @@ export default function PatientsPage() {
                         <span className="text-sm font-medium">{p.name}</span>
                         <span className="font-mono text-xs text-text-muted">{p.id}</span>
                         {isResearchPatient(p) ? (
-                          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">研究病例</span>
+                          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">Research case</span>
                         ) : (
-                          <span className="rounded bg-card-hover px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">格式演示</span>
+                          <span className="rounded bg-card-hover px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">Format demo</span>
                         )}
                       </div>
                       <div className="mt-1 truncate text-xs text-text-secondary">
@@ -683,7 +769,7 @@ export default function PatientsPage() {
                       onClick={() => openDoctorEvaluation(selected)}
                       className="rounded-lg border border-accent px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent/10"
                     >
-                      进入 A / B / C 评测
+                      Enter A/B/C evaluation
                     </button>
                   )}
                 </div>
@@ -691,7 +777,7 @@ export default function PatientsPage() {
                 <div className="rounded-lg border border-card-border bg-card-bg p-4">
                   <div className="mb-3 flex items-baseline justify-between gap-2">
                     <h2 className="text-sm font-semibold">
-                      {selectedIsResearch ? '研究病例患者档案' : T.profileTitle}
+                      {selectedIsResearch ? 'Research case profile' : T.profileTitle}
                     </h2>
                     <span className="font-mono text-xs text-text-muted">
                       {T.fieldId}: {selected.id}
@@ -705,10 +791,10 @@ export default function PatientsPage() {
                         <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.dataset}</span>
                         <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.language}</span>
                         <span className="rounded-full bg-card-hover px-2.5 py-1">{selectedStudyCase.source.protocol}</span>
-                        <span className="rounded-full bg-card-hover px-2.5 py-1">{Math.round(selectedStudyCase.audio.durationSeconds)} 秒</span>
+                        <span className="rounded-full bg-card-hover px-2.5 py-1">{Math.round(selectedStudyCase.audio.durationSeconds)} s</span>
                       </div>
                       <div className="rounded-lg border border-accent/25 bg-accent/5 p-3 text-xs leading-5 text-text-secondary">
-                        这是冻结研究病例生成的只读患者对象。进入评测后会沿用同一病例的三种方法输出，并在 Diary 中生成对应的三份报告记录。
+                        This is a read-only patient generated from a frozen research case. The evaluation reuses the same case's three method outputs and produces three matching report records in the Diary.
                       </div>
                     </div>
                   ) : (
@@ -725,7 +811,7 @@ export default function PatientsPage() {
                       </div>
 
                       <div className="mt-3 rounded-lg border border-dashed border-card-border bg-window-bg p-3 text-xs leading-5 text-text-muted">
-                        此记录仅用于演示平台 patient 信息格式，未关联冻结研究病例、A / B / C 方法输出或研究报告。
+                        This record only demonstrates the platform's patient-profile format; it is not linked to a frozen research case, A/B/C method outputs, or research reports.
                       </div>
 
                       {canManage && (
@@ -760,11 +846,100 @@ export default function PatientsPage() {
                   )}
                 </div>
 
+                {/* Phase 4 (gap 5): session 报告 — 生成 + 索引 + 展开详情 */}
+                {!selectedIsResearch && selected && (
+                  <div className="rounded-lg border border-card-border bg-card-bg p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h2 className="text-sm font-semibold text-text-primary">
+                        {T.reportsTitle}
+                      </h2>
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateReport()}
+                          disabled={reportBusy}
+                          className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent transition-colors hover:bg-accent/10 disabled:opacity-60"
+                        >
+                          {reportBusy ? T.reportGenerating : T.generateReport}
+                        </button>
+                      )}
+                    </div>
+                    {reports.length === 0 ? (
+                      <p className="text-xs text-text-muted">{T.reportsEmpty}</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {reports.map((r) => (
+                          <li key={r.id}>
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="truncate font-mono text-text-secondary">
+                                {r.recording_id} · v{r.version} ·{' '}
+                                {r.generated_at?.slice(0, 16).replace('T', ' ')}
+                                {r.llm_parse_ok === false ? ' ⚠' : ''}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenReport(r.id)}
+                                className="shrink-0 text-accent hover:underline"
+                              >
+                                {openReport?.id === r.id ? T.reportClose : T.reportOpen}
+                              </button>
+                            </div>
+                            {openReport?.id === r.id && (
+                              <div className="mt-1.5 space-y-2 rounded-lg border border-card-border bg-window-bg p-3 text-xs leading-5">
+                                {!openReport.llm_parse_ok && (
+                                  <p className="text-status-danger">{T.reportLlmDegraded}</p>
+                                )}
+                                {openReport.narrative && (
+                                  <p className="text-text-primary">{openReport.narrative}</p>
+                                )}
+                                {openReport.observations.length > 0 && (
+                                  <ul className="list-disc pl-4 text-text-secondary">
+                                    {openReport.observations.map((o, i) => (
+                                      <li key={i}>{o}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {openReport.risk_flags.length > 0 && (
+                                  <ul className="space-y-0.5">
+                                    {openReport.risk_flags.map((f, i) => (
+                                      <li key={i} className="text-status-danger">
+                                        ⚑ [{f.severity || '?'}] {f.flag}
+                                        {f.basis ? ` — ${f.basis}` : ''}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {openReport.recommendations.length > 0 && (
+                                  <ul className="list-disc pl-4 text-text-secondary">
+                                    {openReport.recommendations.map((o, i) => (
+                                      <li key={i}>{o}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {openReport.quality_caveats.length > 0 && (
+                                  <div className="text-text-muted">
+                                    {openReport.quality_caveats.map((c, i) => (
+                                      <p key={i}>⚠ {c}</p>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="border-t border-card-border pt-1.5 text-[10.5px] text-text-muted">
+                                  {openReport.disclaimer}
+                                </p>
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
                 {selectedIsResearch ? (
                   <div className="rounded-lg border border-accent/30 bg-accent/5 p-4">
-                    <h2 className="mb-2 text-sm font-semibold text-text-primary">病例 → 报告链路</h2>
+                    <h2 className="mb-2 text-sm font-semibold text-text-primary">Case → report pipeline</h2>
                     <p className="text-xs leading-5 text-text-secondary">
-                      患者对象 → 冻结 MethodOutput（普通模型 / 普通 Agent / 改良 Agent）→ A / B / C 评测 → Diary 三份报告记录。
+                      Patient object → frozen MethodOutput (plain model / plain agent / improved agent) → A/B/C evaluation → three report records in the Diary.
                     </p>
                   </div>
                 ) : (

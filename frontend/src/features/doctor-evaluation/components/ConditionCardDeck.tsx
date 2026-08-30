@@ -87,7 +87,7 @@ export function ConditionCardDeck({
     <div className="overflow-hidden rounded-2xl border border-card-border bg-window-bg/40 p-3 shadow-sm sm:p-4">
       <div
         role="tablist"
-        aria-label="A、B、C 筛查结果"
+        aria-label="A、B、C 筛查结果 Screening results A/B/C"
         onKeyDown={handleSelectorKeyDown}
         className="grid gap-2 sm:grid-cols-3"
       >
@@ -159,13 +159,13 @@ export function ConditionCardDeck({
           <span className="font-mono text-text-secondary">
             {String(activeIndex + 1).padStart(2, '0')} / {String(items.length).padStart(2, '0')}
           </span>
-          <span className="hidden sm:inline">点击卡片或使用 ← → 切换</span>
+          <span className="hidden sm:inline">点击卡片或使用 ← → 切换（Click a card or use ← → to switch）</span>
         </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => selectIndex(activeIndex - 1)}
-            aria-label="查看上一个条件"
+            aria-label="查看上一个条件 View previous condition"
             className="flex h-8 w-8 items-center justify-center rounded-full border border-card-border bg-card-bg text-sm text-text-secondary transition hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
           >
             ←
@@ -173,7 +173,7 @@ export function ConditionCardDeck({
           <button
             type="button"
             onClick={() => selectIndex(activeIndex + 1)}
-            aria-label="查看下一个条件"
+            aria-label="查看下一个条件 View next condition"
             className="flex h-8 w-8 items-center justify-center rounded-full border border-card-border bg-card-bg text-sm text-text-secondary transition hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
           >
             →

@@ -566,7 +566,23 @@ class WhisperLocalExtension(Extension):
             # Warmup pass — runs *before* the extension exposes itself
             # as ready, so the JIT cost is hidden inside the existing
             # boot wait instead of stealing the user's first utterance.
-            self._warmup_blocking()
+            if not self._warmup_blocking() and loaded:
+                # A CUDA WhisperModel can construct fine and still die at
+                # decode time (e.g. cublas64_12.dll missing) — the CUDA
+                # try/except above can't see that, so demote to CPU when
+                # the warmup decode itself failed on the GPU path.
+                _log(
+                    "CUDA warmup decode failed — rebuilding on CPU int8 "
+                    "so transcription stays usable"
+                )
+                self._model = WhisperModel(
+                    self._model_name,
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=download_root,
+                )
+                _log(f"loaded on CPU (int8) — model={self._model_name}")
+                self._warmup_blocking()
         finally:
             self._model_loading = False
 
@@ -580,11 +596,14 @@ class WhisperLocalExtension(Extension):
         end up dropping every chunk that arrives during that window
         (the `DROP chunk #N: previous transcribe still running` log).
 
-        Costs ~3-8 s on a CUDA 4060 / ~1-2 s on CPU, paid once at boot."""
+        Costs ~3-8 s on a CUDA 4060 / ~1-2 s on CPU, paid once at boot.
+
+        Returns True when the dummy decode succeeded — callers use this to
+        detect a model that constructed but cannot actually infer."""
         import numpy as np  # type: ignore
 
         if self._model is None:
-            return
+            return False
         try:
             # Low-amplitude white noise rather than pure silence so the
             # decoder definitely runs. vad_filter=False guards against
@@ -608,6 +627,7 @@ class WhisperLocalExtension(Extension):
                 f"warmup transcribe complete in {warmup_ms:.0f} ms — "
                 f"kernels primed, first user chunk will be steady-state speed"
             )
+            return True
         except Exception as e:
             # Warmup is opportunistic; never block the extension from
             # starting just because the dummy decode hiccupped.
@@ -615,6 +635,7 @@ class WhisperLocalExtension(Extension):
                 f"warmup transcribe failed (non-fatal): "
                 f"{type(e).__name__}: {e}"
             )
+            return False
 
     # -------- Start / Stop / Status ---------------------------------------
 

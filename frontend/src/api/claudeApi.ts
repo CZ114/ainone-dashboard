@@ -103,10 +103,14 @@ export type PermissionDecisionWire =
   | { behavior: 'deny'; message: string };
 
 export interface StreamResponse {
-  type: 'claude_json' | 'error' | 'done' | 'aborted' | 'permission_request';
+  type: 'claude_json' | 'error' | 'done' | 'aborted' | 'permission_request' | 'references';
   data?: unknown;
   error?: string;
   permission?: PermissionRequestPayload;
+  /** references (自研 agent 链在 done 前发出): 本次回答根据哪些来源 */
+  agent?: string;
+  query?: string;
+  hits?: { source?: string; score?: number; preview?: string }[];
 }
 
 export interface ProjectInfo {

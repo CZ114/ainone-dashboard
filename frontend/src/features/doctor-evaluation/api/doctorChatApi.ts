@@ -68,11 +68,11 @@ async function fetchWithTimeout(
   } catch (error) {
     if (controller.signal.aborted) {
       throw new DoctorChatApiError(
-        init.signal?.aborted ? '请求已取消。' : '报告 Agent 请求超时。',
+        init.signal?.aborted ? '请求已取消。（Request cancelled.）' : '报告 Agent 请求超时。（Report Agent request timed out.）',
       );
     }
     throw new DoctorChatApiError(
-      error instanceof Error ? error.message : '无法连接报告 Agent。',
+      error instanceof Error ? error.message : '无法连接报告 Agent。（Cannot reach the Report Agent.）',
     );
   } finally {
     window.clearTimeout(timer);
@@ -91,7 +91,7 @@ export async function getDoctorChatHealth(signal?: AbortSignal): Promise<DoctorC
   try {
     return parseDoctorChatHealth(payload);
   } catch (error) {
-    throw new DoctorChatApiError(error instanceof Error ? error.message : '健康接口响应无效。');
+    throw new DoctorChatApiError(error instanceof Error ? error.message : '健康接口响应无效。（Invalid health endpoint response.）');
   }
 }
 
@@ -106,10 +106,10 @@ export function buildDoctorChatRequest(
 ): DoctorChatRequest {
   const cleanedCaseId = caseId.trim();
   const cleanedMessage = message.trim();
-  if (!cleanedCaseId) throw new DoctorChatApiError('当前病例 ID 无效。', 400);
-  if (!cleanedMessage) throw new DoctorChatApiError('请输入问题。', 400);
+  if (!cleanedCaseId) throw new DoctorChatApiError('当前病例 ID 无效。（Invalid case ID.）', 400);
+  if (!cleanedMessage) throw new DoctorChatApiError('请输入问题。（Please enter a question.）', 400);
   if (cleanedMessage.length > MESSAGE_LIMIT_CHARS) {
-    throw new DoctorChatApiError('问题不能超过 2000 个字符。', 400);
+    throw new DoctorChatApiError('问题不能超过 2000 个字符。（Questions must not exceed 2000 characters.）', 400);
   }
 
   const safeHistory = history
@@ -128,7 +128,7 @@ export function buildDoctorChatRequest(
     request.history.shift();
   }
   if (encodedSize(request) > REQUEST_LIMIT_BYTES) {
-    throw new DoctorChatApiError('请求内容超过 64 KiB，无法发送。', 400);
+    throw new DoctorChatApiError('请求内容超过 64 KiB，无法发送。（Request exceeds 64 KiB and cannot be sent.）', 400);
   }
   return request;
 }
@@ -150,10 +150,10 @@ export async function askDoctorChat(
   try {
     parsed = parseDoctorChatResponse(payload);
   } catch (error) {
-    throw new DoctorChatApiError(error instanceof Error ? error.message : 'Chat 响应无效。');
+    throw new DoctorChatApiError(error instanceof Error ? error.message : 'Chat 响应无效。（Invalid chat response.）');
   }
   if (parsed.case_id !== request.case_id) {
-    throw new DoctorChatApiError('报告 Agent 返回了其他病例的上下文，已拒绝显示。');
+    throw new DoctorChatApiError('报告 Agent 返回了其他病例的上下文，已拒绝显示。（The Report Agent returned context from a different case; display refused.）');
   }
   return parsed;
 }

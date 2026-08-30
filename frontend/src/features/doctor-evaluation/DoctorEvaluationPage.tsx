@@ -427,25 +427,25 @@ export default function DoctorEvaluationPage({
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-xs font-black text-white">AD</div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-semibold text-text-primary">医生认知筛查工作台</h1>
-                <span className="rounded bg-card-hover px-2 py-0.5 text-[10px] font-semibold text-text-muted">研究评测模式</span>
+                <h1 className="font-semibold text-text-primary">Doctor Cognitive Screening Workbench</h1>
+                <span className="rounded bg-card-hover px-2 py-0.5 text-[10px] font-semibold text-text-muted">Research evaluation mode</span>
               </div>
               <p className="truncate text-xs text-text-muted">
-                {`当前研究患者：${currentResearchPatient.name} · ${currentResearchPatient.id}`}
+                {`Current research patient: ${currentResearchPatient.name} · ${currentResearchPatient.id}`}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 rounded-lg border border-card-border bg-window-bg px-2 py-1.5">
-              <span className="text-[11px] text-text-muted">病例</span>
+              <span className="text-[11px] text-text-muted">Case</span>
               <select
                 value={caseIndex}
                 onChange={(event) => goToCase(Number(event.target.value))}
                 className="bg-transparent text-xs font-semibold text-text-primary outline-none"
               >
                 {bundle.cases.map((studyCase, index) => (
-                  <option key={studyCase.caseId} value={index}>病例 {index + 1} · {studyCase.task}</option>
+                  <option key={studyCase.caseId} value={index}>Case {index + 1} · {studyCase.task}</option>
                 ))}
               </select>
             </div>
@@ -455,7 +455,7 @@ export default function DoctorEvaluationPage({
                 onClick={() => navigate('/diary')}
                 className="rounded-lg border border-accent px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/10"
               >
-                查看患者 Diary 报告
+                View patient Diary reports
               </button>
             )}
           </div>
@@ -467,24 +467,24 @@ export default function DoctorEvaluationPage({
           <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_420px]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                <span>研究病例 {caseIndex + 1}/{bundle.cases.length}</span>
+                <span>Study case {caseIndex + 1}/{bundle.cases.length}</span>
                 <span>·</span><span>{currentCase.source.dataset}</span>
                 <span>·</span><span>{currentCase.source.language}</span>
-                {caseSubmitted && <span className="rounded bg-status-success/15 px-2 py-0.5 font-semibold text-status-success">已评分</span>}
+                {caseSubmitted && <span className="rounded bg-status-success/15 px-2 py-0.5 font-semibold text-status-success">Scored</span>}
               </div>
               <h2 className="mt-2 text-2xl font-semibold text-text-primary">{currentCase.task}</h2>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-text-secondary">{currentCase.taskDescription}</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-card-hover px-3 py-1 text-xs text-text-muted">协议：{currentCase.source.protocol}</span>
-                <span className="rounded-full bg-card-hover px-3 py-1 text-xs text-text-muted">时长：{Math.round(currentCase.audio.durationSeconds)} 秒</span>
+                <span className="rounded-full bg-card-hover px-3 py-1 text-xs text-text-muted">Protocol: {currentCase.source.protocol}</span>
+                <span className="rounded-full bg-card-hover px-3 py-1 text-xs text-text-muted">Duration: {Math.round(currentCase.audio.durationSeconds)} s</span>
                 <span className="rounded-full bg-card-hover px-3 py-1 text-xs text-text-muted">{currentCase.roleHandling.description}</span>
               </div>
             </div>
 
             <div className="min-w-0 rounded-lg border border-card-border bg-card-hover/60 p-3">
               <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="font-semibold text-text-secondary">病例原始音频</span>
-                <span className="text-text-muted">结果与证据回听共用</span>
+                <span className="font-semibold text-text-secondary">Case audio</span>
+                <span className="text-text-muted">Shared by results & evidence playback</span>
               </div>
               <audio
                 key={currentCase.caseId}
@@ -496,7 +496,7 @@ export default function DoctorEvaluationPage({
                 onError={() => setAudioUnavailable(true)}
               />
               {audioUnavailable && (
-                <p className="mt-2 text-[11px] leading-5 text-status-warning">研究音频资产尚未迁移；当前可继续查看 A/B/C 结果、Agent 对话和评分流程。</p>
+                <p className="mt-2 text-[11px] leading-5 text-status-warning">Study audio assets not migrated yet; the A/B/C results, agent chat, and rating flow remain available.</p>
               )}
             </div>
           </div>
@@ -510,9 +510,9 @@ export default function DoctorEvaluationPage({
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-accent">Clinical results</p>
-                <h2 className="mt-1 text-lg font-semibold text-text-primary">A / B / C 结果卡片组</h2>
+                <h2 className="mt-1 text-lg font-semibold text-text-primary">A/B/C result card deck</h2>
               </div>
-              <p className="text-xs text-text-muted">切换查看结果 · 正文沿用平台 Diary 组件</p>
+              <p className="text-xs text-text-muted">Switch between results · body reuses the platform Diary component</p>
             </div>
             <ConditionCardDeck
               key={currentCase.caseId}
@@ -520,7 +520,7 @@ export default function DoctorEvaluationPage({
               mode={mode}
               evidenceOpen={evidenceOpen}
               onToggleEvidence={revealEvidence}
-              evidenceActionLabel="查看临床状态与证据轨迹"
+              evidenceActionLabel="View clinical states & evidence trace"
               onActiveConditionChange={(conditionId) => {
                 setActiveCondition(conditionId);
                 setEvidenceOpen(conditionId === 'ours');
@@ -577,16 +577,16 @@ export default function DoctorEvaluationPage({
             disabled={caseIndex === 0}
             className="rounded-lg border border-card-border bg-card-bg px-4 py-2.5 text-sm font-semibold text-text-secondary disabled:opacity-40"
           >
-            ← 上一病例
+            ← Previous case
           </button>
-          <p className="text-xs text-text-muted">已完成 {completedCases}/{bundle.cases.length} 个病例</p>
+          <p className="text-xs text-text-muted">{completedCases}/{bundle.cases.length} cases completed</p>
           {caseIndex < bundle.cases.length - 1 ? (
             <button
               type="button"
               onClick={() => goToCase(caseIndex + 1)}
               className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
             >
-              下一病例 →
+              Next case →
             </button>
           ) : (
             <button
@@ -594,7 +594,7 @@ export default function DoctorEvaluationPage({
               onClick={() => document.getElementById('overall-evaluation')?.scrollIntoView({ behavior: 'smooth' })}
               className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
             >
-              进入总体评价 ↓
+              Overall evaluation ↓
             </button>
           )}
         </div>

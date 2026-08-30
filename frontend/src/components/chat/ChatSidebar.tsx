@@ -387,9 +387,9 @@ export function ChatSidebar({
                 setActivePatient(p ? { id: p.id, name: p.name } : null);
               }}
               className="flex-1 min-w-0 bg-window-bg border border-card-border rounded px-2 py-1 text-[11px] text-text-primary"
-              title="当前患者 · 新会话自动归他 (录制也共用)"
+              title="当前患者 · 新会话自动归他 (录制也共用)（Active patient — new chats and recordings are tagged to them）"
             >
-              <option value="">当前患者：未选</option>
+              <option value="">当前患者：未选（Active patient: none）</option>
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.id} · {p.name}
@@ -398,7 +398,7 @@ export function ChatSidebar({
             </select>
             <label
               className="flex items-center gap-1 text-[10px] text-text-muted shrink-0 cursor-pointer"
-              title="只看当前患者的会话"
+              title="只看当前患者的会话（Show only the active patient's chats）"
             >
               <input
                 type="checkbox"
@@ -406,7 +406,7 @@ export function ChatSidebar({
                 onChange={(e) => setFilterToActive(e.target.checked)}
                 className="accent-accent"
               />
-              只看TA
+              This patient only
             </label>
           </div>
         )}

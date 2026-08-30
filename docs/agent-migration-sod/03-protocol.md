@@ -47,6 +47,7 @@ interface AgentOneshotRequest {
 | `{type:"tool_call", id, name, arguments}` | kind=`tool_call` | arguments 为 JSON 对象 |
 | `{type:"tool_result", id, name, ok, content}` | kind=`tool_result` | content 截断至 output_limit |
 | `{type:"permission_request", id, tool, arguments}` | approval_callback 触发 | 前端弹窗，回填 `/permission` |
+| `{type:"references", agent, query?, hits}` | done 边界前 (2026-08-21, gap 3) | 本次回答的引用依据: retrieve 命中 / read_recording / read_file; hits=[{source, score?, preview}], 去重封顶 8 条; 与 workflow 的 references 事件同 shape (提取器共用 wire.extract_references) |
 | `{type:"done", usage?}` | kind=`done` | 流正常结束 |
 | `{type:"error", error}` | 异常 | |
 | `{type:"aborted"}` | abort 触发 | |

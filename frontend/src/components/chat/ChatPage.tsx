@@ -333,15 +333,33 @@ function ChatPage() {
       console.log('[DEBUG] getSessionMessages returned:', result);
 
       if (result.messages && result.messages.length > 0) {
-        // Map messages to store format
-        const loadedMessages = result.messages.map((m, i) => ({
-          id: `load_${Date.now()}_${i}`,
-          type: 'chat' as const,
-          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content,
-          timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
-        }));
-        setMessages(loadedMessages);
+        // Map messages to store format. History now carries tool activity
+        // (tool / tool_result / references) alongside the chat turns, so a
+        // replayed session shows which tools ran, what they returned and
+        // which sources were retrieved — same components as a live run.
+        const loadedMessages = result.messages.map((m: any, i: number) => {
+          const base = {
+            id: `load_${Date.now()}_${i}`,
+            timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
+          };
+          switch (m.type) {
+            case 'tool':
+              return { ...base, type: 'tool' as const, toolName: m.toolName,
+                       input: m.input, toolUseId: m.toolUseId };
+            case 'tool_result':
+              return { ...base, type: 'tool_result' as const, toolName: m.toolName,
+                       toolUseId: m.toolUseId, content: m.content, isError: m.isError };
+            case 'workflow':
+              return { ...base, type: 'workflow' as const, subtype: m.subtype,
+                       agent: m.agent, query: m.query, refs: m.refs,
+                       content: m.content ?? '' };
+            default:
+              return { ...base, type: 'chat' as const,
+                       role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+                       content: m.content };
+          }
+        });
+        setMessages(loadedMessages as never);
       }
 
       // Update project list with cwd from session (if available)

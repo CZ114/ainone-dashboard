@@ -314,6 +314,20 @@ export function useStreamParser() {
             // not-thinking state so the spinner doesn't keep spinning.
             setIsThinking(false);
             continue;
+          } else if (chunk.type === 'references' && Array.isArray(chunk.hits) && chunk.hits.length > 0) {
+            // 自研 agent 链 (Phase 2, gap 3): done 前的统一引用事件 —
+            // 本次回答根据哪些知识库文档 / 录音 / 文件。复用 workflow 的
+            // references 消息形状, ChatMessages 已有渲染 (📚 折叠行)。
+            addMessage({
+              type: 'workflow',
+              subtype: 'references',
+              runId: `chat-${requestId ?? Date.now()}`,
+              agent: chunk.agent || 'chat',
+              query: chunk.query || undefined,
+              content: chunk.query || '',
+              refs: chunk.hits,
+            });
+            continue;
           } else if (chunk.type === 'done') {
             // Stream completed
             setIsLoading(false);

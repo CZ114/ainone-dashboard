@@ -79,6 +79,18 @@ DATA_DIR = BACKEND_DIR / "data" / "agent_service"
 SESSIONS_DIR = DATA_DIR / "sessions"
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Phase 0 (gap 9): Agent 跨会话长期记忆根目录。按 <agent_id>/<patient_id> 分域
+# (决策见 docs/plans/agent-mvp-completion.md §5)。与日记不同: 日记写给用户看,
+# 这里的 memory 写给 agent 自己用 (Tier-1 摘要自动注入 + remember/recall 工具)。
+AGENT_MEMORY_DIR = BACKEND_DIR / "data" / "agent_memory"
+AGENT_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+# Phase 0 (gap 8): 上下文压缩 (TokenBudgetCompactor)。半窗触发。各 provider 真实
+# 窗口不同, 取偏小的安全默认 (compact 只在超阈值时才跑, 宁可略早也别撑爆)。
+# 需要时经 env 覆盖; 后续可升级为按 model 查表 (见 plan Phase 0 风险条)。
+COMPACT_CONTEXT_WINDOW = int(os.getenv("AGENT_COMPACT_WINDOW", "32000"))
+COMPACT_THRESHOLD_RATIO = float(os.getenv("AGENT_COMPACT_THRESHOLD", "0.5"))
+
 # 复用日记系统的 agent 定义 + secrets (multi-agent 预留的落点)
 AGENTS_JSON = BACKEND_DIR / "data" / "diary" / "agents.json"
 
@@ -94,14 +106,18 @@ DEFAULT_SYSTEM_PROMPT = """\
 平台功能: ESP32 硬件通过串口/BLE 采集生理传感器数据 (PPG/IMU/音频), 用户可录制 \
 session (CSV + WAV), 在 dashboard 查看波形, 和你对话分析数据。
 
-可用工具: read_file(读仓库内文件, 含录音 CSV), write_file(写文件, 需用户批准), \
-list_recordings(列最近录音), web_search(联网搜索), web_fetch(抓取网页正文), \
-run_workflow(启动多智能体工作流), delegate(委派给其他 agent)。\
+可用工具: read_recording(录音质量摘要+逐通道统计, 分析录音首选), \
+read_file(读仓库内文件), write_file(写文件, 需用户批准), \
+list_recordings(列最近录音, 可按患者过滤), web_search(联网搜索), web_fetch(抓取网页正文), \
+run_workflow(启动多智能体工作流), delegate(委派给其他 agent), \
+remember/recall_memory/list_memories(跨会话长期记忆)。\
 需要时效性信息或仓库外的知识时主动用 web_search; 用户请求匹配某个预定义工作流场景 \
 (见 run_workflow 工具描述里的清单) 时主动用 run_workflow, 并把其输出融入你的回答。
 
 规则:
 - 引用数据时给出具体数值, 绝不编造; 文件读不到就直说。
 - 不做医疗诊断或健康结论 (可以描述数据特征, 不可下临床判断)。
+- 遇到该用户/患者的稳定事实或值得跨会话保留的观察, 用 remember 记下 (会自动按患者归档); \
+下次可用 recall_memory 取回。每轮开头会注入已有记忆的类目摘要。
 - 用用户使用的语言回复 (中文用户用中文)。
 """

@@ -57,7 +57,7 @@ export function parseDoctorChatHealth(value: unknown): DoctorChatHealth {
     typeof value.model !== 'string' ||
     !value.model.trim()
   ) {
-    throw new Error('报告 Agent 健康接口返回了不兼容的数据。');
+    throw new Error('报告 Agent 健康接口返回了不兼容的数据。（Report Agent health endpoint returned incompatible data.）');
   }
   return {
     status: 'ok',
@@ -77,7 +77,7 @@ export function parseDoctorChatResponse(value: unknown): DoctorChatResponse {
     typeof value.case_id !== 'string' ||
     value.disclaimer !== DOCTOR_CHAT_DISCLAIMER
   ) {
-    throw new Error('报告 Agent 返回了不符合 Chat Schema 的数据。');
+    throw new Error('报告 Agent 返回了不符合 Chat Schema 的数据。（Report Agent returned data that does not match the chat schema.）');
   }
   return {
     answer: value.answer,

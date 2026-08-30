@@ -195,7 +195,7 @@ export default function DiaryPage() {
             </button>
             {activeResearchPatient ? (
               <span className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent">
-                A / B / C 报告已载入
+                A/B/C reports loaded
               </span>
             ) : generating ? (
               <button
@@ -221,12 +221,12 @@ export default function DiaryPage() {
         <section className="space-y-3" aria-labelledby="patient-report-list-title">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 id="patient-report-list-title" className="text-sm font-semibold text-text-primary">患者评测报告</h2>
+              <h2 id="patient-report-list-title" className="text-sm font-semibold text-text-primary">Patient evaluation reports</h2>
               <p className="mt-0.5 text-xs text-text-muted">
-                全部冻结研究病例；当前研究患者会自动置顶，普通演示患者不会生成研究报告
+                All frozen research cases; the active research patient is pinned to the top — regular demo patients do not generate research reports
               </p>
             </div>
-            <span className="text-[11px] text-text-muted">{reportPatientRows.length} 位患者</span>
+            <span className="text-[11px] text-text-muted">{reportPatientRows.length} patients</span>
           </div>
           {reportPatientRows.map(({ patient, studyCase }) => (
             <PatientReportAccordion

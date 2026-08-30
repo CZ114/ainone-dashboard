@@ -78,19 +78,21 @@ def list_workflows() -> list[dict]:
 def get_workflow(wf_id: str) -> dict:
     spec = _load_doc()["workflows"].get(wf_id)
     if spec is None:
-        raise KeyError(f"未知 workflow: {wf_id}")
+        raise KeyError(f"未知 workflow: {wf_id}（Unknown workflow）")
     return spec
 
 
 def upsert_workflow(wf_id: str, spec: dict, known_agent_ids: set) -> dict:
     if not _ID_RE.match(wf_id):
-        raise ValueError(f"非法 workflow id: {wf_id!r} (2-40 位小写字母/数字/_/-)")
+        raise ValueError(f"非法 workflow id: {wf_id!r} (2-40 位小写字母/数字/_/-)"
+                         f"（Invalid workflow id: 2-40 chars of lowercase letters/digits/_/-）")
     problems = validate_spec(spec)
     unknown = referenced_agents(spec) - known_agent_ids
     if unknown:
-        problems.append(f"引用了未定义的 agent: {sorted(unknown)} (先在 Agents 里创建)")
+        problems.append(f"引用了未定义的 agent: {sorted(unknown)} (先在 Agents 里创建)"
+                        f"（References undefined agents — create them in the Agents tab first）")
     if problems:
-        raise ValueError("spec 校验失败: " + "; ".join(problems))
+        raise ValueError("spec 校验失败（Spec validation failed）: " + "; ".join(problems))
     spec = dict(spec)
     spec["id"] = wf_id
     with _lock:
@@ -104,7 +106,7 @@ def delete_workflow(wf_id: str) -> None:
     with _lock:
         doc = _load_doc()
         if wf_id not in doc["workflows"]:
-            raise KeyError(f"未知 workflow: {wf_id}")
+            raise KeyError(f"未知 workflow: {wf_id}（Unknown workflow）")
         del doc["workflows"][wf_id]
         _save_doc(doc)
 
@@ -115,28 +117,35 @@ def delete_workflow(wf_id: str) -> None:
 # 需保证任何环境都存在 → 首启种子。纯 agent (无 human), 每步带 labels
 # 供三镜头投影。引用 triage/doctor/verifier agent (问诊场景已建)。
 _SEED_FOLLOWUP = {
-    "name": "随访分析 (纯 AI, 无需人工)",
+    "name": "随访分析 / Follow-up analysis (AI-only, no human step)",
     "description": "医生一键为患者跑: 评估 → 检索知识库诊断 → 核验循环至 PASS。"
-                   "无 human 步骤, 后台跑完, 患者照护丝带完整呈现。",
+                   "无 human 步骤, 后台跑完, 患者照护丝带完整呈现。"
+                   "（One-click follow-up run for a patient: assessment → knowledge-base "
+                   "diagnosis → verification loop until PASS. No human step; runs in the "
+                   "background and fully populates the patient care ribbon.）",
     "inputs": ["complaint"],
     "output": "{diagnosis}",
     "steps": [
         {"type": "agent", "id": "triage", "agent": "triage",
          "prompt": "患者主诉与近期情况:\n{complaint}\n\n请做初步评估, 列出需要关注的要点。",
-         "labels": {"patient": "正在了解你的情况…", "doctor": "初诊评估"}},
+         "labels": {"patient": "正在了解你的情况… / Getting to know your situation…",
+                    "doctor": "初诊评估 / Initial assessment"}},
         {"type": "agent", "id": "diagnosis", "agent": "doctor",
          "prompt": "患者主诉:\n{complaint}\n\n初步评估:\n{triage}\n\n"
                    "请先检索知识库, 再输出诊断分析与随访建议。",
-         "labels": {"patient": "正在对照医生留下的资料…", "doctor": "知识库检索与诊断推理"}},
+         "labels": {"patient": "正在对照医生留下的资料… / Cross-checking the doctor's materials…",
+                    "doctor": "知识库检索与诊断推理 / Knowledge-base retrieval & diagnostic reasoning"}},
         {"type": "loop", "id": "revise", "max_iters": 3, "steps": [
             {"type": "agent", "id": "review", "agent": "verifier",
              "prompt": "请核验以下诊断分析。\n患者主诉: {complaint}\n\n"
                        "诊断分析:\n{diagnosis}\n\n若无误请回复以 PASS 开头。",
-             "labels": {"patient": "医生会亲自确认一遍结果…", "doctor": "诊断复核验证"}},
+             "labels": {"patient": "医生会亲自确认一遍结果… / The doctor will double-check the result…",
+                        "doctor": "诊断复核验证 / Diagnosis verification"}},
             {"type": "break_if", "when": {"var": "review", "regex": "^\\s*PASS\\b"}},
             {"type": "agent", "id": "diagnosis", "agent": "doctor",
              "prompt": "核验意见:\n{review}\n\n请逐条回应并输出修订后的完整诊断分析。",
-             "labels": {"patient": "医生正在调整诊断结果…", "doctor": "诊断反馈与修订"}},
+             "labels": {"patient": "医生正在调整诊断结果… / The doctor is revising the diagnosis…",
+                        "doctor": "诊断反馈与修订 / Diagnosis feedback & revision"}},
         ]},
     ],
     "id": "followup_review",

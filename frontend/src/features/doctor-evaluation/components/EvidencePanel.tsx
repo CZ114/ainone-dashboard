@@ -58,15 +58,15 @@ function MetricTrace({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 className="font-semibold text-text-primary">{dimension.label}</h4>
-          <p className="mt-1 text-xs leading-5 text-text-secondary">{dimension.description || '按语音片段追踪该指标变化。'}</p>
+          <p className="mt-1 text-xs leading-5 text-text-secondary">{dimension.description || '按语音片段追踪该指标变化。（Tracks this metric across speech segments.）'}</p>
         </div>
         <div className="rounded-lg bg-accent/10 px-3 py-2 text-xs text-accent">
-          参考：{reference.populationLabel} · 中位数 {reference.median.toFixed(2)}
+          参考 Reference：{reference.populationLabel} · 中位数 Median {reference.median.toFixed(2)}
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-card-border bg-card-hover/60 p-2">
         {points.length > 0 ? (
-          <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px]" role="img" aria-label={`${dimension.label}证据轨迹`}>
+          <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px]" role="img" aria-label={`${dimension.label}证据轨迹 evidence trace`}>
             {[0, 0.25, 0.5, 0.75, 1].map((value) => (
               <g key={value}>
                 <line x1={padX} x2={width - padX} y1={y(value)} y2={y(value)} stroke="currentColor" className="text-card-border" strokeWidth="1" />
@@ -99,7 +99,7 @@ function MetricTrace({
             })}
           </svg>
         ) : (
-          <div className="flex min-h-44 items-center justify-center text-sm text-text-secondary">该维度暂无可绘制数值</div>
+          <div className="flex min-h-44 items-center justify-center text-sm text-text-secondary">该维度暂无可绘制数值（No plottable values for this dimension）</div>
         )}
       </div>
     </div>
@@ -146,8 +146,8 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
       <div className="border-b border-card-border px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-text-primary">临床状态与对照参考</h3>
-            <p className="mt-1 text-xs text-text-secondary">状态卡保留冻结刺激中的原始指标、病例值、参考范围与计算解释。</p>
+            <h3 className="font-semibold text-text-primary">临床状态与对照参考 / Clinical states & reference comparison</h3>
+            <p className="mt-1 text-xs text-text-secondary">状态卡保留冻结刺激中的原始指标、病例值、参考范围与计算解释。（State cards keep the frozen stimulus's raw metrics, case values, reference ranges, and calculation notes.）</p>
           </div>
           <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">Condition C · Evidence trace</span>
         </div>
@@ -161,7 +161,7 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
             const hasRange = Boolean(reference && reference.q3 > reference.q1);
             const rangeLeft = hasRange ? clamp(reference!.q1) * 100 : 0;
             const rangeWidth = hasRange ? Math.max(2, (reference!.q3 - reference!.q1) * 100) : 100;
-            const referenceText = state.referenceLabel ?? reference?.populationLabel ?? '缺少可比参考';
+            const referenceText = state.referenceLabel ?? reference?.populationLabel ?? '缺少可比参考（No comparable reference）';
 
             return (
               <article key={state.id} className="rounded-xl border border-card-border bg-card-hover/60 p-4">
@@ -182,7 +182,7 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
                   />
                   {value !== null && (
                     <span
-                      aria-label="病例状态值"
+                      aria-label="病例状态值 Case state value"
                       className="absolute top-1/2 h-4 w-1.5 -translate-y-1/2 rounded-full bg-accent shadow-[0_0_0_2px_rgba(255,255,255,0.72)]"
                       style={{ left: `calc(${value * 100}% - 3px)` }}
                     />
@@ -191,19 +191,19 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
 
                 <div className="mt-3 flex items-end justify-between gap-3">
                   <span className="max-w-[62%] text-[11px] leading-4 text-text-muted">{referenceText}</span>
-                  <span className="text-right text-lg font-semibold text-text-primary">{state.valueLabel ?? (value?.toFixed(2) || '暂不估计')}</span>
+                  <span className="text-right text-lg font-semibold text-text-primary">{state.valueLabel ?? (value?.toFixed(2) || '暂不估计 Not estimated')}</span>
                 </div>
 
                 {state.supportingMetrics.length > 0 && (
                   <details className="mt-3 border-t border-card-border pt-3" open={state.expandMetrics}>
-                    <summary className="cursor-pointer text-xs font-semibold text-text-secondary">查看原始指标与计算解释</summary>
+                    <summary className="cursor-pointer text-xs font-semibold text-text-secondary">查看原始指标与计算解释 / View raw metrics & calculation notes</summary>
                     <div className="mt-3 overflow-x-auto">
                       <table className="min-w-full text-left text-xs">
                         <thead className="border-b border-card-border text-text-muted">
                           <tr>
-                            <th className="pb-2 pr-3 font-medium">支持指标</th>
-                            <th className="pb-2 pr-3 font-medium">本病例</th>
-                            <th className="pb-2 font-medium">参考分布/含义</th>
+                            <th className="pb-2 pr-3 font-medium">支持指标 Metric</th>
+                            <th className="pb-2 pr-3 font-medium">本病例 This case</th>
+                            <th className="pb-2 font-medium">参考分布/含义 Reference/meaning</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -225,8 +225,8 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
         </div>
 
         <div className="mb-4 border-t border-card-border pt-5">
-          <h3 className="font-semibold text-text-primary">片段证据回溯</h3>
-          <p className="mt-1 text-xs text-text-secondary">选择状态并点击轨迹点，可检查原始转录、局部计算值与对应音频片段。</p>
+          <h3 className="font-semibold text-text-primary">片段证据回溯 / Segment evidence trace</h3>
+          <p className="mt-1 text-xs text-text-secondary">选择状态并点击轨迹点，可检查原始转录、局部计算值与对应音频片段。（Select a state and click a trace point to inspect the raw transcript, local values, and matching audio segment.）</p>
         </div>
 
         {evidence.dimensions.length > 0 && (
@@ -259,37 +259,37 @@ export function EvidencePanel({ evidence, audioRef }: EvidencePanelProps) {
         {selectedSegment && (
           <div className="mt-5 grid gap-4 rounded-xl border border-accent/25 bg-accent/5 p-4 lg:grid-cols-[180px_1fr]">
             <div>
-              <p className="text-xs uppercase tracking-wider text-text-muted">选中片段</p>
+              <p className="text-xs uppercase tracking-wider text-text-muted">选中片段 Selected segment</p>
               <p className="mt-2 text-lg font-semibold text-text-primary">
                 {formatSeconds(selectedSegment.startSeconds)}–{formatSeconds(selectedSegment.endSeconds)}
               </p>
-              <p className="mt-1 text-xs text-text-secondary">说话人：{selectedSegment.speakerRole}</p>
+              <p className="mt-1 text-xs text-text-secondary">说话人 Speaker：{selectedSegment.speakerRole}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={playSegment}
                   className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white"
                 >
-                  ▶ 开始回听
+                  ▶ 开始回听 Play
                 </button>
                 <button
                   type="button"
                   onClick={stopSegment}
                   className="rounded-lg border border-card-border bg-card-bg px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-card-hover"
                 >
-                  ■ 停止
+                  ■ 停止 Stop
                 </button>
               </div>
             </div>
             <div>
-              <p className="text-sm leading-7 text-text-primary">“{selectedSegment.transcript || '该片段暂无转录文本'}”</p>
+              <p className="text-sm leading-7 text-text-primary">“{selectedSegment.transcript || '该片段暂无转录文本（No transcript for this segment）'}”</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedSegment.coreUnits.map((unit) => (
                   <span key={unit} className="rounded-full border border-card-border bg-card-bg px-2.5 py-1 text-xs text-text-secondary">{unit}</span>
                 ))}
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                <span>原始音频/转录</span><span>→</span><span>局部指标</span><span>→</span><span>临床状态</span><span>→</span><span>报告结论</span>
+                <span>原始音频/转录 Audio/transcript</span><span>→</span><span>局部指标 Local metrics</span><span>→</span><span>临床状态 Clinical states</span><span>→</span><span>报告结论 Report conclusion</span>
               </div>
             </div>
           </div>

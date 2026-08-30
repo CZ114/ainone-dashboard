@@ -89,14 +89,14 @@ def list_runs(limit: int = 30, owner=None) -> list[dict]:
 def read_run(run_id: str) -> dict:
     path = RUNS_DIR / f"{run_id}.json"
     if not path.is_file():
-        raise KeyError(f"未知运行记录: {run_id}")
+        raise KeyError(f"未知运行记录: {run_id}（Unknown run record）")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def delete_run(run_id: str) -> None:
     path = RUNS_DIR / f"{run_id}.json"
     if not path.is_file():
-        raise KeyError(f"未知运行记录: {run_id}")
+        raise KeyError(f"未知运行记录: {run_id}（Unknown run record）")
     path.unlink()
 
 
@@ -193,7 +193,7 @@ def get_active(run_id: str) -> dict:
     with _active_lock:
         h = _active.get(run_id)
     if h is None:
-        raise KeyError(f"运行不在进行中: {run_id}")
+        raise KeyError(f"运行不在进行中: {run_id}（Run is not in progress）")
     return h.snapshot()
 
 

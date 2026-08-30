@@ -12,11 +12,29 @@ import json
 import os
 import re
 
-from agent import Agent, AgentDeploy, AuditLog, create_registry
+from agent import (
+    Agent,
+    AgentDeploy,
+    AuditLog,
+    FileMemoryStore,
+    TokenBudgetCompactor,
+    create_registry,
+)
 
 from . import config_store
-from .agent_tools import build_registry, recordings_context_provider
-from .config import AGENTS_JSON, DEFAULT_SYSTEM_PROMPT, SESSIONS_DIR
+from .agent_tools import (
+    build_registry,
+    make_reports_context_provider,
+    recordings_context_provider,
+)
+from .config import (
+    AGENT_MEMORY_DIR,
+    AGENTS_JSON,
+    COMPACT_CONTEXT_WINDOW,
+    COMPACT_THRESHOLD_RATIO,
+    DEFAULT_SYSTEM_PROMPT,
+    SESSIONS_DIR,
+)
 
 _SECRET_REF = re.compile(r"\$\{(\w+)\}")
 
@@ -34,7 +52,9 @@ def _resolve_secret(value, secrets):
         name = m.group(1)
         resolved = secrets.get(name) or os.getenv(name)
         if resolved is None:
-            raise ValueError(f"secret 未配置: ${{{name}}} (agents.json secrets 块或环境变量)")
+            raise ValueError(f"secret 未配置: ${{{name}}} (agents.json secrets 块或环境变量)"
+                             f"（Secret not configured — set it in the agents.json secrets "
+                             f"block or as an environment variable）")
         return resolved
     return _SECRET_REF.sub(sub, value)
 
@@ -67,7 +87,7 @@ def resolve_agent_config(agent_id=None):
         if agent_id == "diary_observer":
             return resolve_agent_config("default")
         known = ["default", "diary_observer", *(doc.get("agents") or {}).keys()]
-        raise KeyError(f"未知 agent_id: {agent_id}; 可用: {known}")
+        raise KeyError(f"未知 agent_id（Unknown agent_id）: {agent_id}; 可用（available）: {known}")
 
     secrets = doc.get("secrets") or {}
     # env 块解析后注入环境 (agent 库按环境变量找 key); 已存在的变量不覆盖
@@ -112,10 +132,35 @@ def build_client(cfg):
     )
 
 
-def build_chat_agent(session_id, agent_id=None):
+def _safe_seg(value):
+    """把 id 归一成安全的单层目录名 (防路径穿越): 仅保留字母数字/-/_。"""
+    s = str(value or "default")
+    cleaned = "".join(c if (c.isalnum() or c in "-_") else "_" for c in s)
+    return cleaned or "default"
+
+
+def _build_memory(agent_id, patient_id):
+    """Phase 0 (gap 9): 按 <agent_id>/<patient_id> 分域的跨会话长期记忆 store。
+    临床场景额外允许 clinical_observation 类别。传给 Agent(memory=) 后框架自动
+    注册 Tier-1 摘要 provider + remember/recall/list/forget 四个工具。"""
+    root = AGENT_MEMORY_DIR / _safe_seg(agent_id or "default") / _safe_seg(patient_id)
+    return FileMemoryStore(str(root), extra_types=["clinical_observation"])
+
+
+def _build_compactor():
+    """Phase 0 (gap 8): token 预算压缩器。半窗触发, 超阈值时 5 阶段压缩
+    (含 LLM 中段摘要, Agent.send/stream/resume 自动调用并传 client)。"""
+    return TokenBudgetCompactor(
+        context_window=COMPACT_CONTEXT_WINDOW,
+        threshold_ratio=COMPACT_THRESHOLD_RATIO,
+    )
+
+
+def build_chat_agent(session_id, agent_id=None, patient_id=None):
     """交互会话 agent: 全套工具 + 录音上下文注入 + AuditLog (both 模式, 供 resume+审计)。
     cfg.retrieval 存在时自动挂知识库; MCP 工具源与 Skills 技能库全局挂载
-    (仅 chat agent — oneshot/工作流节点保持轻量, SOD 07)。"""
+    (仅 chat agent — oneshot/工作流节点保持轻量, SOD 07)。
+    Phase 0: 挂上 compactor (gap 8) 与按 <agent_id>/<patient_id> 分域的 memory (gap 9)。"""
     cfg = resolve_agent_config(agent_id)
     audit = AuditLog(
         SESSIONS_DIR / f"{session_id}.jsonl",
@@ -141,7 +186,12 @@ def build_chat_agent(session_id, agent_id=None):
         build_client(cfg),
         cfg["system_prompt"],
         registry=reg,
-        context_providers=[recordings_context_provider],
+        context_providers=[
+            recordings_context_provider,
+            make_reports_context_provider(session_id),  # Phase 5: 勾选报告注入
+        ],
+        memory=_build_memory(agent_id, patient_id),   # gap 9: 跨会话记忆 (按患者分域)
+        compactor=_build_compactor(),                 # gap 8: 上下文压缩
         audit_log=audit,
         skill_store=skill_store,
         max_rounds=8,
@@ -155,8 +205,11 @@ def tracking_build_agent(emit):
     事件交给 emit(dict) — 前端据此显示"答案查了哪个知识库/哪些文档"。
 
     emit 由调用方适配: run_workflow 工具传 handle.add_event (轮询可见);
-    /workflows/{id}/stream 传 q 适配器 (NDJSON 流可见, 消费端再入追踪)。"""
-    import json as _json
+    /workflows/{id}/stream 传 q 适配器 (NDJSON 流可见, 消费端再入追踪)。
+
+    引用提取走 wire.extract_references (Phase 2 起 chat 与 workflow 共用同一提取器;
+    workflow 节点的 tool 消息拿不到工具名 → 传 None, 只按 shape 识别 RAG 结果)。"""
+    from .wire import extract_references
 
     def build(name):
         agent = build_oneshot_agent(name)
@@ -169,18 +222,11 @@ def tracking_build_agent(emit):
             for m in agent.messages[before:]:
                 if m.get("role") != "tool":
                     continue
-                try:
-                    data = _json.loads(m.get("content") or "")
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(data, dict) and isinstance(data.get("hits"), list):
-                    query = data.get("query") or query
-                    for h in data["hits"]:
-                        refs.append({
-                            "source": h.get("source"),
-                            "score": h.get("score"),
-                            "preview": (h.get("text") or "")[:150],
-                        })
+                ref = extract_references(None, m.get("content"))
+                if ref:
+                    q, hits = ref
+                    query = q or query
+                    refs.extend(hits)
             if refs:
                 emit({"type": "references", "agent": name,
                       "query": query, "hits": refs[:8]})

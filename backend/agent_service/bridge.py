@@ -46,10 +46,12 @@ class PermissionBroker:
         if not pending.event.wait(timeout):
             with self._lock:
                 self._pending.pop(pending.id, None)
-            return {"approved": False, "reason": f"审批超时 ({timeout}s), 默认拒绝"}
+            return {"approved": False,
+                    "reason": f"审批超时 ({timeout}s), 默认拒绝"
+                              f"（Approval timed out, denied by default）"}
         return pending.decision
 
-    def deny_all_for_request(self, request_id, reason="请求已中止"):
+    def deny_all_for_request(self, request_id, reason="请求已中止（Request aborted）"):
         """abort 时解除该请求下所有挂起审批, 防止工具线程永久阻塞。"""
         with self._lock:
             targets = [p for p in self._pending.values() if p.request_id == request_id]

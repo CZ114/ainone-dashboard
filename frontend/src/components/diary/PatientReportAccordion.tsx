@@ -31,9 +31,9 @@ function formatReportTime(values: Array<string | undefined>): string {
     })
     .sort((left, right) => right.timestamp - left.timestamp)[0];
 
-  if (!latest) return '生成时间未提供';
+  if (!latest) return 'Time not provided';
   if (/^\d{4}-\d{2}-\d{2}$/.test(latest.value)) {
-    return `${latest.value}（仅记录日期）`;
+    return `${latest.value} (date only)`;
   }
   return new Date(latest.timestamp).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -102,7 +102,7 @@ export function PatientReportAccordion({
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-text-primary">{patient.name}</span>
-            <span className="mt-0.5 block font-mono text-[11px] text-text-muted">患者 ID · {patient.id}</span>
+            <span className="mt-0.5 block font-mono text-[11px] text-text-muted">Patient ID · {patient.id}</span>
           </span>
         </span>
 
@@ -112,13 +112,13 @@ export function PatientReportAccordion({
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
               : 'border-amber-500/30 bg-amber-500/10 text-amber-600'
           }`}>
-            {allComplete ? '报告已完成' : '报告生成中'} · {completedReports}/{reportItems.length}
+            {allComplete ? 'Reports complete' : 'Generating'} · {completedReports}/{reportItems.length}
           </span>
-          <span className="text-[11px] text-text-muted">最近报告：{latestReportTime}</span>
+          <span className="text-[11px] text-text-muted">Latest report: {latestReportTime}</span>
         </span>
 
         <span className="flex items-center justify-between gap-3 md:justify-end">
-          <span className="text-xs font-semibold text-accent">{expanded ? '收起报告' : '展开报告'}</span>
+          <span className="text-xs font-semibold text-accent">{expanded ? 'Collapse' : 'Expand'}</span>
           <span className={`text-sm text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">⌄</span>
         </span>
       </button>
@@ -132,7 +132,7 @@ export function PatientReportAccordion({
             {definition.blindLabel} · {methodOutputStatusLabel(output.status)}
           </span>
         ))}
-        <span className="ml-auto text-[10px] text-text-muted">冻结研究输出 · 非实时诊断</span>
+        <span className="ml-auto text-[10px] text-text-muted">Frozen research output · not a real-time diagnosis</span>
       </div>
 
       {expanded && (
@@ -140,13 +140,13 @@ export function PatientReportAccordion({
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-accent">Patient-linked reports</p>
-              <h2 className="mt-1 text-base font-semibold text-text-primary">A / B / C 三条件报告</h2>
+              <h2 className="mt-1 text-base font-semibold text-text-primary">A/B/C three-condition reports</h2>
               <p className="mt-1 text-xs text-text-muted">
-                对应冻结研究病例 {studyCase.caseId}；报告接口尚未接入，当前展示硬编码结果。
+                Frozen research case {studyCase.caseId}; the report API is not wired up yet — showing hard-coded results.
               </p>
             </div>
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-600">
-              报告接口待接入
+              Report API pending
             </span>
           </div>
 

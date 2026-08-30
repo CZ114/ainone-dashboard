@@ -14,8 +14,19 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { recordingsApi, type RecordingSession } from '../../api/recordingsApi';
 import { patientsApi, type Patient } from '../../api/patientsApi';
-import { RECORDING_DRAG_MIME, formatSize } from '../../lib/attachments';
+import {
+  agentAdminApi,
+  type ReportSummary,
+  type SessionReport,
+} from '../../api/agentAdminApi';
+import {
+  RECORDING_DRAG_MIME,
+  REPORT_DRAG_MIME,
+  formatSize,
+  type ReportDragPayload,
+} from '../../lib/attachments';
 import { useStore } from '../../store';
+import { useChatStore } from '../../store/chatStore';
 
 // Embedded mode: the parent (ChatPage) owns visibility/collapse via
 // a resizable Panel. We just render fluid content that fills its
@@ -126,6 +137,111 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
   useEffect(() => {
     patientsApi.list().then(setPatients).catch(() => setPatients([]));
   }, []);
+
+  // ---- 分析报告区 (Phase 5): 列表 + 勾选加入当前会话上下文 ----
+  // 勾选状态挂在 session 上 (PUT /sessions/:id/context-reports), 后端的
+  // reports context provider 每轮读取 — 下一条消息生效。
+  const sessionId = useChatStore((s) => s.sessionId);
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [ctxIds, setCtxIds] = useState<string[]>([]);
+  const [ctxBusy, setCtxBusy] = useState(false);
+
+  const refreshReports = useCallback(async () => {
+    try {
+      const res = await agentAdminApi.listReports(filterPid ?? undefined);
+      setReports(res.reports);
+    } catch {
+      setReports([]); // 报告服务不可用不阻塞录音抽屉
+    }
+  }, [filterPid]);
+
+  useEffect(() => {
+    void refreshReports();
+  }, [refreshReports]);
+
+  // 会话切换 → 拉取该会话已勾选的集合
+  useEffect(() => {
+    if (!sessionId) {
+      setCtxIds([]);
+      return;
+    }
+    agentAdminApi
+      .getContextReports(sessionId)
+      .then((r) => setCtxIds(r.reportIds))
+      .catch(() => setCtxIds([]));
+  }, [sessionId]);
+
+  const toggleContextReport = useCallback(
+    async (reportId: string) => {
+      if (!sessionId || ctxBusy) return;
+      const next = ctxIds.includes(reportId)
+        ? ctxIds.filter((id) => id !== reportId)
+        : [...ctxIds, reportId].slice(0, 3); // 服务端同样封顶 3 份
+      setCtxBusy(true);
+      const prev = ctxIds;
+      setCtxIds(next); // 乐观更新
+      try {
+        const res = await agentAdminApi.setContextReports(sessionId, next);
+        setCtxIds(res.reportIds);
+      } catch {
+        setCtxIds(prev); // 失败回滚
+      } finally {
+        setCtxBusy(false);
+      }
+    },
+    [sessionId, ctxIds, ctxBusy],
+  );
+
+  // 报告展开详情 — 首次展开时拉全文并缓存; 'loading' 占位防连点。
+  const [expandedReports, setExpandedReports] = useState<
+    Map<string, SessionReport | 'loading'>
+  >(new Map());
+
+  const toggleReportExpand = useCallback(
+    async (reportId: string) => {
+      if (expandedReports.has(reportId)) {
+        setExpandedReports((prev) => {
+          const next = new Map(prev);
+          next.delete(reportId);
+          return next;
+        });
+        return;
+      }
+      setExpandedReports((prev) => new Map(prev).set(reportId, 'loading'));
+      try {
+        const res = await agentAdminApi.getReport(reportId);
+        setExpandedReports((prev) => new Map(prev).set(reportId, res.report));
+      } catch {
+        setExpandedReports((prev) => {
+          const next = new Map(prev);
+          next.delete(reportId);
+          return next;
+        });
+      }
+    },
+    [expandedReports],
+  );
+
+  // 报告拖入聊天框 (Phase 6): payload 只带 id 等元数据, ChatInput 的
+  // drop handler 负责拉全文并构建附件 chip。
+  const handleReportDragStart = (
+    e: React.DragEvent<HTMLElement>,
+    r: ReportSummary,
+  ) => {
+    const payload: ReportDragPayload = {
+      id: r.id,
+      recordingId: r.recording_id,
+      version: r.version,
+      patientId: r.patient_id,
+    };
+    e.dataTransfer.setData(REPORT_DRAG_MIME, JSON.stringify(payload));
+    e.dataTransfer.setData(
+      'text/plain',
+      `分析报告 / Analysis report ${r.recording_id} v${r.version} (${r.id})`,
+    );
+    e.dataTransfer.effectAllowed = 'copy';
+    e.stopPropagation();
+  };
 
   // Cross-page Play: stash a replayRequest in the store and route to
   // the dashboard. ReplayPanel watches the store and consumes the
@@ -265,6 +381,109 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
           </select>
         </div>
 
+        {/* 分析报告 (Phase 5) — 勾选加入当前会话上下文, 下一条消息生效 */}
+        {reports.length > 0 && (
+          <div className="shrink-0 border-b border-card-border px-3 py-2 max-h-44 overflow-y-auto">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-text-primary">
+                📄 分析报告 Analysis Reports
+              </span>
+              <span className="text-[10px] text-text-muted">
+                {sessionId
+                  ? `拖入聊天框 · 勾选注入 (${ctxIds.length}/3)（Drag into chat · check to inject）`
+                  : '可拖入聊天框 · 勾选需先建会话（Drag into chat · checking requires a session）'}
+              </span>
+            </div>
+            {reports.slice(0, 8).map((r) => {
+              const checked = ctxIds.includes(r.id);
+              const expanded = expandedReports.get(r.id);
+              return (
+                <div key={r.id}>
+                  {/* 整行可拖入聊天框 (Phase 6); 勾选=注入上下文; ▸=展开详情 */}
+                  <div
+                    draggable
+                    onDragStart={(e) => handleReportDragStart(e, r)}
+                    className="flex items-center gap-2 py-1 text-[11px] rounded px-1 cursor-grab active:cursor-grabbing hover:bg-card-border/40"
+                    title={`拖入聊天框作为附件（Drag into chat as attachment）· ${r.recording_id} v${r.version} · ${r.patient_id ?? '未关联患者 No patient'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!sessionId || ctxBusy}
+                      onChange={() => void toggleContextReport(r.id)}
+                      className="accent-[var(--accent,#6366f1)] cursor-pointer disabled:cursor-not-allowed"
+                      title={sessionId ? '勾选注入当前会话上下文（Check to inject into the current session context）' : '先发送一条消息建立会话（Send a message first to start a session）'}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-mono text-text-secondary">
+                      {r.recording_id} v{r.version}
+                      {r.patient_id ? ` · ${r.patient_id}` : ''}
+                      {r.llm_parse_ok === false ? ' ⚠' : ''}
+                    </span>
+                    <span className="shrink-0 text-text-muted">
+                      {(r.generated_at || '').slice(5, 16).replace('T', ' ')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void toggleReportExpand(r.id)}
+                      className="shrink-0 px-1 text-text-muted hover:text-text-primary"
+                      title={expanded ? '收起 Collapse' : '展开报告详情 Expand details'}
+                    >
+                      {expanded ? '▾' : '▸'}
+                    </button>
+                  </div>
+                  {expanded === 'loading' && (
+                    <div className="ml-6 py-1 text-[10.5px] text-text-muted">加载中… Loading…</div>
+                  )}
+                  {expanded && expanded !== 'loading' && (
+                    <div className="ml-4 my-1 space-y-1.5 rounded border border-card-border bg-window-bg p-2 text-[10.5px] leading-4">
+                      {expanded.llm_parse_ok === false && (
+                        <p className="text-red-400">⚠ 模型段落生成失败, 仅确定性统计（LLM narrative failed; deterministic stats only）</p>
+                      )}
+                      {expanded.narrative && (
+                        <p className="text-text-primary">{expanded.narrative}</p>
+                      )}
+                      {expanded.observations.length > 0 && (
+                        <ul className="list-disc pl-3.5 text-text-secondary">
+                          {expanded.observations.map((o, i) => (
+                            <li key={i}>{o}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {expanded.risk_flags.length > 0 && (
+                        <ul className="space-y-0.5">
+                          {expanded.risk_flags.map((f, i) => (
+                            <li key={i} className="text-red-400">
+                              ⚑ [{f.severity || '?'}] {f.flag}
+                              {f.basis ? ` — ${f.basis}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {expanded.recommendations.length > 0 && (
+                        <ul className="list-disc pl-3.5 text-text-secondary">
+                          {expanded.recommendations.map((o, i) => (
+                            <li key={i}>{o}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {expanded.quality_caveats.length > 0 && (
+                        <div className="text-text-muted">
+                          {expanded.quality_caveats.map((c, i) => (
+                            <p key={i}>⚠ {c}</p>
+                          ))}
+                        </div>
+                      )}
+                      <p className="border-t border-card-border pt-1 text-[9.5px] text-text-muted">
+                        {expanded.disclaimer}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-2">
           {error && (
@@ -314,7 +533,7 @@ export function RecordingsPanel(_: RecordingsPanelProps) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium text-text-primary truncate">
-                        {s.patient_name ? `🧑 ${s.patient_name}` : '🧑 未标注患者'}
+                        {s.patient_name ? `🧑 ${s.patient_name}` : '🧑 未标注患者 Untagged'}
                         {s.patient_id && (
                           <span className="ml-1 font-mono text-text-muted">{s.patient_id}</span>
                         )}

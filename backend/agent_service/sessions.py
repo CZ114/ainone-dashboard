@@ -102,14 +102,17 @@ class SessionManager:
                 if create_if_missing:
                     session_id = None
                 else:
-                    raise KeyError(f"未知 session: {session_id}")
+                    raise KeyError(f"未知 session: {session_id}（Unknown session）")
 
             if session_id:
-                agent = build_chat_agent(session_id, agent_id)
+                # 记忆按患者分域 (Phase 0 gap 9): resume 时患者取已登记的归属,
+                # 缺失才回落到本次请求带的 patient_id。
+                eff_patient = self._patients.get(session_id) or patient_id
+                agent = build_chat_agent(session_id, agent_id, patient_id=eff_patient)
                 agent.resume(session_id)
             else:
                 session_id = self._new_session_id()
-                agent = build_chat_agent(session_id, agent_id)
+                agent = build_chat_agent(session_id, agent_id, patient_id=patient_id)
 
             entry = SessionEntry(agent)
             self._sessions[session_id] = entry
@@ -164,14 +167,15 @@ class SessionManager:
         """干净对话历史 (含 _ts)。session 不存在 → KeyError。"""
         path = self._audit_path(session_id)
         if not path.exists():
-            raise KeyError(f"未知 session: {session_id}")
+            raise KeyError(f"未知 session: {session_id}（Unknown session）")
         audit = AuditLog(path, session_id=session_id, mode="both")
         return audit.read_session(session_id)
 
     def reset(self, session_id, scope="messages"):
         entry = self.peek(session_id)
         if entry is None:
-            raise KeyError(f"session 不在内存中 (已淘汰或不存在): {session_id}")
+            raise KeyError(f"session 不在内存中 (已淘汰或不存在): {session_id}"
+                           f"（Session not in memory — evicted or nonexistent）")
         with entry.lock:
             entry.agent.reset(scope)
         return True

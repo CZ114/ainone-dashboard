@@ -16,6 +16,11 @@ import type {
 import { useChatStore } from '../../store/chatStore';
 import { claudeApi } from '../../api/claudeApi';
 import { agentAdminApi } from '../../api/agentAdminApi';
+import {
+  CHAT_MSG_DRAG_MIME,
+  CHAT_QUOTE_MAX_CHARS,
+  type ChatQuoteDragPayload,
+} from '../../lib/attachments';
 import { MessageMarkdown } from './MessageMarkdown';
 import { useT, useLang } from '../../contexts/LanguageContext';
 import { useCan } from '../../contexts/RoleContext';
@@ -134,13 +139,32 @@ export function ActivityRow({
 }
 
 // Chat message (user/assistant text)
+// Phase 6: 气泡可拖进 ChatInput 变成"引用"附件 (💬 chip) — 把早前对话内容
+// 显式指给模型看。payload 截断到 CHAT_QUOTE_MAX_CHARS; text/plain 兜底。
 function ChatMessageComponent({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    // 用户正在选择气泡内文字时不劫持拖拽 (划词优先)
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const payload: ChatQuoteDragPayload = {
+      role: isUser ? 'user' : 'assistant',
+      content: message.content.slice(0, CHAT_QUOTE_MAX_CHARS),
+      timestamp: message.timestamp,
+    };
+    e.dataTransfer.setData(CHAT_MSG_DRAG_MIME, JSON.stringify(payload));
+    e.dataTransfer.setData('text/plain', message.content.slice(0, 500));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       <div
-        className={`max-w-[80%] rounded-lg px-4 py-3 ${
+        draggable
+        onDragStart={handleDragStart}
+        title="拖入下方输入框可引用这条消息（Drag into the input box below to quote this message）"
+        className={`max-w-[80%] rounded-lg px-4 py-3 cursor-grab active:cursor-grabbing ${
           isUser
             ? 'bg-accent text-white'
             : 'bg-card-bg border border-card-border'
@@ -1254,7 +1278,7 @@ function ActivityDigestLine() {
     <div className="mb-1 flex items-center gap-1.5 px-1.5 py-1">
       <span className="text-[13px] leading-none text-text-muted">✳</span>
       <span className="shimmer-text text-[12.5px]">
-        {lang === 'zh' ? '正在为你处理…' : 'Working on it…'}
+        {lang === 'zh' ? '正在为你处理…（Working on it…）' : 'Working on it…'}
       </span>
     </div>
   );

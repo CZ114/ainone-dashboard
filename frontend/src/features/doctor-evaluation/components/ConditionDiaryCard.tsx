@@ -34,7 +34,7 @@ export function ConditionDiaryCard({
   const entry: DiaryEntry = {
     id: `doctor-eval-${output.runId}`,
     type: 'observation',
-    title: `${title} · 病例观察`,
+    title: `${title} · 病例观察 Case observation`,
     body: methodOutputReportMarkdown(condition, output),
     created_at: output.provenance.generatedAt || new Date(0).toISOString(),
     trigger: 'manual',
@@ -72,17 +72,17 @@ export function ConditionDiaryCard({
             onClick={onToggleEvidence}
             className="w-full rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/15"
           >
-            {evidenceActionLabel ?? (evidenceOpen ? '收起临床状态与证据轨迹' : '展开临床状态与证据轨迹')}
+            {evidenceActionLabel ?? (evidenceOpen ? '收起临床状态与证据轨迹 / Hide clinical states & evidence trace' : '展开临床状态与证据轨迹 / Show clinical states & evidence trace')}
           </button>
         ) : condition.id === 'b2' ? (
           <div className="text-center text-[11px] leading-5 text-text-muted">
-            该文字由直接 Agent 根据可用音频/转录生成，结论与具体片段之间没有结构化链接。
+            该文字由直接 Agent 根据可用音频/转录生成，结论与具体片段之间没有结构化链接。（This text was generated directly by an agent from the available audio/transcript; conclusions are not structurally linked to specific segments.）
           </div>
         ) : (
           <div className="text-center text-[11px] leading-5 text-text-muted">
             {output.score.value == null
-              ? '该普通话病例只展示分类和可核查证据，不显示未经校准的概率。'
-              : '概率表示模型筛查输出，不是确诊概率。'}
+              ? '该普通话病例只展示分类和可核查证据，不显示未经校准的概率。（This Mandarin case shows only the classification and verifiable evidence; no uncalibrated probability is displayed.）'
+              : '概率表示模型筛查输出，不是确诊概率。（The probability is a model screening output, not a diagnostic probability.）'}
           </div>
         )}
       </footer>

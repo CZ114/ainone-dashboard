@@ -81,19 +81,26 @@ export const DEMO_DIARY_ENTRY_EN: DiaryEntry = {
 
 export const DEMO_DIARY_ENTRY_ZH: DiaryEntry = {
   ...baseEntry(),
-  title: '今日观察',
+  title: '今日观察 Today\'s check-in',
   body:
-    '今天有三件事值得记一下。\n\n' +
+    '今天有三件事值得记一下。（EN: Three things stood out today.）\n\n' +
     '**负荷峰值（16:00）** — 下午 3 点到 5 点心率比上周平均高 ~12%，' +
     'GSR 也没回到基线。这一段时间正好和家庭视频通话重合，看起来是情绪/' +
-    '认知负荷，不是体力疲劳。\n\n' +
+    '认知负荷，不是体力疲劳。（EN: Load peak at 16:00 — HR ran ~12% above ' +
+    "last week's average between 3 and 5 PM and GSR didn't return to " +
+    'baseline; the window aligns with a family video call — reads as ' +
+    'emotional/cognitive load, not physical fatigue.）\n\n' +
     '**家人那边的重复语** — 翻了本周保留的 7 段通话录音，' +
     '"退休金" 在她那一侧重复了 9 次，集中在周二、周三。' +
-    '我把它作为趋势项放进观察了，需要给医生看的话可以直接调出来。\n\n' +
-    '> 提醒：这是观察，不是诊断。\n\n' +
+    '我把它作为趋势项放进观察了，需要给医生看的话可以直接调出来。' +
+    '（EN: Repeated phrase from mom — across 7 saved recordings this week, ' +
+    '"pension" came up 9 times on her side, clustered Tuesday and Wednesday; ' +
+    'logged as a trend marker, ready to pull up for a clinician.）\n\n' +
+    '> 提醒：这是观察，不是诊断。（EN: Reminder: this is observation, not diagnosis.）\n\n' +
     '**休息建议** — 今晚的录音设成提前 30 分钟收，想看看睡前 HRV ' +
-    '的恢复会不会更快。\n\n' +
-    '— *基于今天的语音会话自动生成。*',
+    '的恢复会不会更快。（EN: Rest suggestion — tonight\'s recording ends 30 ' +
+    'minutes earlier; curious whether pre-sleep HRV recovers faster.）\n\n' +
+    '— *基于今天的语音会话自动生成。（EN: Auto-generated from today\'s voice session.）*',
 };
 
 /** Pick the demo entry matching the active UI language. */

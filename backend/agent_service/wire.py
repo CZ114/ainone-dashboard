@@ -34,6 +34,67 @@ def _result_is_error(content):
         return False
 
 
+# ─── References 提取 (Phase 2, gap 3 — chat 与 workflow 共用) ─────────
+
+def extract_references(tool_name, content):
+    """tool_result content → (query, hits) 或 None。
+
+    统一的"答案根据什么"提取器, 三类来源:
+    - retrieve 工具结果 (RAG): {query, hits:[{source, score, text}]} — 按 shape 识别,
+      不需要工具名 (workflow 节点的 tool 消息里拿不到名字)
+    - read_recording: 引用到具体录音 session
+    - read_file: 引用到具体文件路径
+    """
+    try:
+        data = json.loads(content or "")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict) or "error" in data:
+        return None
+    if isinstance(data.get("hits"), list):          # retrieve 结果 (shape 识别)
+        hits = [{"source": h.get("source"), "score": h.get("score"),
+                 "preview": (h.get("text") or "")[:150]}
+                for h in data["hits"] if isinstance(h, dict)]
+        return (data.get("query"), hits) if hits else None
+    if tool_name == "read_recording" and data.get("id"):
+        q = data.get("quality") or {}
+        preview = (f"录音 {q.get('duration_s')}s @{q.get('sample_rate_hz')}Hz, "
+                   f"{q.get('rows')}行（Recording, {q.get('rows')} rows）"
+                   if q.get("duration_s") is not None else "录音（Recording）")
+        return (None, [{"source": f"recording:{data['id']}", "preview": preview}])
+    if tool_name == "read_file" and data.get("path"):
+        return (None, [{"source": data.get("path"),
+                        "preview": (data.get("content") or "")[:120]}])
+    return None
+
+
+def _collect_refs(payload, ctx):
+    """tool_result 事件 → 攒进 ctx["refs"] (done 时统一发一条 references)。"""
+    name = ctx["tool_names"].get(payload.get("tool_call_id"))
+    ref = extract_references(name, payload.get("content"))
+    if ref:
+        query, hits = ref
+        ctx["ref_query"] = query or ctx.get("ref_query")
+        ctx["refs"].extend(hits)
+
+
+def _references_line(ctx):
+    """去重(按 source)+封顶 8 条, 生成统一 references 事件行。"""
+    seen, hits = set(), []
+    for h in ctx["refs"]:
+        key = h.get("source")
+        if key in seen:
+            continue
+        seen.add(key)
+        hits.append(h)
+        if len(hits) >= 8:
+            break
+    line = _line({"type": "references", "agent": "chat",
+                  "query": ctx.get("ref_query"), "hits": hits})
+    ctx["refs"], ctx["ref_query"] = [], None
+    return line
+
+
 _THINK_SPLIT_RE = re.compile(r"^\s*<think>(.*?)</think>\s*", re.DOTALL)
 
 
@@ -101,14 +162,24 @@ def new_stream_ctx(session_id, model, tool_names):
         "start": time.time(),
         "text_buf": [],        # compat: 本轮文本缓冲 (轮次边界整体 flush)
         "tool_names": {},      # tool_call_id -> name (tool_result 回填用)
+        "refs": [],            # Phase 2 gap 3: 本次请求攒的引用命中
+        "ref_query": None,
     }
 
 
 def serialize(kind, payload, ctx, fmt):
     """返回 NDJSON 行列表 (一个内部事件可能映射成多行)。"""
+    if kind == "tool_result":
+        _collect_refs(payload, ctx)     # 两种 fmt 共用的引用收集
     if fmt == "compat":
-        return _compat(kind, payload, ctx)
-    return _neutral(kind, payload, ctx)
+        out = _compat(kind, payload, ctx)
+    else:
+        out = _neutral(kind, payload, ctx)
+    # done 边界: 有引用则在最终 done 行之前发一条统一 references 事件
+    # (独立顶层事件, 不塞进 assistant 气泡 — 见 03-protocol 的 compat flush 教训)
+    if kind == "done" and ctx["refs"]:
+        out.insert(max(len(out) - 1, 0), _references_line(ctx))
+    return out
 
 
 # ─── neutral (SOD 03) ────────────────────────────────────────────────
@@ -232,7 +303,8 @@ def _compat(kind, payload, ctx):
                     "toolName": payload["toolName"],
                     "toolUseId": payload["toolUseId"],
                     "input": payload["input"],
-                    "title": f"Agent 请求执行 {payload['toolName']}",
+                    "title": f"Agent 请求执行 {payload['toolName']} / "
+                             f"Agent requests to run {payload['toolName']}",
                     "displayName": payload["toolName"],
                 },
             }),

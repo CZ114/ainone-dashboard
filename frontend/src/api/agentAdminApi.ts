@@ -159,6 +159,46 @@ export interface WorkflowReferenceHit {
   preview?: string;
 }
 
+// ---- 报告 (Phase 4, gap 5 — session 级结构化报告) ----
+
+/** GET /reports 列表项（索引，不含正文大字段）。 */
+export interface ReportSummary {
+  id: string;
+  type: string;
+  version: number;
+  patient_id: string | null;
+  recording_id: string;
+  generated_at: string;
+  generated_by?: string | null;
+  model?: string | null;
+  duration_s?: number | null;
+  llm_parse_ok?: boolean;
+}
+
+/** 完整报告（GET /reports/:id / generate 返回）。 */
+export interface SessionReport extends ReportSummary {
+  source_recordings: string[];
+  recording_started_at?: string | null;
+  sample_rate_hz?: number | null;
+  modality_summary: {
+    channel: string;
+    label: string;
+    min?: number | null;
+    max?: number | null;
+    mean?: number | null;
+    missing_pct?: number | null;
+    status: string;
+  }[];
+  quality_caveats: string[];
+  narrative: string;
+  observations: string[];
+  risk_flags: { flag?: string; severity?: string; basis?: string }[];
+  recommendations: string[];
+  llm_error?: string | null;
+  evidence_refs: WorkflowReferenceHit[];
+  disclaimer: string;
+}
+
 // ---- workflow runs (持久化运行历史) ----
 
 export type WorkflowRunStatus = 'done' | 'error' | 'aborted';
@@ -616,6 +656,56 @@ export const agentAdminApi = {
       await fetch(`${API_BASE}/api/diary/secrets/${encodeURIComponent(name)}`, {
         method: 'DELETE',
       }),
+    );
+  },
+
+  // ---- 报告 (Phase 4) ----
+  /** 生成 session 报告（阻塞至 LLM 完成，可能 10-60s）。
+   *  recordingId 缺省 → 服务端取该患者最新一条有 CSV 的录音。 */
+  async generateReport(
+    patientId?: string,
+    recordingId?: string,
+  ): Promise<{ report: SessionReport }> {
+    return asJson(
+      await fetch(`${API_BASE}/api/agent/reports/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordingId, patientId }),
+        signal: AbortSignal.timeout(120000),
+      }),
+    );
+  },
+  async listReports(patientId?: string): Promise<{ reports: ReportSummary[] }> {
+    const qs = patientId ? `?patient_id=${encodeURIComponent(patientId)}` : '';
+    return asJson(await fetch(`${API_BASE}/api/agent/reports${qs}`));
+  },
+  async getReport(id: string): Promise<{ report: SessionReport }> {
+    return asJson(
+      await fetch(`${API_BASE}/api/agent/reports/${encodeURIComponent(id)}`),
+    );
+  },
+  /** 该会话已勾选注入上下文的报告 ids。 */
+  async getContextReports(sessionId: string): Promise<{ reportIds: string[] }> {
+    return asJson(
+      await fetch(
+        `${API_BASE}/api/agent/sessions/${encodeURIComponent(sessionId)}/context-reports`,
+      ),
+    );
+  },
+  /** 整体替换该会话注入上下文的报告集（勾选/取消统一走这里，下一轮生效）。 */
+  async setContextReports(
+    sessionId: string,
+    reportIds: string[],
+  ): Promise<{ ok: boolean; reportIds: string[] }> {
+    return asJson(
+      await fetch(
+        `${API_BASE}/api/agent/sessions/${encodeURIComponent(sessionId)}/context-reports`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reportIds }),
+        },
+      ),
     );
   },
 };

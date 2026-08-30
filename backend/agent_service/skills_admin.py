@@ -38,11 +38,11 @@ def list_skills() -> list[dict]:
 
 def get_skill(name: str) -> dict:
     if not _ID_RE.match(name):
-        raise KeyError(f"非法技能名: {name}")
+        raise KeyError(f"非法技能名: {name}（Invalid skill name）")
     try:
         view = _store().view(name)
     except Exception:
-        raise KeyError(f"未知技能: {name}")
+        raise KeyError(f"未知技能: {name}（Unknown skill）")
     # view 的 body 已做 ${SKILL_DIR} 替换 — 编辑器要原文, 重新读原始文件
     raw = (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
     body = raw
@@ -56,7 +56,8 @@ def get_skill(name: str) -> dict:
 
 def upsert_skill(name: str, description: str, body: str) -> dict:
     if not _ID_RE.match(name):
-        raise ValueError(f"非法技能名: {name!r} (2-40 位小写字母/数字/_/-)")
+        raise ValueError(f"非法技能名: {name!r} (2-40 位小写字母/数字/_/-)"
+                         f"（Invalid skill name: 2-40 chars of lowercase letters/digits/_/-）")
     description = " ".join((description or "").split())  # 单行化 (frontmatter 只认单行)
     content = f"---\nname: {name}\ndescription: {description}\n---\n\n{body.strip()}\n"
     with _lock:
@@ -68,9 +69,9 @@ def upsert_skill(name: str, description: str, body: str) -> dict:
 
 def delete_skill(name: str) -> None:
     if not _ID_RE.match(name):
-        raise KeyError(f"非法技能名: {name}")
+        raise KeyError(f"非法技能名: {name}（Invalid skill name）")
     skill_dir = SKILLS_DIR / name
     if not (skill_dir / "SKILL.md").is_file():
-        raise KeyError(f"未知技能: {name}")
+        raise KeyError(f"未知技能: {name}（Unknown skill）")
     with _lock:
         shutil.rmtree(skill_dir)

@@ -100,9 +100,11 @@ POLICY: list[tuple[frozenset[str] | None, re.Pattern, tuple[str, ...]]] = [
     ({"GET"}, re.compile(r"^/api/agent/workflow-runs/active"), PATIENT),  # 照护丝带轮询
     ({"POST"}, re.compile(r"^/api/agent/workflows/input$"), PATIENT),     # human 问题卡作答
     ({"GET"}, re.compile(r"^/api/agent/care-ribbon$"), PATIENT),          # 患者照护丝带
+    ({"GET"}, re.compile(r"^/api/agent/reports"), PATIENT),               # 报告读 (患者只见自己, 钳制在 handler)
 
     # ── 医生档 ──
     ({"GET"}, re.compile(r"^/api/agent/(health|config)$"), STAFF),
+    ({"POST"}, re.compile(r"^/api/agent/reports/generate$"), STAFF),      # 生成报告 (Phase 4)
     ({"GET"}, re.compile(r"^/api/agent/workflows"), STAFF),
     ({"POST"}, re.compile(r"^/api/agent/workflows/[^/]+/(run|stream)$"), STAFF),
     ({"GET"}, re.compile(r"^/api/agent/workflow-runs"), STAFF),

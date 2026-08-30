@@ -83,7 +83,9 @@ def list_collections() -> list[dict]:
 def create_collection(name: str, embedder_name: str) -> dict:
     if not _NAME_RE.match(name):
         raise ValueError(
-            f"非法 collection 名: {name!r} (3-63 位, 字母数字开头结尾, 可含 . _ -)")
+            f"非法 collection 名: {name!r} (3-63 位, 字母数字开头结尾, 可含 . _ -)"
+            f"（Invalid collection name: 3-63 chars, must start/end with a letter "
+            f"or digit, may contain . _ -）")
     col = _client().get_or_create_collection(
         name=name,
         metadata={"hnsw:space": "cosine", "embedder": embedder_name},

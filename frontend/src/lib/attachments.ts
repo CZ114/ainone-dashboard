@@ -18,7 +18,13 @@
 //   - Zero backend upload storage. The entire "attachment" is just
 //     in-memory frontend state + a string built from it at send time.
 
-export type AttachmentKind = 'text' | 'image' | 'other' | 'recording';
+export type AttachmentKind =
+  | 'text'
+  | 'image'
+  | 'other'
+  | 'recording'
+  | 'report'      // 分析报告 (侧边栏拖入; content = 压缩后的报告文本)
+  | 'chat-quote'; // 聊天消息引用 (气泡拖入; content = 消息文本)
 
 // Extra metadata for kind === 'recording'. Stored inline on the
 // attachment so buildPromptWithAttachments can synthesize a prompt
@@ -34,6 +40,14 @@ export interface RecordingAttachmentMeta {
   audioUrl?: string;                       // served by Python backend
 }
 
+// Extra metadata for kind === 'report' (Phase 6 drag-in).
+export interface ReportAttachmentMeta {
+  reportId: string;
+  recordingId?: string;
+  version?: number;
+  patientId?: string | null;
+}
+
 export interface PendingAttachment {
   id: string;                    // crypto.randomUUID()
   path: string;                  // absolute, forward-slash. For recordings: the CSV path (or audio path if CSV absent)
@@ -43,6 +57,8 @@ export interface PendingAttachment {
   kind: AttachmentKind;
   content?: string;              // only for text files / small CSV previews (≤ 50 KB)
   recording?: RecordingAttachmentMeta;
+  report?: ReportAttachmentMeta;
+  quoteRole?: 'user' | 'assistant'; // chat-quote: 被引用消息的角色
 }
 
 // Guardrail for one message's total inlined-text payload.
@@ -64,6 +80,27 @@ export const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 // RecordingsPanel → ChatInput. Custom MIME keeps our drops distinguishable
 // from arbitrary OS file drags (which arrive as `Files` + text/uri-list).
 export const RECORDING_DRAG_MIME = 'application/x-esp32-recording';
+
+// 分析报告拖入 (RecordingsPanel 报告区 → ChatInput)。payload = ReportDragPayload。
+export const REPORT_DRAG_MIME = 'application/x-analysis-report';
+// 聊天消息引用拖入 (ChatMessages 气泡 → ChatInput)。payload = ChatQuoteDragPayload。
+export const CHAT_MSG_DRAG_MIME = 'application/x-chat-quote';
+
+export interface ReportDragPayload {
+  id: string;                    // report id (rpt_...)
+  recordingId?: string;
+  version?: number;
+  patientId?: string | null;
+}
+
+export interface ChatQuoteDragPayload {
+  role: 'user' | 'assistant';
+  content: string;               // 拖出时已截断 (CHAT_QUOTE_MAX_CHARS)
+  timestamp?: number;
+}
+
+// 聊天引用的截断上限 — 引用是"指给模型看这一段", 不是搬运全文。
+export const CHAT_QUOTE_MAX_CHARS = 4000;
 
 // Preview cap: when a user drags a recording into the chat we fetch at
 // most this many data rows of the CSV inline. Anything beyond is still
@@ -87,6 +124,10 @@ export function promptBytesFor(att: PendingAttachment): number {
   if (att.kind === 'recording') {
     return (att.content?.length ?? 0) + 256;
   }
+  // Report / chat-quote: content is fully inlined (both are pre-capped).
+  if (att.kind === 'report' || att.kind === 'chat-quote') {
+    return (att.content?.length ?? 0) + 128;
+  }
   // Image / other: only a one-liner path reference goes to the model.
   return 256;
 }
@@ -109,6 +150,10 @@ export function iconForKind(kind: AttachmentKind): string {
       return '🖼️';
     case 'recording':
       return '🎙️';
+    case 'report':
+      return '📋';
+    case 'chat-quote':
+      return '💬';
     default:
       return '📎';
   }
@@ -154,6 +199,12 @@ export function buildPromptWithAttachments(
     const header = `[Attachment ${i + 1}: ${att.filename} (${formatSize(att.sizeBytes)})]`;
     if (att.kind === 'recording') {
       blocks.push(renderRecordingBlock(header, att));
+    } else if (att.kind === 'report' && att.content !== undefined) {
+      // content 是拖入时构建好的紧凑报告文本 (见 ChatInput.renderReportText)
+      blocks.push(`${header}\n分析报告 ${att.report?.reportId ?? ''} (引用其中数值时注明报告 id):\n${att.content}`);
+    } else if (att.kind === 'chat-quote' && att.content !== undefined) {
+      const who = att.quoteRole === 'user' ? '用户' : 'AI 助手';
+      blocks.push(`${header}\n引用的${who}消息 (来自本会话早前内容):\n> ${att.content.replace(/\n/g, '\n> ')}`);
     } else if (att.kind === 'text' && att.content !== undefined) {
       const lang = langForFilename(att.filename);
       blocks.push(`${header}\n\`\`\`${lang}\n${att.content}\n\`\`\``);

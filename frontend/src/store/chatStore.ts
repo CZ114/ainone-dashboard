@@ -232,8 +232,8 @@ export interface VoiceLangOption {
 export const VOICE_LANGS: VoiceLangOption[] = [
   { code: 'en-US', label: 'English (US)', short: 'EN' },
   { code: 'en-GB', label: 'English (UK)', short: 'EN' },
-  { code: 'zh-CN', label: '中文 (简体)', short: '中' },
-  { code: 'zh-TW', label: '中文 (繁體)', short: '中' },
+  { code: 'zh-CN', label: '中文 (简体) / Chinese (Simplified)', short: '中' },
+  { code: 'zh-TW', label: '中文 (繁體) / Chinese (Traditional)', short: '中' },
   { code: 'ja-JP', label: '日本語', short: '日' },
   { code: 'ko-KR', label: '한국어', short: '한' },
   { code: 'es-ES', label: 'Español', short: 'ES' },

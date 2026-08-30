@@ -90,10 +90,10 @@ const CONDITION_ORDERS: ConditionId[][] = [
 ];
 
 const DEFAULT_TRACE_OPTIONS: Array<[string, string]> = [
-  ['lexical', '词汇提取'],
-  ['information', '信息密度'],
-  ['pause', '停顿/连续性'],
-  ['output', '输出效率'],
+  ['lexical', '词汇提取 Lexical retrieval'],
+  ['information', '信息密度 Information density'],
+  ['pause', '停顿/连续性 Pause/continuity'],
+  ['output', '输出效率 Output efficiency'],
 ];
 
 function severityCode(label: string): SeverityCode {
@@ -106,6 +106,22 @@ function severityCode(label: string): SeverityCode {
     同队列偏高: 'cohort_high',
   };
   return map[label] ?? 'ungraded';
+}
+
+// Display-layer only: the frozen study data (mock/publicCases.json) stays
+// Chinese; badges render bilingually keyed by the matched code.
+const BILINGUAL_SEVERITY: Record<SeverityCode, string | undefined> = {
+  reference_range: '参考范围内 In reference range',
+  borderline_high: '边界偏高 Borderline high',
+  abnormal: '明显异常 Abnormal',
+  cohort_low: '同队列偏低 Below cohort',
+  cohort_mid: '同队列中位范围 Cohort mid-range',
+  cohort_high: '同队列偏高 Above cohort',
+  ungraded: undefined,
+};
+
+function severityDisplayLabel(raw: string): string {
+  return BILINGUAL_SEVERITY[severityCode(raw)] ?? raw;
 }
 
 function datasetFor(caseId: string): string {
@@ -129,7 +145,7 @@ function protocolFor(caseId: string, task: string): string {
 
 function publicTaskDescription(source: LegacyDoctorCase): string {
   if (datasetFor(source.id) !== 'PREPARE') return source.task_description;
-  return '普通话认知评估语音；当前材料包含真实音频，暂无时间对齐转录或说话人角色标注。';
+  return '普通话认知评估语音；当前材料包含真实音频，暂无时间对齐转录或说话人角色标注。（Mandarin cognitive-assessment speech; real audio included, no time-aligned transcript or speaker-role annotation yet.）';
 }
 
 function referenceKindFor(source: LegacyDoctorCase): ReferenceKind {
@@ -139,9 +155,9 @@ function referenceKindFor(source: LegacyDoctorCase): ReferenceKind {
 }
 
 function populationLabelFor(source: LegacyDoctorCase): string {
-  if (datasetFor(source.id) === 'PREPARE') return '34 例同源普通话 MCI 音频';
-  if (datasetFor(source.id) === 'ADReSS 2020') return 'ADReSS 2020 训练集健康对照';
-  return '当前刺激材料内置比较队列';
+  if (datasetFor(source.id) === 'PREPARE') return '34 例同源普通话 MCI 音频（34 same-cohort Mandarin MCI recordings）';
+  if (datasetFor(source.id) === 'ADReSS 2020') return 'ADReSS 2020 训练集健康对照（ADReSS 2020 training-set healthy controls）';
+  return '当前刺激材料内置比较队列（Comparison cohort built into the current stimuli）';
 }
 
 function referenceFor(
@@ -207,7 +223,7 @@ function evidenceFor(source: LegacyDoctorCase): TraceableEvidence | undefined {
       referenceLabel: state.reference_label,
       expandMetrics: state.expand_metrics,
       severity: severityCode(state.severity),
-      severityLabel: state.severity,
+      severityLabel: severityDisplayLabel(state.severity),
       reference: state.reference ? referenceFor(source, state.reference) : undefined,
       supportingMetrics: (state.metric_details ?? []).map((metric, index) => ({
         id: `${state.key}_metric_${index + 1}`,
@@ -272,13 +288,13 @@ function methodOutputFor(
     score: {
       value: score,
       kind: score === null ? 'unavailable' : 'screening_score',
-      displayLabel: score === null ? '未输出' : undefined,
+      displayLabel: score === null ? '未输出 No output' : undefined,
     },
     classification: source.diagnoses[conditionId] || null,
     report,
     evidence,
     provenance: provenanceFor(conditionId),
-    warnings: score === null ? ['当前冻结刺激未提供可校准风险值。'] : [],
+    warnings: score === null ? ['当前冻结刺激未提供可校准风险值。（The frozen stimulus provides no calibrated risk score.）'] : [],
   };
 }
 

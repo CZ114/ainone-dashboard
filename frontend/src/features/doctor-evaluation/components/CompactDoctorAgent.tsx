@@ -31,10 +31,10 @@ interface PendingRetry {
 }
 
 const QUICK_PROMPTS = [
-  { id: 'basis', label: '这份报告最主要的依据是什么？' },
-  { id: 'uncertainty', label: '哪些结论目前最不确定？' },
-  { id: 'next_step', label: '下一步应补充哪些评估？' },
-  { id: 'counter_evidence', label: '有没有支持相反判断的证据？' },
+  { id: 'basis', label: '这份报告最主要的依据是什么？（What is the main basis of this report?）' },
+  { id: 'uncertainty', label: '哪些结论目前最不确定？（Which conclusions are most uncertain?）' },
+  { id: 'next_step', label: '下一步应补充哪些评估？（What further assessments are needed?）' },
+  { id: 'counter_evidence', label: '有没有支持相反判断的证据？（Is there evidence for the opposite judgment?）' },
 ];
 
 function localDemoAnswer(question: string, studyCase: DoctorEvaluationCase) {
@@ -44,31 +44,31 @@ function localDemoAnswer(question: string, studyCase: DoctorEvaluationCase) {
     .filter((state) => state.severity !== 'reference_range')
     .map((state) => `${state.label}（${state.severityLabel}）`)
     .join('、');
-  const stateText = nonReferenceStates || '状态卡未显示超出当前参考范围的项目';
+  const stateText = nonReferenceStates || '状态卡未显示超出当前参考范围的项目（State cards show no items outside the current reference range）';
 
   if (/不确定|局限|限制|影响|可靠/.test(question)) {
-    return `${report?.limitations || '需要结合任务、听力、语言、教育背景和完整临床资料解释。'}\n\n[依据：采集限制与需复核因素]`;
+    return `${report?.limitations || '需要结合任务、听力、语言、教育背景和完整临床资料解释。（Interpret alongside task, hearing, language, education, and full clinical records.）'}\n\n[依据：采集限制与需复核因素 / Basis: acquisition limitations & factors to re-verify]`;
   }
   if (/下一步|补充|检查|评估|怎么做/.test(question)) {
-    return `${report?.recommendation || '建议结合标准化认知量表、日常功能和完整病史进一步评估。'}\n\n[依据：建议的下一步]`;
+    return `${report?.recommendation || '建议结合标准化认知量表、日常功能和完整病史进一步评估。（Recommend further evaluation with standardised cognitive scales, daily function, and full history.）'}\n\n[依据：建议的下一步 / Basis: recommended next steps]`;
   }
   if (/相反|反向|保留|正常|排除/.test(question)) {
-    return `${report?.counterEvidence || '当前报告没有提供足以排除认知障碍的独立证据。'}\n\n[依据：保留表现与反向证据]`;
+    return `${report?.counterEvidence || '当前报告没有提供足以排除认知障碍的独立证据。（The current report provides no independent evidence sufficient to rule out cognitive impairment.）'}\n\n[依据：保留表现与反向证据 / Basis: preserved performance & counter-evidence]`;
   }
   if (/依据|证据|为什么|主要/.test(question)) {
-    return `报告的主要结论是：${report?.impression || '未提供筛查结论'}\n\n主要支持信息包括：${report?.summary || stateText}。当前需要重点核查的状态为：${stateText}。\n\n[依据：筛查结论、主要临床表现、状态卡]`;
+    return `报告的主要结论是 Main conclusion：${report?.impression || '未提供筛查结论（No screening conclusion provided）'}\n\n主要支持信息包括 Key supporting information：${report?.summary || stateText}。当前需要重点核查的状态为 States to verify：${stateText}。\n\n[依据：筛查结论、主要临床表现、状态卡 / Basis: screening conclusion, key clinical findings, state cards]`;
   }
-  return `根据当前条件 C 报告：${report?.impression || '没有可用的筛查结论'} 当前状态提示：${stateText}。对于“${question}”，现有报告没有提供更多独立资料，不能据此补充病史、量表、影像或生物标志物结论。\n\n[依据：当前病例条件 C 报告与状态卡]`;
+  return `根据当前条件 C 报告 Per the current Condition C report：${report?.impression || '没有可用的筛查结论（No screening conclusion available）'} 当前状态提示 Current state flags：${stateText}。对于“${question}”，现有报告没有提供更多独立资料，不能据此补充病史、量表、影像或生物标志物结论。（For this question the report offers no further independent material; history, scales, imaging, or biomarker conclusions cannot be inferred from it.）\n\n[依据：当前病例条件 C 报告与状态卡 / Basis: this case's Condition C report & state cards]`;
 }
 
 function errorLabel(error: unknown): string {
   if (!(error instanceof DoctorChatApiError)) {
-    return error instanceof Error ? error.message : '报告 Agent 请求失败。';
+    return error instanceof Error ? error.message : '报告 Agent 请求失败。（Report Agent request failed.）';
   }
-  if (error.status === 400) return `问题格式不正确：${error.message}`;
-  if (error.status === 404) return `当前病例或 Chat 接口不可用：${error.message}`;
-  if (error.status === 502) return `上游模型暂时不可用：${error.message}`;
-  return `无法连接报告 Agent：${error.message}`;
+  if (error.status === 400) return `问题格式不正确 Invalid question format：${error.message}`;
+  if (error.status === 404) return `当前病例或 Chat 接口不可用 Case or chat endpoint unavailable：${error.message}`;
+  if (error.status === 502) return `上游模型暂时不可用 Upstream model temporarily unavailable：${error.message}`;
+  return `无法连接报告 Agent Cannot reach the Report Agent：${error.message}`;
 }
 
 const CONNECTION_COPY: Record<
@@ -76,19 +76,19 @@ const CONNECTION_COPY: Record<
   { label: string; className: string }
 > = {
   checking: {
-    label: '检查 API 状态…',
+    label: '检查 API 状态… Checking API…',
     className: 'border-card-border bg-card-hover text-text-muted',
   },
   llm: {
-    label: '真实模型已连接',
+    label: '真实模型已连接 LLM connected',
     className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600',
   },
   demo: {
-    label: '服务端演示模式',
+    label: '服务端演示模式 Server demo mode',
     className: 'border-amber-500/30 bg-amber-500/10 text-amber-700',
   },
   offline: {
-    label: '离线 · 本地演示',
+    label: '离线 · 本地演示 Offline · local demo',
     className: 'border-rose-500/30 bg-rose-500/10 text-rose-600',
   },
 };
@@ -145,7 +145,7 @@ export function CompactDoctorAgent({
       if (controller.signal.aborted) return;
       setConnection('offline');
       setModel('local-static-fallback');
-      setError(`${errorLabel(healthError)} 已启用明确标记的本地演示回答。`);
+      setError(`${errorLabel(healthError)} 已启用明确标记的本地演示回答。（Clearly-labelled local demo answers are now enabled.）`);
     }
   }, []);
 
@@ -247,7 +247,7 @@ export function CompactDoctorAgent({
         setConnection('offline');
         setModel('local-static-fallback');
       }
-      setError(`${errorLabel(requestError)} 下方回答来自本地冻结报告，不是真实模型输出。`);
+      setError(`${errorLabel(requestError)} 下方回答来自本地冻结报告，不是真实模型输出。（The answer below comes from the local frozen report, not a live model.）`);
       setDraft(question);
       setPendingRetry({ question, promptId, userMessageId, assistantMessageId });
       onResponseSettled();
@@ -268,9 +268,9 @@ export function CompactDoctorAgent({
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/15 text-lg" aria-hidden="true">✳</div>
             <div>
               <h2 id={`doctor-agent-title-${studyCase.caseId}`} className="text-sm font-semibold text-text-primary">
-                向报告 Agent 询问
+                向报告 Agent 询问 / Ask the Report Agent
               </h2>
-              <p className="text-[11px] text-text-muted">仅依据当前病例条件 C 的公开报告证据回答</p>
+              <p className="text-[11px] text-text-muted">仅依据当前病例条件 C 的公开报告证据回答（Answers rely only on this case's disclosed Condition C report evidence）</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -278,10 +278,10 @@ export function CompactDoctorAgent({
               {connection === 'checking' && <span className="mr-1 inline-block animate-spin" aria-hidden="true">◌</span>}
               {connectionCopy.label}
             </span>
-            <span className="rounded bg-accent/15 px-2 py-1 text-[10px] font-semibold text-accent">条件 C</span>
+            <span className="rounded bg-accent/15 px-2 py-1 text-[10px] font-semibold text-accent">条件 C Condition C</span>
           </div>
         </div>
-        {model && <p className="mt-2 text-[10px] text-text-muted">模型/模式：{model}</p>}
+        {model && <p className="mt-2 text-[10px] text-text-muted">模型/模式 Model/mode：{model}</p>}
       </header>
 
       {error && (
@@ -295,7 +295,7 @@ export function CompactDoctorAgent({
                 onClick={() => void send(pendingRetry.question, pendingRetry.promptId, pendingRetry)}
                 className="rounded border border-amber-600/30 bg-card-bg px-2.5 py-1 font-semibold disabled:opacity-50"
               >
-                重试真实 Agent
+                重试真实 Agent Retry live agent
               </button>
             )}
             <button
@@ -304,7 +304,7 @@ export function CompactDoctorAgent({
               onClick={() => void checkConnection()}
               className="rounded border border-amber-600/30 bg-card-bg px-2.5 py-1 font-semibold disabled:opacity-50"
             >
-              重新检查连接
+              重新检查连接 Recheck connection
             </button>
           </div>
         </div>
@@ -313,8 +313,8 @@ export function CompactDoctorAgent({
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-window-bg/40 p-3" aria-live="polite">
         {messages.length === 0 && !loading && (
           <div className="rounded-xl border border-dashed border-card-border bg-card-bg/70 p-4 text-center">
-            <p className="text-sm font-semibold text-text-primary">尚未询问当前病例</p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">可询问主要依据、不确定性、反向证据或下一步评估。</p>
+            <p className="text-sm font-semibold text-text-primary">尚未询问当前病例 / No questions asked yet for this case</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">可询问主要依据、不确定性、反向证据或下一步评估。（Ask about key evidence, uncertainty, counter-evidence, or next assessments.）</p>
           </div>
         )}
         {messages.map((message) => (
@@ -327,10 +327,10 @@ export function CompactDoctorAgent({
               }`}
             >
               <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold opacity-75">
-                <span>{message.role === 'user' ? '医生' : '报告 Agent'}</span>
+                <span>{message.role === 'user' ? '医生 Doctor' : '报告 Agent / Report Agent'}</span>
                 {message.role === 'assistant' && message.mode && (
                   <span className="rounded bg-window-bg px-1.5 py-0.5">
-                    {message.fallback ? '本地演示' : message.mode === 'llm' ? '真实模型' : '服务端演示'}
+                    {message.fallback ? '本地演示 Local demo' : message.mode === 'llm' ? '真实模型 LLM' : '服务端演示 Server demo'}
                   </span>
                 )}
               </div>
@@ -342,14 +342,14 @@ export function CompactDoctorAgent({
           <div className="flex justify-start">
             <div className="rounded-xl rounded-bl-sm border border-card-border bg-card-bg px-3 py-2.5 text-[13px] text-text-muted" role="status">
               <span className="mr-2 inline-block animate-spin" aria-hidden="true">✳</span>
-              正在分析当前病例报告…
+              正在分析当前病例报告…（Analyzing the current case report…）
             </div>
           </div>
         )}
       </div>
 
       <div className="border-t border-card-border bg-card-bg p-3">
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1" aria-label="快捷问题">
+        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1" aria-label="快捷问题 Quick questions">
           {QUICK_PROMPTS.map((prompt) => (
             <button
               key={prompt.id}
@@ -363,13 +363,13 @@ export function CompactDoctorAgent({
           ))}
         </div>
         <div className="flex items-end gap-2 rounded-xl border border-card-border bg-window-bg p-2 focus-within:border-accent/60">
-          <label className="sr-only" htmlFor={`doctor-agent-input-${studyCase.caseId}`}>向报告 Agent 提问</label>
+          <label className="sr-only" htmlFor={`doctor-agent-input-${studyCase.caseId}`}>向报告 Agent 提问 / Ask the Report Agent</label>
           <textarea
             id={`doctor-agent-input-${studyCase.caseId}`}
             value={draft}
             rows={2}
             maxLength={2000}
-            placeholder="例如：为什么把停顿判断为异常？这个结论受录音质量影响吗？"
+            placeholder="例如：为什么把停顿判断为异常？这个结论受录音质量影响吗？（e.g. Why are the pauses judged abnormal? Is this conclusion affected by recording quality?）"
             className="min-h-10 flex-1 resize-none bg-transparent px-1 text-sm text-text-primary outline-none placeholder:text-text-muted"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -385,16 +385,16 @@ export function CompactDoctorAgent({
             disabled={loading || !draft.trim()}
             className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
           >
-            {loading ? '分析中…' : '发送'}
+            {loading ? '分析中… Analyzing…' : '发送 Send'}
           </button>
         </div>
         <div className="mt-1 flex justify-between gap-3 text-[10px] text-text-muted">
-          <span>Ctrl/Cmd + Enter 发送；Enter 换行</span>
+          <span>Ctrl/Cmd + Enter 发送 send；Enter 换行 newline</span>
           <span>{draft.length}/2000</span>
         </div>
         <div className="mt-2 rounded-lg border border-card-border bg-window-bg/70 px-3 py-2 text-[10px] leading-4 text-text-muted">
-          <strong className="text-text-secondary">安全提示：</strong>
-          本功能仅用于筛查决策支持，不构成诊断。回答不得替代病史、认知量表、日常功能及必要的临床检查。
+          <strong className="text-text-secondary">安全提示 Safety notice：</strong>
+          本功能仅用于筛查决策支持，不构成诊断。回答不得替代病史、认知量表、日常功能及必要的临床检查。（Screening decision support only, not a diagnosis. Answers must not replace history, cognitive scales, daily function, or necessary clinical examinations.）
           <span className="sr-only">{DOCTOR_CHAT_DISCLAIMER}</span>
         </div>
       </div>

@@ -82,7 +82,7 @@ def list_agents(runtime_cfg: dict) -> list[dict]:
         "id": "default",
         "builtin": True,
         "name": "Default",
-        "description": "服务默认 agent — 跟随设置页的模型路由配置",
+        "description": "服务默认 agent — 跟随设置页的模型路由配置 / Built-in default agent — follows the model-routing settings",
         "provider": runtime_cfg["provider"],
         "model": runtime_cfg["model"],
         "sampling": {"temperature": runtime_cfg["temperature"]},
@@ -96,9 +96,13 @@ def list_agents(runtime_cfg: dict) -> list[dict]:
 
 def upsert_agent(agent_id: str, cfg: dict) -> dict:
     if agent_id in RESERVED_IDS:
-        raise ValueError(f"'{agent_id}' 是内置 agent, 不可覆盖 — 请到模型路由设置里改默认配置")
+        raise ValueError(f"'{agent_id}' 是内置 agent, 不可覆盖 — 请到模型路由设置里改默认配置"
+                         f"（'{agent_id}' is a built-in agent and cannot be overridden — "
+                         f"change the defaults in the model-routing settings）")
     if not _ID_RE.match(agent_id):
-        raise ValueError(f"非法 agent id: {agent_id!r} (2-40 位小写字母/数字/_/-, 字母数字开头)")
+        raise ValueError(f"非法 agent id: {agent_id!r} (2-40 位小写字母/数字/_/-, 字母数字开头)"
+                         f"（Invalid agent id: 2-40 chars of lowercase letters/digits/_/-, "
+                         f"starting with a letter or digit）")
     clean = _sanitize(cfg)
     with _lock:
         doc = _load_doc()
@@ -109,10 +113,10 @@ def upsert_agent(agent_id: str, cfg: dict) -> dict:
 
 def delete_agent(agent_id: str) -> None:
     if agent_id in RESERVED_IDS:
-        raise ValueError(f"内置 agent 不可删除: {agent_id}")
+        raise ValueError(f"内置 agent 不可删除: {agent_id}（Built-in agent cannot be deleted）")
     with _lock:
         doc = _load_doc()
         if agent_id not in doc["agents"]:
-            raise KeyError(f"未知 agent: {agent_id}")
+            raise KeyError(f"未知 agent: {agent_id}（Unknown agent）")
         del doc["agents"][agent_id]
         _save_doc(doc)

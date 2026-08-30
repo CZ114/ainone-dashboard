@@ -81,7 +81,7 @@ export const PROVIDERS: Provider[] = [
   },
   {
     id: 'minimax-intl',
-    label: 'MiniMax (国际)',
+    label: 'MiniMax (国际 Intl)',
     shortNote: 'Anthropic-compatible · api.minimax.io',
     baseUrl: 'https://api.minimax.io/anthropic',
     authTokenEnvKey: 'ANTHROPIC_AUTH_TOKEN',
@@ -95,7 +95,7 @@ export const PROVIDERS: Provider[] = [
   },
   {
     id: 'minimax-cn',
-    label: 'MiniMax (国内)',
+    label: 'MiniMax (国内 CN)',
     shortNote: 'Anthropic-compatible · api.minimaxi.com',
     baseUrl: 'https://api.minimaxi.com/anthropic',
     authTokenEnvKey: 'ANTHROPIC_AUTH_TOKEN',
@@ -109,7 +109,7 @@ export const PROVIDERS: Provider[] = [
   },
   {
     id: 'zhipu-intl',
-    label: 'Zhipu Z.ai (国际)',
+    label: 'Zhipu Z.ai (国际 Intl)',
     shortNote: 'Anthropic-compatible · api.z.ai',
     baseUrl: 'https://api.z.ai/api/anthropic',
     authTokenEnvKey: 'ANTHROPIC_AUTH_TOKEN',
@@ -124,7 +124,7 @@ export const PROVIDERS: Provider[] = [
   },
   {
     id: 'zhipu-cn',
-    label: 'Zhipu (国内)',
+    label: 'Zhipu (国内 CN)',
     shortNote: 'Anthropic-compatible · open.bigmodel.cn',
     baseUrl: 'https://open.bigmodel.cn/api/anthropic',
     authTokenEnvKey: 'ANTHROPIC_AUTH_TOKEN',
@@ -167,7 +167,7 @@ export const PROVIDERS: Provider[] = [
   },
   {
     id: 'ollama',
-    label: 'Ollama (本地)',
+    label: 'Ollama (本地 Local)',
     shortNote: 'Local models · runs on your machine',
     baseUrl: 'http://localhost:11434/anthropic',
     authTokenEnvKey: 'ANTHROPIC_AUTH_TOKEN', // ollama ignores it but sets must be present

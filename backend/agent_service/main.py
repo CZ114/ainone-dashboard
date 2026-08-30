@@ -29,7 +29,7 @@ from datetime import datetime
 
 from . import (agents_admin, authdb, authz, config_store, mcp_admin, rag,
                run_history, skills_admin, workflows_admin)
-from .agent_tools import build_registry
+from .agent_tools import augment_workflow_inputs, build_registry
 from .bridge import AbortRegistry, PermissionBroker, human_inputs
 from .config import PERMISSION_TIMEOUT_S, REPO_ROOT
 from .factory import (build_client, build_oneshot_agent, resolve_agent_config,
@@ -78,7 +78,8 @@ async def authz_middleware(request: Request, call_next):
         who = authz.verify_token(token)
         if who is None:
             # 过期/伪造给 401 而非降档 — 前端据此登出重登, 不静默变患者
-            return JSONResponse({"detail": "token 无效或已过期, 请重新登录"},
+            return JSONResponse({"detail": "token 无效或已过期, 请重新登录"
+                                           "（Token invalid or expired — please log in again）"},
                                 status_code=401)
         role, uid = who["role"], who["id"]
     else:
@@ -89,7 +90,9 @@ async def authz_middleware(request: Request, call_next):
     if role not in roles:
         authz.audit(role, uid, method, path, 403)
         return JSONResponse(
-            {"detail": f"此操作需要 {'/'.join(roles)} 角色 (当前: {role})",
+            {"detail": f"此操作需要 {'/'.join(roles)} 角色 (当前: {role})"
+                       f"（This operation requires the {'/'.join(roles)} role; "
+                       f"current role: {role}）",
              "requiredRole": list(roles)},
             status_code=403)
 
@@ -217,6 +220,12 @@ class WorkflowInputBody(BaseModel):
     value: str
 
 
+class ReportGenerateBody(BaseModel):
+    recordingId: str | None = None  # 缺省取该患者最新一条有 CSV 的录音
+    patientId: str | None = None    # 缺省从录音 sidecar 的患者归属取
+    agentId: str | None = None      # 用哪个 agent 定义生成 (缺省 default)
+
+
 class McpUpsertBody(BaseModel):
     transport: str
     command: str | None = None
@@ -257,7 +266,8 @@ def _chat_response(body: ChatBody, fmt: str, owner: str | None = None) -> Stream
         raise HTTPException(501, str(e))
 
     if not entry.lock.acquire(blocking=False):
-        raise HTTPException(409, f"session {session_id} 有进行中的请求")
+        raise HTTPException(409, f"session {session_id} 有进行中的请求"
+                                 f"（Session already has a request in progress）")
 
     request_id = body.requestId or uuid.uuid4().hex[:12]
     abort_ev = aborts.register(request_id)
@@ -318,7 +328,8 @@ def _chat_response(body: ChatBody, fmt: str, owner: str | None = None) -> Stream
                 entry.lock.release()
                 aborts.unregister(request_id)
             # 无论流怎么断, 挂起的审批都解除, 防工具线程滞留到超时
-            broker.deny_all_for_request(request_id, reason="连接已断开或请求中止")
+            broker.deny_all_for_request(
+                request_id, reason="连接已断开或请求中止（Connection closed or request aborted）")
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
@@ -381,7 +392,7 @@ def agent_sessions(request: Request):
 def agent_session_messages(session_id: str, request: Request):
     ui = getattr(request.state, "user_info", {})
     if ui.get("role") == "patient" and manager.owner_of(session_id) != ui.get("id"):
-        raise HTTPException(403, "无权访问此会话")
+        raise HTTPException(403, "无权访问此会话（No access to this session）")
     try:
         return {"messages": manager.read_messages(session_id)}
     except KeyError as e:
@@ -395,6 +406,40 @@ def agent_session_reset(session_id: str, body: ResetBody):
     except KeyError as e:
         raise HTTPException(404, str(e))
     return {"ok": True}
+
+
+# ─── 会话上下文报告 (Phase 5 — 侧边栏勾选报告注入聊天上下文) ─────────
+
+class ContextReportsBody(BaseModel):
+    reportIds: list[str] = []
+
+
+@app.get("/api/agent/sessions/{session_id}/context-reports")
+def session_context_reports_get(session_id: str):
+    from . import context_reports
+    return {"reportIds": context_reports.get(session_id)}
+
+
+@app.put("/api/agent/sessions/{session_id}/context-reports")
+def session_context_reports_set(session_id: str, body: ContextReportsBody,
+                                request: Request):
+    """整体替换该会话注入上下文的报告集 (勾选/取消都走这里, 幂等)。
+    患者只能选归属自己的报告; 报告必须真实存在。下一轮对话生效。"""
+    from . import context_reports, reports
+    ui = getattr(request.state, "user_info", {})
+    valid = []
+    for rid in body.reportIds:
+        try:
+            doc = reports.read_report(rid)
+        except KeyError:
+            raise HTTPException(404, f"未知报告: {rid}（Unknown report）")
+        if (ui.get("role") == "patient"
+                and doc.get("patient_id") != ui.get("id")):
+            raise HTTPException(403, f"只能选择自己的报告: {rid}"
+                                     f"（You can only select your own reports）")
+        valid.append(rid)
+    stored = context_reports.set_for(session_id, valid)
+    return {"ok": True, "reportIds": stored}
 
 
 @app.get("/api/agent/health")
@@ -436,7 +481,8 @@ class PatientPatchBody(BaseModel):
 def auth_login(body: LoginBody):
     who = authdb.login(body.id, body.code)
     if who is None:
-        raise HTTPException(401, "编号/用户名或口令不正确")
+        raise HTTPException(401, "编号/用户名或口令不正确"
+                                 "（Incorrect patient ID/username or passcode）")
     # M2: 附签名 token — 前端每个 /api 请求带上, 中间件据此定角色。
     return {"ok": True, **who, "token": authz.mint_token(who)}
 
@@ -449,7 +495,7 @@ def patients_list():
 @app.post("/api/agent/patients")
 def patients_create(body: PatientBody):
     if not body.name.strip():
-        raise HTTPException(422, "姓名不能为空")
+        raise HTTPException(422, "姓名不能为空（Name must not be empty）")
     created = authdb.create_patient(
         body.name.strip(), body.age, body.complaint, body.device, body.createdBy)
     # pair_code 明文只出现在这一次响应里 (医生抄给病人), 库里只存哈希
@@ -459,7 +505,7 @@ def patients_create(body: PatientBody):
 @app.patch("/api/agent/patients/{pid}")
 def patients_update(pid: str, body: PatientPatchBody):
     if not authdb.update_patient(pid, body.model_dump()):
-        raise HTTPException(404, f"未知病人: {pid}")
+        raise HTTPException(404, f"未知病人: {pid}（Unknown patient）")
     return {"ok": True}
 
 
@@ -467,7 +513,7 @@ def patients_update(pid: str, body: PatientPatchBody):
 def patients_reset_code(pid: str):
     reset = authdb.reset_pair_code(pid)
     if reset is None:
-        raise HTTPException(404, f"未知病人: {pid}")
+        raise HTTPException(404, f"未知病人: {pid}（Unknown patient）")
     return {"ok": True, **reset}
 
 
@@ -512,20 +558,23 @@ def list_models(provider: str | None = None):
     from agent.core import llm
     p = (provider or config_store.load()["provider"]).lower()
     if p not in llm.PROVIDERS:
-        raise HTTPException(404, f"未知 provider: {p}")
+        raise HTTPException(404, f"未知 provider: {p}（Unknown provider）")
     key_envs, base_url, _ = llm.PROVIDERS[p]
     if p == "custom":
         base_url = os.getenv("LLM_BASE_URL")
     api_key = llm._first_env(*key_envs, "LLM_API_KEY") or ("ollama" if p == "ollama" else None)
     if not base_url or not api_key:
-        raise HTTPException(400, f"provider '{p}' 缺 key 或 base_url, 无法拉模型列表")
+        raise HTTPException(400, f"provider '{p}' 缺 key 或 base_url, 无法拉模型列表"
+                                 f"（Provider '{p}' is missing an API key or base_url; "
+                                 f"cannot fetch the model list）")
     try:
         r = httpx.get(f"{base_url.rstrip('/')}/models", timeout=10,
                       headers={"Authorization": f"Bearer {api_key}"})
         r.raise_for_status()
         ids = sorted(m.get("id", "") for m in r.json().get("data", []) if m.get("id"))
     except Exception as e:
-        raise HTTPException(502, f"拉取模型列表失败 ({p}): {type(e).__name__}: {e}")
+        raise HTTPException(502, f"拉取模型列表失败（Failed to fetch model list） "
+                                 f"({p}): {type(e).__name__}: {e}")
     return {"provider": p, "models": ids}
 
 
@@ -669,8 +718,10 @@ def workflows_run(wf_id: str, body: WorkflowRunBody):
     (无文件工具; 挂了知识库的节点自动有 retrieve)。"""
     wf = _load_workflow_or_404(wf_id)
     started = time.time()
+    # Phase 3 (gap 7): 声明了 patient_recordings 的工作流注入患者录音质量摘要
+    run_inputs = augment_workflow_inputs(wf.spec, body.inputs, body.patientId)
     try:
-        result = wf.run_sync(body.inputs, build_agent=build_oneshot_agent)
+        result = wf.run_sync(run_inputs, build_agent=build_oneshot_agent)
     except WorkflowError as e:
         raise HTTPException(400, str(e))
     result["elapsed_ms"] = int((time.time() - started) * 1000)
@@ -690,10 +741,12 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody, request: Request):
     """
     wf = _load_workflow_or_404(wf_id)
     q: queue.Queue = queue.Queue()
+    # Phase 3 (gap 7): 声明了 patient_recordings 的工作流注入患者录音质量摘要
+    run_inputs = augment_workflow_inputs(wf.spec, body.inputs, body.patientId)
     # run owner = 发起者 id; patient_id = 服务对象 (医生为谁跑, 照护丝带按它查)。
     _run_owner = getattr(request.state, "user_info", {}).get("id")
     handle = run_history.start_run(
-        wf_id, wf.spec.get("name") or wf_id, body.inputs, _run_owner,
+        wf_id, wf.spec.get("name") or wf_id, run_inputs, _run_owner,
         patient_id=body.patientId)
 
     def ask_human(prompt: str) -> str:
@@ -701,7 +754,8 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody, request: Request):
         q.put(("human_input_required", {"input_id": p.id, "prompt": prompt}))
         value = human_inputs.wait(p, HUMAN_INPUT_TIMEOUT_S)
         if value is None:
-            raise WorkflowError(f"等待人工输入超时 ({HUMAN_INPUT_TIMEOUT_S}s)")
+            raise WorkflowError(f"等待人工输入超时 ({HUMAN_INPUT_TIMEOUT_S}s)"
+                                f"（Timed out waiting for human input）")
         return value
 
     def _emit_ref(ev: dict):
@@ -710,7 +764,7 @@ def workflows_stream(wf_id: str, body: WorkflowRunBody, request: Request):
 
     def worker():
         try:
-            for kind, payload in wf.run(body.inputs,
+            for kind, payload in wf.run(run_inputs,
                                         build_agent=tracking_build_agent(_emit_ref),
                                         ask_human=ask_human):
                 q.put((kind, payload))
@@ -753,6 +807,47 @@ def workflow_runs_list(request: Request, limit: int = 30):
 def workflow_runs_active(request: Request):
     """进行中的运行 (含聊天 agent 经 run_workflow 工具启动的) — 面板轮询用。"""
     return {"active": run_history.list_active(_owner_filter(request))}
+
+
+# ─── 报告 (Phase 4, gap 5 — session 级结构化报告) ─────────────────────
+
+@app.post("/api/agent/reports/generate")
+def reports_generate(body: ReportGenerateBody, request: Request):
+    """为一段录音生成结构化 session 报告 (阻塞至 LLM 完成; LLM 不可用时
+    降级为纯确定性报告, llm_error 字段说明)。医生档操作。"""
+    from . import reports
+    ui = getattr(request.state, "user_info", {})
+    try:
+        doc = reports.generate_session_report(
+            body.recordingId, patient_id=body.patientId,
+            generated_by=ui.get("id"), agent_id=body.agentId)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    return {"report": doc}
+
+
+@app.get("/api/agent/reports")
+def reports_list(request: Request, limit: int = 50):
+    """报告索引。患者只见自己的 (token id 钳制); staff 可 ?patient_id= 过滤或看全部。"""
+    from . import reports
+    ui = getattr(request.state, "user_info", {})
+    pid = (ui.get("id") if ui.get("role") == "patient"
+           else request.query_params.get("patient_id"))
+    return {"reports": reports.list_reports(pid or None, limit)}
+
+
+@app.get("/api/agent/reports/{report_id}")
+def reports_get(report_id: str, request: Request):
+    """完整报告。患者只能读归属自己的报告 (数据级钳制)。"""
+    from . import reports
+    try:
+        doc = reports.read_report(report_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    ui = getattr(request.state, "user_info", {})
+    if ui.get("role") == "patient" and doc.get("patient_id") != ui.get("id"):
+        raise HTTPException(403, "只能查看自己的报告（You can only view your own reports）")
+    return {"report": doc}
 
 
 @app.get("/api/agent/care-ribbon")
@@ -882,7 +977,7 @@ def rag_delete_collection(name: str):
     try:
         rag.delete_collection(name)
     except Exception as e:
-        raise HTTPException(404, f"删除失败: {e}")
+        raise HTTPException(404, f"删除失败（Delete failed）: {e}")
     return {"ok": True}
 
 
@@ -898,7 +993,7 @@ def rag_ingest(body: IngestBody):
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, f"ingest 失败: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"ingest 失败（Ingest failed）: {type(e).__name__}: {e}")
     return result
 
 
@@ -908,7 +1003,7 @@ def rag_search(body: RagSearchBody):
         hits = rag.search(body.collection, body.query, body.top_k,
                           config_store.load()["embedder"])
     except Exception as e:
-        raise HTTPException(500, f"检索失败: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"检索失败（Search failed）: {type(e).__name__}: {e}")
     return {"hits": hits}
 
 
@@ -969,16 +1064,56 @@ def compat_session_messages(session_id: str):
         msgs = manager.read_messages(session_id)
     except KeyError as e:
         raise HTTPException(404, str(e))
-    out = [
-        {
-            "type": "message",
-            "role": m["role"],
-            # 历史回放是纯文本接口, 画不了思考气泡 — 只回正文
-            "content": strip_think(m["content"]) if m["role"] == "assistant" else m["content"],
-            "timestamp": m.get("_ts", ""),
-        }
-        for m in msgs
-        if m.get("role") in ("user", "assistant")
-        and isinstance(m.get("content"), str) and m["content"]
-    ]
+    # 历史回放保留工具活动: 前端有 tool / tool_result / references 组件,
+    # 只回正文会把"用了哪些工具、检索到什么、返回了什么"整段丢掉 —
+    # 而这恰恰是可审计性要展示的部分。思考块仍然剥掉 (回放画不了)。
+    import json as _json
+
+    def _tool_name(msgs_, call_id):
+        for mm in msgs_:
+            for c in (mm.get("tool_calls") or []):
+                if c.get("id") == call_id:
+                    return (c.get("function") or {}).get("name")
+        return None
+
+    out = []
+    for m in msgs:
+        role, ts = m.get("role"), m.get("_ts", "")
+        content = m.get("content")
+
+        if role in ("user", "assistant") and isinstance(content, str) and content:
+            out.append({"type": "message", "role": role,
+                        "content": strip_think(content) if role == "assistant" else content,
+                        "timestamp": ts})
+
+        if role == "assistant":
+            for c in (m.get("tool_calls") or []):
+                fn = c.get("function") or {}
+                try:
+                    args = _json.loads(fn.get("arguments") or "{}")
+                except ValueError:
+                    args = {"raw": fn.get("arguments")}
+                out.append({"type": "tool", "toolName": fn.get("name"),
+                            "input": args, "toolUseId": c.get("id"), "timestamp": ts})
+
+        elif role == "tool":
+            name = _tool_name(msgs, m.get("tool_call_id"))
+            body = content if isinstance(content, str) else _json.dumps(content, ensure_ascii=False)
+            payload = None
+            try:
+                payload = _json.loads(body)
+            except (ValueError, TypeError):
+                payload = None
+            # 检索类返回带 refs 时走 references 组件 (来源 + 分数 + 预览)
+            if isinstance(payload, dict) and isinstance(payload.get("refs"), list):
+                out.append({"type": "workflow", "subtype": "references",
+                            "agent": name or "retrieval",
+                            "query": payload.get("query", ""),
+                            "refs": payload["refs"], "timestamp": ts})
+            else:
+                out.append({"type": "tool_result", "toolName": name,
+                            "toolUseId": m.get("tool_call_id"), "content": body,
+                            "isError": bool(isinstance(payload, dict) and payload.get("error")),
+                            "timestamp": ts})
+
     return {"messages": out, "cwd": str(REPO_ROOT)}
