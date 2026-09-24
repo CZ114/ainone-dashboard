@@ -141,6 +141,12 @@ export function Header() {
     { path: '/today', feature: 'route.today', label: t.header.nav.today },
     // 监测台平铺 tab 仅开发者可见 (nav.dashboardTab); 医生经患者列表进入。
     { path: '/dashboard', feature: 'nav.dashboardTab', label: t.header.nav.dashboard },
+    // The voice-call walkthrough is deliberately a demo-only entry.
+    // Its route remains available for direct links in realtime mode, but
+    // exposing it there would make scripted playback look like live hardware.
+    ...(demo
+      ? [{ path: '/call', feature: 'route.call' as const, label: t.header.nav.callDemo }]
+      : []),
     { path: '/patients', feature: 'route.patients', label: t.header.nav.patients },
     { path: '/doctor-evaluation', feature: 'route.patients', label: t.header.nav.doctorEvaluation },
     { path: '/diary', feature: 'route.diary', label: t.header.nav.diary },
